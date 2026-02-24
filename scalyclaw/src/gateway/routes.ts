@@ -1,0 +1,44 @@
+import type { FastifyInstance } from 'fastify';
+import { registerSystemRoutes } from '../api/system.js';
+import { registerChatRoutes } from '../api/chat.js';
+import { registerConfigRoutes } from '../api/config.js';
+import { registerModelsRoutes } from '../api/models.js';
+import { registerMemoryRoutes } from '../api/memory.js';
+import { registerAgentsRoutes } from '../api/agents.js';
+import { registerSkillsRoutes } from '../api/skills.js';
+import { registerVaultRoutes } from '../api/vault.js';
+import { registerWorkspaceRoutes } from '../api/workspace.js';
+import { registerMindRoutes } from '../api/mind.js';
+import { registerWorkersRoutes } from '../api/workers.js';
+import { registerJobsRoutes } from '../api/jobs.js';
+import { registerSchedulerRoutes } from '../api/scheduler.js';
+import { registerChannelsRoutes } from '../api/channels.js';
+import { registerLogsRoutes } from '../api/logs.js';
+import { registerFilesRoutes } from '../api/files.js';
+import { registerMcpRoutes } from '../api/mcp.js';
+import { registerUsageRoutes } from '../api/usage.js';
+import { registerBudgetRoutes } from '../api/budget.js';
+import { registerProactiveRoutes } from '../api/proactive.js';
+
+export function registerRoutes(server: FastifyInstance): void {
+  registerSystemRoutes(server);
+  registerChatRoutes(server);
+  registerConfigRoutes(server);
+  registerModelsRoutes(server);
+  registerMemoryRoutes(server);
+  registerAgentsRoutes(server);
+  registerSkillsRoutes(server);
+  registerVaultRoutes(server);
+  registerWorkspaceRoutes(server);
+  registerMindRoutes(server);
+  registerWorkersRoutes(server);
+  registerJobsRoutes(server);
+  registerSchedulerRoutes(server);
+  registerChannelsRoutes(server);
+  registerLogsRoutes(server);
+  registerFilesRoutes(server);
+  registerMcpRoutes(server);
+  registerUsageRoutes(server);
+  registerBudgetRoutes(server);
+  registerProactiveRoutes(server);
+}

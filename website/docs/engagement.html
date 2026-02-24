@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Engagement — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Engagement</h1>
+        <p>ScalyClaw can proactively reach out when something actionable happens. This isn't spam — it's useful, timely context delivered to the right channel at the right moment.</p>
+
+        <h2 id="proactive">Proactive System</h2>
+
+        <p>The proactive system monitors for triggers and sends messages to your preferred channel without you having to ask first. Jobs are dispatched through the BullMQ <strong>proactive queue</strong>, processed by the same worker that handles all other queue work.</p>
+
+        <p>Before sending anything, the system checks two conditions:</p>
+
+        <ul>
+          <li><strong>Quiet hours</strong> — if the current time falls inside the configured quiet window, the message is held until the window ends.</li>
+          <li><strong>Cooldown</strong> — a minimum gap between any two proactive messages prevents bursts even when multiple triggers fire at once.</li>
+        </ul>
+
+        <p>The following config keys control proactive engagement. All values are stored in Redis at <code>scalyclaw:config</code> and editable from the dashboard.</p>
+
+        <table>
+          <thead>
+            <tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>enabled</code></td>
+              <td><code>boolean</code></td>
+              <td><code>false</code></td>
+              <td>Master switch. Set to <code>false</code> to disable all proactive messages without touching any other setting.</td>
+            </tr>
+            <tr>
+              <td><code>model</code></td>
+              <td><code>string</code></td>
+              <td>—</td>
+              <td>Model used to generate proactive messages. Defaults to the main orchestrator model if not set.</td>
+            </tr>
+            <tr>
+              <td><code>cronPattern</code></td>
+              <td><code>string</code></td>
+              <td><code>"*/15 * * * *"</code></td>
+              <td>How often the proactive system checks for triggers. Defaults to every 15 minutes. Uses standard five-field cron syntax.</td>
+            </tr>
+            <tr>
+              <td><code>idleThresholdMinutes</code></td>
+              <td><code>number</code> (minutes)</td>
+              <td><code>120</code></td>
+              <td>How long the conversation must be silent before an idle trigger fires. Measured from the timestamp of the last message in any channel.</td>
+            </tr>
+            <tr>
+              <td><code>cooldownSeconds</code></td>
+              <td><code>number</code> (seconds)</td>
+              <td><code>14400</code></td>
+              <td>Minimum time in seconds that must elapse between two proactive messages, regardless of trigger type. Default is 14400 seconds (4 hours). Prevents back-to-back pings.</td>
+            </tr>
+            <tr>
+              <td><code>maxPerDay</code></td>
+              <td><code>number</code></td>
+              <td><code>3</code></td>
+              <td>Maximum number of proactive messages that can be sent in a single calendar day. Once the limit is reached, all further proactive messages are suppressed until the next day.</td>
+            </tr>
+            <tr>
+              <td><code>quietHours.enabled</code></td>
+              <td><code>boolean</code></td>
+              <td><code>false</code></td>
+              <td>Whether the quiet-hours window is active. Set to <code>true</code> to suppress proactive messages between <code>start</code> and <code>end</code>.</td>
+            </tr>
+            <tr>
+              <td><code>quietHours.start</code></td>
+              <td><code>number</code> (0–23)</td>
+              <td><code>23</code></td>
+              <td>Start hour of the quiet window (inclusive), in 24-hour local time. E.g. <code>23</code> means 11 pm. Proactive messages are suppressed until <code>end</code>.</td>
+            </tr>
+            <tr>
+              <td><code>quietHours.end</code></td>
+              <td><code>number</code> (0–23)</td>
+              <td><code>7</code></td>
+              <td>End hour of the quiet window (exclusive), in 24-hour local time. E.g. <code>7</code> means 7 am. The system resumes normal engagement after this hour.</td>
+            </tr>
+            <tr>
+              <td><code>quietHours.timezone</code></td>
+              <td><code>string</code></td>
+              <td>—</td>
+              <td>IANA timezone string used to interpret <code>start</code> and <code>end</code>. E.g. <code>"America/New_York"</code>. Falls back to the instance timezone if not set.</td>
+            </tr>
+            <tr>
+              <td><code>triggers.undeliveredResults</code></td>
+              <td><code>boolean</code></td>
+              <td><code>true</code></td>
+              <td>Fire when a tool or skill result was produced while the user was unreachable and has not yet been delivered.</td>
+            </tr>
+            <tr>
+              <td><code>triggers.firedScheduledItems</code></td>
+              <td><code>boolean</code></td>
+              <td><code>true</code></td>
+              <td>Fire when a scheduled reminder or task reaches its trigger time. The scheduler hands the job to the proactive queue; quiet-hours and cooldown checks apply before delivery.</td>
+            </tr>
+            <tr>
+              <td><code>triggers.unansweredMessages</code></td>
+              <td><code>boolean</code></td>
+              <td><code>false</code></td>
+              <td>Fire when the user has sent a message that has not received a reply within the idle threshold window. Useful for surfacing stalled conversations.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Proactive engagement config (stored in scalyclaw:config)</span>
+{
+  <span class="prop">"proactive"</span>: {
+    <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+    <span class="prop">"model"</span>: <span class="str">"claude-sonnet-4-5"</span>,
+    <span class="prop">"cronPattern"</span>: <span class="str">"*/15 * * * *"</span>,
+    <span class="prop">"idleThresholdMinutes"</span>: <span class="num">120</span>,
+    <span class="prop">"cooldownSeconds"</span>: <span class="num">14400</span>,
+    <span class="prop">"maxPerDay"</span>: <span class="num">3</span>,
+    <span class="prop">"quietHours"</span>: {
+      <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"start"</span>: <span class="num">23</span>,
+      <span class="prop">"end"</span>: <span class="num">7</span>,
+      <span class="prop">"timezone"</span>: <span class="str">"America/New_York"</span>
+    },
+    <span class="prop">"triggers"</span>: {
+      <span class="prop">"undeliveredResults"</span>: <span class="kw">true</span>,
+      <span class="prop">"firedScheduledItems"</span>: <span class="kw">true</span>,
+      <span class="prop">"unansweredMessages"</span>: <span class="kw">false</span>
+    }
+  }
+}</pre>
+        </div>
+
+        <h2 id="triggers">Triggers</h2>
+
+        <p>A trigger is any condition that tells the proactive system there is something worth surfacing. Each trigger is an independent boolean flag under <code>triggers</code> in the config — enable only the ones that make sense for your workflow.</p>
+
+        <table>
+          <thead>
+            <tr><th>Trigger</th><th>Description</th><th>Example</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>undeliveredResults</strong></td>
+              <td>Fires when a tool or skill produced a result while the user was unreachable — for example, a background agent completed a task while no conversation was active — and the result has not yet been delivered. The system surfaces the result proactively once the user is reachable.</td>
+              <td>"Your code review agent finished — here's the report it produced."</td>
+            </tr>
+            <tr>
+              <td><strong>firedScheduledItems</strong></td>
+              <td>Fires when a scheduled reminder or task reaches its trigger time. The scheduler hands the job off to the proactive queue; the engagement system applies quiet-hours and cooldown checks before delivery.</td>
+              <td>"Good morning! Here is your Monday news summary." (from a recurring cron job)</td>
+            </tr>
+            <tr>
+              <td><strong>unansweredMessages</strong></td>
+              <td>Fires when the user has sent a message that ScalyClaw has not yet replied to, and the idle threshold has elapsed since that message was sent. Useful for surfacing stalled conversations caused by transient processing errors.</td>
+              <td>"It looks like I may not have replied to your earlier message — were you still waiting on something?"</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Cooldown applies across all trigger types
+          </div>
+          <p>The <code>cooldownSeconds</code> timer is global, not per-trigger. If a scheduled reminder fires and is delivered, no further proactive message can fire until the cooldown has elapsed — even if another trigger condition is met in that window. This keeps multiple triggers from piling up on the same quiet afternoon.</p>
+        </div>
+
+        <h2 id="guidelines">Guidelines</h2>
+
+        <p>A few principles that keep proactive engagement useful rather than annoying:</p>
+
+        <ul>
+          <li><strong>Set a generous idle threshold.</strong> A value of 60–120 minutes (<code>idleThresholdMinutes</code>) is a reasonable starting point for most people. A threshold under 30 minutes will produce frequent check-ins that quickly become noise.</li>
+          <li><strong>Always configure quiet hours.</strong> Even if your schedule is irregular, defining a sleep window prevents early-morning or late-night pings. Set <code>quietHours.enabled</code> to <code>true</code> and configure <code>start</code> and <code>end</code> as hour integers (0–23). The system will hold the message and deliver it after the quiet window ends.</li>
+          <li><strong>Never follow up on your own follow-up.</strong> ScalyClaw will not send a second proactive message to chase up the first one. If you haven't responded to the check-in, it waits — the <code>cooldownSeconds</code> enforces this mechanically, and the identity constraint enforces it philosophically.</li>
+          <li><strong>Keep triggers minimal.</strong> Start with only <code>firedScheduledItems</code> enabled. Add <code>undeliveredResults</code> once you are comfortable with the cadence, and enable <code>unansweredMessages</code> only if you find yourself missing stalled conversations.</li>
+        </ul>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Proactive messages consume LLM tokens
+          </div>
+          <p>Every proactive message runs a full LLM call. Depending on your model, <code>cronPattern</code>, and which triggers are enabled, this can add up. Monitor usage on the <strong>Models</strong> page and adjust <code>idleThresholdMinutes</code>, <code>cooldownSeconds</code>, and <code>maxPerDay</code> if costs are higher than expected.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="scheduler.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Scheduler</span>
+          </a>
+          <a href="dashboard.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Dashboard</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

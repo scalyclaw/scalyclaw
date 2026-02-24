@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Use Cases — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Use Cases</h1>
+        <p>These are real-world setups showing ScalyClaw in action. Each scenario walks through a concrete goal, what you'll need, how to configure it, and what the experience looks like in practice. The scenarios are independent — pick the one closest to your situation and adapt it freely.</p>
+
+        <h2 id="personal">Personal Assistant</h2>
+
+        <p>Use ScalyClaw as a daily companion that follows you across channels. You message it on Telegram in the morning and continue the same thread on Discord in the evening — the memory system ensures it never loses the thread. The assistant learns your habits, preferences, and recurring interests over time, gradually becoming more useful without any manual tuning.</p>
+
+        <h3>What You'll Need</h3>
+
+        <ul>
+          <li>A Telegram bot token (from <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a>) and/or a Discord application with a bot token</li>
+          <li>Your Telegram user ID or Discord user ID to set as the allowed user in the channel config</li>
+          <li>A few minutes to write your <code>mind/SOUL.md</code> — the personality file that shapes tone and style</li>
+          <li>Optionally: API keys for any skills you want to enable (weather, calendar, news)</li>
+        </ul>
+
+        <h3>Setup</h3>
+
+        <p>Enable both channels from the dashboard Channels page. Set your own user ID as the only permitted user on each channel so no one else can interact with your assistant. Then open <strong>Mind</strong> and edit <code>SOUL.md</code> to describe the tone you want — casual or formal, brief or expansive, which topics it should prioritise.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># mind/SOUL.md — example personal tone</span>
+
+<span class="str">You are my daily companion. Keep responses concise and conversational.</span>
+<span class="str">I'm a software engineer who reads a lot. I care about privacy and open source.</span>
+<span class="str">When I ask about something technical, be precise. Otherwise be casual.</span>
+<span class="str">Remember my preferences without me having to repeat them.</span></pre>
+        </div>
+
+        <p>Turn on <strong>proactive engagement</strong> in the config so the assistant can reach out when it has something worth surfacing — a saved article you haven't read, a reminder you set yesterday, a follow-up on something you mentioned.</p>
+
+        <h3>Starter Skills</h3>
+
+        <ul>
+          <li><strong>weather-lookup</strong> — queries a weather API for your default location; the assistant learns your location from context and saves it to memory</li>
+          <li><strong>calendar-sync</strong> — reads upcoming events from a CalDAV or Google Calendar endpoint and formats them as a daily briefing</li>
+          <li><strong>news-summary</strong> — fetches RSS feeds or a news API and summarises headlines filtered to your saved interests</li>
+        </ul>
+
+        <h3>Cross-Channel Memory</h3>
+
+        <p>The memory system stores facts, preferences, and conversation summaries in a shared SQLite database — not per-channel. When you switch from Telegram to Discord, the assistant picks up where you left off.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Telegram, morning —</span>
+
+<span class="fn">You:</span>       <span class="str">I've been thinking about switching from Vim to Neovim.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Makes sense — the plugin ecosystem is much better now. Are you</span>
+           <span class="str">planning to migrate your config or start fresh?</span>
+
+<span class="cmt">→ memory write: "user considering Neovim migration"</span>
+
+<span class="cmt">— Discord, evening —</span>
+
+<span class="fn">You:</span>       <span class="str">What's a good Neovim starter config?</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">You mentioned on Telegram earlier that you're considering a move</span>
+           <span class="str">from Vim. For a clean start, kickstart.nvim is the most popular</span>
+           <span class="str">base — it installs lazy.nvim and gives you a commented config</span>
+           <span class="str">you can strip down to exactly what you need.</span></pre>
+        </div>
+
+        <h3>Setup Checklist</h3>
+
+        <ul>
+          <li>Enable Telegram and/or Discord in the dashboard Channels page</li>
+          <li>Set your user ID as the only permitted user on each channel</li>
+          <li>Edit <code>mind/SOUL.md</code> with your preferred tone and context</li>
+          <li>Enable proactive engagement in the config</li>
+          <li>Install one or two starter skills (weather, calendar, or news)</li>
+          <li>Set any required API keys via the Vault page in the dashboard</li>
+        </ul>
+
+        <h2 id="developer">Developer Companion</h2>
+
+        <p>Use ScalyClaw as a coding-focused assistant that can read your filesystem, execute code, browse documentation, and delegate deep research to a specialist agent. This setup pairs best with a coding-optimised model (such as a model from the Claude 3.5 Sonnet or GPT-4o family) and MCP servers that give the assistant direct access to your codebase and version control.</p>
+
+        <h3>What You'll Need</h3>
+
+        <ul>
+          <li>Web Gateway enabled (for browser-based access) or Discord for a persistent chat surface</li>
+          <li>An MCP filesystem server pointed at your working directory</li>
+          <li>An MCP GitHub server with a personal access token for repository operations</li>
+          <li>A "researcher" agent configured with web search permissions and a longer <code>maxIterations</code></li>
+          <li>Optionally: skills for code review automation, dependency auditing, and deploy scripts</li>
+        </ul>
+
+        <h3>Setup</h3>
+
+        <p>Open the dashboard MCP page and add two servers. The filesystem server gives the assistant read and write access to a directory you specify — point it at your project root or a dedicated workspace. The GitHub server lets it open issues, read pull requests, and inspect commit history without leaving the conversation.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Dashboard → MCP → New Server (filesystem)</span>
+<span class="op">{</span>
+  <span class="prop">"name"</span><span class="op">:</span> <span class="str">"filesystem"</span><span class="op">,</span>
+  <span class="prop">"command"</span><span class="op">:</span> <span class="str">"npx"</span><span class="op">,</span>
+  <span class="prop">"args"</span><span class="op">:</span> <span class="op">[</span><span class="str">"-y"</span><span class="op">,</span> <span class="str">"@modelcontextprotocol/server-filesystem"</span><span class="op">,</span> <span class="str">"/home/user/projects"</span><span class="op">]</span>
+<span class="op">}</span>
+
+<span class="cmt">// Dashboard → MCP → New Server (GitHub)</span>
+<span class="op">{</span>
+  <span class="prop">"name"</span><span class="op">:</span> <span class="str">"github"</span><span class="op">,</span>
+  <span class="prop">"command"</span><span class="op">:</span> <span class="str">"npx"</span><span class="op">,</span>
+  <span class="prop">"args"</span><span class="op">:</span> <span class="op">[</span><span class="str">"-y"</span><span class="op">,</span> <span class="str">"@modelcontextprotocol/server-github"</span><span class="op">]</span><span class="op">,</span>
+  <span class="prop">"env"</span><span class="op">:</span> <span class="op">{</span> <span class="prop">"GITHUB_PERSONAL_ACCESS_TOKEN"</span><span class="op">:</span> <span class="str">"ghp_..."</span> <span class="op">}</span>
+<span class="op">}</span></pre>
+        </div>
+
+        <p>Next, open the Agents page and create a "researcher" agent. Give it a system prompt focused on thoroughness over speed, set the model to a capable reasoning model, allow it the <code>web_search</code> and <code>execute_code</code> tools, and set <code>maxIterations</code> to something generous (30–50). The main orchestrator can delegate long research tasks to this agent while continuing to respond to you immediately.</p>
+
+        <h3>Codebase Analysis Example</h3>
+
+        <p>With the filesystem MCP connected and the researcher agent in place, you can ask the assistant to explore an unfamiliar project and get a substantive report — not just a summary of the README.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Analyse the auth module in /home/user/projects/myapp and tell me</span>
+           <span class="str">what session strategy it uses and whether there are any obvious</span>
+           <span class="str">security gaps.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">I'll delegate this to the researcher agent — it'll do a thorough</span>
+           <span class="str">pass. Give me a moment.</span>
+
+<span class="cmt">→ delegate_agent called: "researcher"
+  → mcp_call: filesystem/read_file src/auth/session.ts
+  → mcp_call: filesystem/read_file src/auth/middleware.ts
+  → mcp_call: filesystem/list_directory src/auth/
+  → execute_code: parse JWT claims, check algorithm
+  → 12 iterations, 4 files read</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">The auth module uses JWT with HS256. Here's what the researcher found:</span>
+
+           <span class="str">1. Sessions are stateless — no server-side revocation. If a token</span>
+           <span class="str">   is stolen, it remains valid until expiry (currently 7 days).</span>
+           <span class="str">2. The secret key is read from process.env.JWT_SECRET with no</span>
+           <span class="str">   fallback check — the app will silently accept unsigned tokens</span>
+           <span class="str">   if the env var is missing in some environments.</span>
+           <span class="str">3. There is no refresh token mechanism; forced re-login is the</span>
+           <span class="str">   only recovery path.</span>
+
+           <span class="str">Recommended fixes: add a token blocklist in Redis for logout,</span>
+           <span class="str">assert JWT_SECRET is set at startup, and shorten expiry to 1 hour</span>
+           <span class="str">with a refresh token flow.</span></pre>
+        </div>
+
+        <h3>Developer Skills</h3>
+
+        <ul>
+          <li><strong>code-review</strong> — runs a linter and static analyser on a file or diff and formats the output as structured feedback</li>
+          <li><strong>dep-check</strong> — reads a <code>package.json</code> or <code>requirements.txt</code> and checks for known CVEs via an advisory database API</li>
+          <li><strong>deploy</strong> — wraps a deploy script with pre-flight checks and posts the result back to the conversation</li>
+        </ul>
+
+        <h3>Setup Checklist</h3>
+
+        <ul>
+          <li>Enable Web Gateway or Discord as the primary channel</li>
+          <li>Set the main orchestrator model to a coding-capable model in the config</li>
+          <li>Add MCP filesystem server pointing at your project directory</li>
+          <li>Add MCP GitHub server with a personal access token</li>
+          <li>Create a "researcher" agent with generous <code>maxIterations</code> and a focused system prompt</li>
+          <li>Install code-review, dep-check, and deploy skills as needed</li>
+          <li>Store API keys and tokens in the Vault</li>
+        </ul>
+
+        <h2 id="team">Team Bot</h2>
+
+        <p>Deploy ScalyClaw into a shared Slack workspace to handle recurring team rituals — standup reminders, thread summaries, and on-demand knowledge base queries. The scheduler drives the time-based work; agents handle the heavier summarisation tasks; and a knowledge base skill gives the assistant access to your team's documentation.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            ScalyClaw is designed for one user
+          </div>
+          <p>ScalyClaw does not have per-user identity management. In a team deployment all members interact with the same assistant, share the same personality and memory, and cannot have separate preferences. This can be a feature — the assistant accumulates collective team knowledge — but it also means one user's stored preferences affect everyone. Design your team setup with this in mind.</p>
+        </div>
+
+        <h3>What You'll Need</h3>
+
+        <ul>
+          <li>A Slack app with <code>chat:write</code>, <code>channels:history</code>, and <code>app_mentions:read</code> scopes</li>
+          <li>Your Slack bot token and signing secret stored in the Vault</li>
+          <li>A standup reminder configured in the scheduler (cron, weekdays at 9am)</li>
+          <li>A "summariser" agent with access to the Slack MCP server or a thread-reading skill</li>
+          <li>A knowledge base skill that queries your team's docs (Notion, Confluence, a local directory, or a static site)</li>
+        </ul>
+
+        <h3>Setup</h3>
+
+        <p>Enable the Slack channel in the dashboard. Add the bot to the relevant channels in your workspace. Then open the Scheduler page and create a standup reminder:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Dashboard → Scheduler → New Schedule —</span>
+
+<span class="prop">Channel:</span>   <span class="str">slack:#engineering</span>
+<span class="prop">Message:</span>   <span class="str">Good morning team. Time for standup — what did you work on</span>
+           <span class="str">yesterday, what are you doing today, and are there any blockers?</span>
+<span class="prop">Schedule:</span>  <span class="str">0 9 * * 1-5</span>   <span class="cmt">(weekdays at 09:00)</span></pre>
+        </div>
+
+        <p>Create a "summariser" agent on the Agents page. Give it access to a thread-reading tool or the Slack MCP server. Team members can ask the assistant to summarise a long thread and the agent will do the heavy lifting — reading the history, distilling the key points, and posting the summary back.</p>
+
+        <h3>Knowledge Base Skill</h3>
+
+        <p>Write a <code>knowledge-base</code> skill that accepts a query string, searches your documentation source (vector search, Notion API, or a static markdown directory), and returns the most relevant excerpts. Once installed, the assistant can answer team questions grounded in your actual docs rather than general knowledge.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">Engineer:</span>  <span class="str">How do we handle database migrations in this project?</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Let me check the docs.</span>
+
+<span class="cmt">→ execute_skill: knowledge-base { query: "database migration process" }
+  → searched 847 docs chunks, returned top 3 excerpts</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">According to the engineering handbook: migrations run automatically</span>
+           <span class="str">on deploy via the migrate:latest npm script. Roll-backs require a</span>
+           <span class="str">manual down migration — see docs/migrations.md#rollback for the</span>
+           <span class="str">step-by-step process. Always test migrations on staging first.</span></pre>
+        </div>
+
+        <h3>Setup Checklist</h3>
+
+        <ul>
+          <li>Enable the Slack channel in the dashboard</li>
+          <li>Store the Slack bot token and signing secret in the Vault</li>
+          <li>Create a weekday 9am standup reminder in the Scheduler</li>
+          <li>Create a "summariser" agent with thread-reading tool access</li>
+          <li>Install a knowledge-base skill connected to your documentation source</li>
+          <li>Decide which Slack channels the bot joins and configure channel IDs accordingly</li>
+          <li>Brief the team on the shared-memory model so preferences are set intentionally</li>
+        </ul>
+
+        <h2 id="home">Home Automation</h2>
+
+        <p>Connect ScalyClaw to your smart home via an MCP server for Home Assistant or a similar platform. Use the scheduler to run time-based routines and enable proactive engagement so the assistant can alert you to conditions that need attention — a door left open, a temperature outside the expected range, a device that went offline.</p>
+
+        <h3>What You'll Need</h3>
+
+        <ul>
+          <li>A running Home Assistant instance with the REST API or WebSocket API enabled</li>
+          <li>An MCP server that wraps the Home Assistant API (e.g. <code>@modelcontextprotocol/server-home-assistant</code> or a custom wrapper)</li>
+          <li>Your Home Assistant long-lived access token stored in the Vault</li>
+          <li>Proactive engagement enabled in the config, with a Telegram or Discord channel as the alert surface</li>
+          <li>A device-status skill and a routine-runner skill</li>
+        </ul>
+
+        <h3>Setup</h3>
+
+        <p>Add the Home Assistant MCP server on the dashboard MCP page. Point it at your Home Assistant URL and supply the access token via an environment variable resolved from the Vault.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Dashboard → MCP → New Server</span>
+<span class="op">{</span>
+  <span class="prop">"name"</span><span class="op">:</span> <span class="str">"home-assistant"</span><span class="op">,</span>
+  <span class="prop">"command"</span><span class="op">:</span> <span class="str">"npx"</span><span class="op">,</span>
+  <span class="prop">"args"</span><span class="op">:</span> <span class="op">[</span><span class="str">"-y"</span><span class="op">,</span> <span class="str">"@modelcontextprotocol/server-home-assistant"</span><span class="op">]</span><span class="op">,</span>
+  <span class="prop">"env"</span><span class="op">:</span> <span class="op">{</span>
+    <span class="prop">"HA_URL"</span><span class="op">:</span> <span class="str">"http://homeassistant.local:8123"</span><span class="op">,</span>
+    <span class="prop">"HA_TOKEN"</span><span class="op">:</span> <span class="str">"vault:home_assistant_token"</span>
+  <span class="op">}</span>
+<span class="op">}</span></pre>
+        </div>
+
+        <p>Next, set up scheduled routines in the Scheduler. Routines are just scheduled messages — the assistant receives the message, interprets it, and makes the appropriate MCP call.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Routine 1: sunset lights —</span>
+<span class="prop">Message:</span>   <span class="str">Turn on the living room and hallway lights.</span>
+<span class="prop">Schedule:</span>  <span class="str">0 20 * * *</span>   <span class="cmt">(daily at 20:00 — adjust to local sunset)</span>
+
+<span class="cmt">— Routine 2: thermostat check —</span>
+<span class="prop">Message:</span>   <span class="str">Check the thermostat. If the temperature is outside 18–22°C, alert me.</span>
+<span class="prop">Schedule:</span>  <span class="str">0 * * * *</span>    <span class="cmt">(every hour)</span></pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Use proactive engagement for condition-based alerts
+          </div>
+          <p>Scheduled routines fire at fixed times. For condition-based alerts — "notify me if the front door is left open for more than 10 minutes" — pair the hourly check routine with proactive engagement. The assistant evaluates the condition on each check and, if the condition is met, sends an unprompted message to your channel rather than waiting for you to ask.</p>
+        </div>
+
+        <h3>Conversational Control</h3>
+
+        <p>With the MCP server connected, you can control devices through natural language in any channel. The assistant translates your request into the appropriate MCP call transparently.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Turn off the living room lights.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Done.</span>
+
+<span class="cmt">→ mcp_call: home-assistant/call_service
+    domain: light
+    service: turn_off
+    entity_id: light.living_room</span>
+
+<span class="fn">You:</span>       <span class="str">What's the temperature in the bedroom?</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">The bedroom sensor reads 19.4°C.</span>
+
+<span class="cmt">→ mcp_call: home-assistant/get_state
+    entity_id: sensor.bedroom_temperature</span>
+
+<span class="fn">You:</span>       <span class="str">Set the thermostat to 21 degrees.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Thermostat set to 21°C.</span>
+
+<span class="cmt">→ mcp_call: home-assistant/call_service
+    domain: climate
+    service: set_temperature
+    entity_id: climate.main_thermostat
+    temperature: 21</span></pre>
+        </div>
+
+        <h3>Home Automation Skills</h3>
+
+        <ul>
+          <li><strong>device-status</strong> — queries the state of all devices in a given area and formats a readable summary (useful for morning briefings)</li>
+          <li><strong>routine-runner</strong> — triggers a named Home Assistant scene or script by name, letting you say "run the movie night scene" without knowing the entity ID</li>
+        </ul>
+
+        <h3>Setup Checklist</h3>
+
+        <ul>
+          <li>Enable the Home Assistant REST or WebSocket API and generate a long-lived access token</li>
+          <li>Store the token in the Vault via the dashboard</li>
+          <li>Add the Home Assistant MCP server on the MCP page</li>
+          <li>Enable proactive engagement and set your preferred alert channel (Telegram or Discord)</li>
+          <li>Create scheduled routines in the Scheduler for time-based automations</li>
+          <li>Install device-status and routine-runner skills</li>
+          <li>Test with a simple "turn on the lights" message before building routines</li>
+        </ul>
+
+        <nav class="docs-page-nav">
+          <a href="cli.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">CLI Reference</span>
+          </a>
+          <a href="troubleshooting.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Troubleshooting</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

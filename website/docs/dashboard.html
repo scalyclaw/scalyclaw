@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Dashboard — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Dashboard</h1>
+        <p>A 16-page React 19 SPA for managing every aspect of ScalyClaw. Real-time updates via WebSocket. Runs at <code>http://localhost:3000</code> by default.</p>
+
+        <h2 id="overview">Overview</h2>
+
+        <p>The dashboard is built with React 19 and Tailwind CSS. It maintains a persistent WebSocket connection to the Node so every page reflects live state without manual refreshing. Access is password-protected — the password is set during initial setup and stored in Redis. All configuration changes made through the dashboard take effect immediately via Redis pub/sub.</p>
+
+        <p>Start the dashboard with:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> dashboard start</pre>
+        </div>
+
+        <h2 id="pages">Pages</h2>
+
+        <table>
+          <thead>
+            <tr><th>Page</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Overview</td>
+              <td>System health at a glance: node status, models, budget, channels, workers.</td>
+            </tr>
+            <tr>
+              <td>Mind</td>
+              <td>Edit <code>IDENTITY.md</code>, <code>SOUL.md</code>, and <code>USER.md</code> with a rich markdown editor.</td>
+            </tr>
+            <tr>
+              <td>Usage</td>
+              <td>API call tracking, token counts, daily cost charts, model breakdowns.</td>
+            </tr>
+            <tr>
+              <td>Channels</td>
+              <td>Toggle and configure each messaging channel.</td>
+            </tr>
+            <tr>
+              <td>Models</td>
+              <td>Manage LLM providers, priorities, weights, test connectivity.</td>
+            </tr>
+            <tr>
+              <td>Agents</td>
+              <td>Create and manage sub-agents with custom prompts and permissions.</td>
+            </tr>
+            <tr>
+              <td>Skills</td>
+              <td>Upload, browse, and manage skill packages. Hot-reload.</td>
+            </tr>
+            <tr>
+              <td>Memory</td>
+              <td>Browse, search, and filter memories by type and confidence.</td>
+            </tr>
+            <tr>
+              <td>Vault</td>
+              <td>Store and manage secrets. Masked by default.</td>
+            </tr>
+            <tr>
+              <td>MCP</td>
+              <td>Connect Model Context Protocol servers, bulk import.</td>
+            </tr>
+            <tr>
+              <td>Scheduler</td>
+              <td>View and manage scheduled reminders and tasks.</td>
+            </tr>
+            <tr>
+              <td>Engagement</td>
+              <td>Configure proactive engagement settings.</td>
+            </tr>
+            <tr>
+              <td>Security</td>
+              <td>Toggle and configure security guards.</td>
+            </tr>
+            <tr>
+              <td>Logs</td>
+              <td>Real-time log viewer with level, time, and keyword filters.</td>
+            </tr>
+            <tr>
+              <td>Workers</td>
+              <td>Monitor worker health, uptime, and concurrency.</td>
+            </tr>
+            <tr>
+              <td>Jobs</td>
+              <td>Inspect BullMQ queues, filter by status, retry or clean jobs.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>The dashboard auto-refreshes via WebSocket — no manual polling needed. Every page updates in real time as the system state changes.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="engagement.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Engagement</span>
+          </a>
+          <a href="cli.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">CLI Reference</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

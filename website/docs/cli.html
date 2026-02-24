@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CLI Reference — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>CLI Reference</h1>
+        <p>Complete reference for the <code>scalyclaw</code> command-line interface. All commands connect to Redis to communicate with running processes — ensure <code>REDIS_URL</code> is set or pass <code>--redis-url</code> on each invocation.</p>
+
+        <h2 id="commands">Commands</h2>
+
+        <h3>Global</h3>
+
+        <p>Top-level commands that operate across the full ScalyClaw stack.</p>
+
+        <h4><code>scalyclaw setup</code></h4>
+        <p>Interactive setup wizard. Walks through Redis connection, LLM provider credentials, embedding model selection, and dashboard password. Writes config to Redis at <code>scalyclaw:config</code> and secrets to <code>scalyclaw:secret:*</code>. Safe to re-run — existing values are shown as defaults.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> setup</pre>
+        </div>
+
+        <h4><code>scalyclaw start</code></h4>
+        <p>Start the node, a worker, and the dashboard together in a single command. Streams combined log output with per-process prefixes. Ctrl-C stops all three.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> start</pre>
+        </div>
+
+        <h4><code>scalyclaw stop</code></h4>
+        <p>Gracefully stop all running ScalyClaw processes. Sends a shutdown signal via the system BullMQ queue; each process drains its active jobs before exiting.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> stop</pre>
+        </div>
+
+        <h4><code>scalyclaw status</code></h4>
+        <p>Print a summary table of all processes: node, worker(s), and dashboard. Shows PID, uptime, queue depths, and last heartbeat timestamp.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> status</pre>
+        </div>
+
+        <h4><code>scalyclaw version</code></h4>
+        <p>Print the installed ScalyClaw version.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> version</pre>
+        </div>
+
+        <h3>Node</h3>
+
+        <p>Commands for the node process — the orchestrator that manages channels, builds system prompts, and enqueues LLM work.</p>
+
+        <h4><code>scalyclaw node start</code></h4>
+        <p>Start the node process in the foreground. The node connects to all configured channels, initialises the session state machine in Redis, and begins consuming from the <code>messages</code> and <code>system</code> BullMQ queues.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> node start</pre>
+        </div>
+
+        <h4><code>scalyclaw node stop</code></h4>
+        <p>Gracefully stop the running node. Waits for in-flight message processing to complete before exiting.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> node stop</pre>
+        </div>
+
+        <h4><code>scalyclaw node status</code></h4>
+        <p>Show node health: process uptime, connected channels, active session count, and pending message queue depth per channel.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> node status</pre>
+        </div>
+
+        <h3>Worker</h3>
+
+        <p>Commands for worker processes — stateless BullMQ consumers that execute code, run skills, invoke agents, and forward MCP tool calls.</p>
+
+        <h4><code>scalyclaw worker start</code></h4>
+        <p>Start a worker process. Multiple workers can run simultaneously against the same Redis instance; BullMQ distributes jobs across them automatically. Use <code>--concurrency</code> to control how many jobs a single worker processes in parallel.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> worker start
+<span class="cmd">scalyclaw</span> worker start --concurrency <span class="num">8</span></pre>
+        </div>
+
+        <h4><code>scalyclaw worker stop</code></h4>
+        <p>Stop all running worker processes. Each worker drains its active jobs before shutting down.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> worker stop</pre>
+        </div>
+
+        <h4><code>scalyclaw worker status</code></h4>
+        <p>Show worker health and queue statistics: active jobs, waiting jobs, failed jobs, and throughput for each BullMQ queue (<code>tools</code>, <code>agents</code>, <code>scheduler</code>).</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> worker status</pre>
+        </div>
+
+        <h3>Dashboard</h3>
+
+        <p>Commands for the dashboard process — the React admin interface served by a lightweight HTTP server.</p>
+
+        <h4><code>scalyclaw dashboard start</code></h4>
+        <p>Start the dashboard server. Defaults to port <code>3000</code>. Use <code>--port</code> to change it.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> dashboard start
+<span class="cmd">scalyclaw</span> dashboard start --port <span class="num">8080</span></pre>
+        </div>
+
+        <h4><code>scalyclaw dashboard stop</code></h4>
+        <p>Stop the running dashboard server.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> dashboard stop</pre>
+        </div>
+
+        <h4><code>scalyclaw dashboard status</code></h4>
+        <p>Show dashboard status: process uptime, bound address, and port.</p>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmd">scalyclaw</span> dashboard status</pre>
+        </div>
+
+        <h2 id="flags">Global Flags</h2>
+
+        <p>These flags are accepted by all commands that communicate with Redis or bind to a port.</p>
+
+        <table>
+          <thead>
+            <tr><th>Flag</th><th>Default</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>--redis-url &lt;url&gt;</code></td>
+              <td><code>redis://localhost:6379</code></td>
+              <td>Redis connection URL. Overrides the <code>REDIS_URL</code> environment variable when both are present.</td>
+            </tr>
+            <tr>
+              <td><code>--port &lt;number&gt;</code></td>
+              <td>Varies per command</td>
+              <td>Override the default port. Applies to <code>dashboard start</code> (default <code>3000</code>).</td>
+            </tr>
+            <tr>
+              <td><code>--concurrency &lt;number&gt;</code></td>
+              <td><code>4</code></td>
+              <td>Number of BullMQ jobs a single worker processes in parallel. Applies to <code>worker start</code>.</td>
+            </tr>
+            <tr>
+              <td><code>--verbose</code></td>
+              <td>off</td>
+              <td>Enable debug-level logging. Prints queue events, Redis round-trips, and LLM request/response details.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>Set <code>REDIS_URL</code> as an environment variable instead of passing <code>--redis-url</code> on every command. All <code>scalyclaw</code> commands read it automatically, keeping your shell history clean.</p>
+        </div>
+
+        <h2 id="command-reference">Command Reference</h2>
+
+        <p>Full list of all commands and their accepted flags at a glance.</p>
+
+        <table>
+          <thead>
+            <tr><th>Command</th><th>--redis-url</th><th>--port</th><th>--concurrency</th><th>--verbose</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>scalyclaw setup</code></td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td><code>scalyclaw start</code></td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw stop</code></td><td>Yes</td><td>—</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw status</code></td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td><code>scalyclaw version</code></td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td><code>scalyclaw node start</code></td><td>Yes</td><td>—</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw node stop</code></td><td>Yes</td><td>—</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw node status</code></td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td><code>scalyclaw worker start</code></td><td>Yes</td><td>—</td><td>Yes</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw worker stop</code></td><td>Yes</td><td>—</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw worker status</code></td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+            <tr><td><code>scalyclaw dashboard start</code></td><td>Yes</td><td>Yes</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw dashboard stop</code></td><td>Yes</td><td>—</td><td>—</td><td>Yes</td></tr>
+            <tr><td><code>scalyclaw dashboard status</code></td><td>Yes</td><td>—</td><td>—</td><td>—</td></tr>
+          </tbody>
+        </table>
+
+        <nav class="docs-page-nav">
+          <a href="dashboard.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Dashboard</span>
+          </a>
+          <a href="use-cases.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Use Cases</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

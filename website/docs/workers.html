@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Workers — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Workers</h1>
+        <p>The worker process is a stateless execution sandbox that consumes only the <code>scalyclaw-tools</code> queue. It only needs Redis and a reachable gateway — no shared filesystem or direct connection to the Node. The Node process itself runs its own in-process BullMQ workers for the remaining five queues.</p>
+
+        <h2 id="overview">Overview</h2>
+
+        <p>ScalyClaw splits queue consumption between two processes. The <strong>worker process</strong> (<code>worker/</code>) handles sandboxed tool execution in isolation. The <strong>Node process</strong> runs in-process BullMQ workers for orchestration, agents, scheduling, proactive messaging, and system events.</p>
+
+        <h3>Worker process — <code>scalyclaw-tools</code> queue only</h3>
+
+        <p>The worker process lives in <code>worker/src/</code> and starts a single BullMQ consumer for the <code>scalyclaw-tools</code> queue. It handles two job types:</p>
+
+        <table>
+          <thead>
+            <tr><th>Processor</th><th>Queue</th><th>Job type</th><th>Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>tool-processor.ts</code></td>
+              <td><code>scalyclaw-tools</code></td>
+              <td><code>tool-execution</code></td>
+              <td>Executes sandboxed code via <code>execute_code</code> (JavaScript with Bun, Python with uv, Bash) and shell commands via <code>execute_command</code>.</td>
+            </tr>
+            <tr>
+              <td><code>tool-processor.ts</code></td>
+              <td><code>scalyclaw-tools</code></td>
+              <td><code>skill-execution</code></td>
+              <td>Runs skill modules via <code>execute_skill</code>. Delegates to <code>execute-skill.ts</code> which loads and invokes the named skill.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>The worker connects to Redis directly and reaches the Node only through the gateway API (used as a file bridge). Sub-processors: <code>execute-code.ts</code>, <code>execute-command.ts</code>, <code>execute-skill.ts</code>.</p>
+
+        <h3>Node process — five in-process workers</h3>
+
+        <p>The Node runs its own BullMQ workers for all orchestration queues. These are not separate processes — they run inside the Node alongside the channel adapters and REST API.</p>
+
+        <table>
+          <thead>
+            <tr><th>Processor</th><th>Queue</th><th>Concurrency</th><th>Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>message-processor.ts</code></td>
+              <td><code>scalyclaw-messages</code></td>
+              <td>3</td>
+              <td>Drives the full orchestrator pipeline for an inbound user message — session checks, guards, LLM call, tool loop, and reply dispatch.</td>
+            </tr>
+            <tr>
+              <td><code>agent-processor.ts</code></td>
+              <td><code>scalyclaw-agents</code></td>
+              <td>3</td>
+              <td>Runs delegated sub-agents. Each sub-agent gets its own orchestrator loop with its own system prompt and tool permission set, then returns a structured result.</td>
+            </tr>
+            <tr>
+              <td><code>schedule-processor.ts</code></td>
+              <td><code>scalyclaw-scheduler</code></td>
+              <td>2</td>
+              <td>Fires delayed and recurring jobs — reminders, timed tasks, periodic skill runs. BullMQ's built-in delay support handles timing; this processor handles what happens when a job fires.</td>
+            </tr>
+            <tr>
+              <td><code>proactive-processor.ts</code></td>
+              <td><code>scalyclaw-proactive</code></td>
+              <td>1</td>
+              <td>Generates and sends engagement-triggered outbound messages when the proactive system decides to reach out to a channel.</td>
+            </tr>
+            <tr>
+              <td><code>system-processor.ts</code></td>
+              <td><code>scalyclaw-system</code></td>
+              <td>2</td>
+              <td>Handles operational events — config reloads, maintenance tasks, cache invalidation. Kept separate from the message queue so system operations never block user traffic.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>All state that any processor reads or writes passes through Redis. A worker restart loses nothing — BullMQ jobs are durable and any active job is re-queued automatically after its lock expires.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Stateless by design
+          </div>
+          <p>The worker process intentionally holds no in-memory state between jobs. Skill modules and file bridge connections are re-established per job or kept warm within a single worker process — but no cross-job shared state exists. This makes it safe to kill and restart a worker at any point without data loss.</p>
+        </div>
+
+        <h2 id="deploying">Deploying</h2>
+
+        <p>The worker process can run on the same machine as the Node, on a separate remote machine, or inside a Docker container. The only requirements are a reachable Redis instance and network access to the Node's gateway API. All three modes use the same binary — the difference is how the worker is configured.</p>
+
+        <p>Worker setup is stored in <code>~/.scalyclaw-worker/worker.json</code> and specifies the home directory, gateway connection (host, port, TLS, auth token), Redis connection, Node URL and token, and per-process concurrency.</p>
+
+        <h3>Same Machine</h3>
+
+        <p>The simplest setup. Install ScalyClaw once and start a worker alongside the Node. Both processes connect to the local Redis instance and the worker reaches the gateway on localhost.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Start the Node (channel adapters + orchestrator)</span>
+<span class="cmd">scalyclaw</span> start
+
+<span class="cmt"># Start a worker in another terminal (or background it)</span>
+<span class="cmd">scalyclaw</span> worker start
+
+<span class="cmt"># Start a second worker for higher throughput</span>
+<span class="cmd">scalyclaw</span> worker start</pre>
+        </div>
+
+        <h3>Remote Machine</h3>
+
+        <p>Install ScalyClaw on the remote machine, configure <code>~/.scalyclaw-worker/worker.json</code> with the shared Redis instance and the Node's gateway address, then start the worker.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># On the remote worker machine</span>
+<span class="cmd">bun</span> install -g scalyclaw
+
+<span class="cmt"># Configure gateway + Redis, then start</span>
+<span class="cmd">scalyclaw</span> worker configure
+<span class="cmd">scalyclaw</span> worker start</pre>
+        </div>
+
+        <h3>Docker Container</h3>
+
+        <p>Run the official ScalyClaw image with the <code>worker</code> command. Pass Redis and gateway configuration as environment variables. No volume mounts or filesystem access to the Node are needed — the worker uses the gateway API as its file bridge.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Single worker container</span>
+<span class="cmd">docker</span> run -d \
+  --name scalyclaw-worker \
+  -e <span class="str">REDIS_URL</span>=redis://redis.internal:6379 \
+  scalyclaw/scalyclaw worker start
+
+<span class="cmt"># Scale to 3 replicas with Docker Compose</span>
+<span class="cmd">docker</span> compose up --scale worker=3</pre>
+        </div>
+
+        <h3>Configuration</h3>
+
+        <p>Worker configuration is stored in <code>~/.scalyclaw-worker/worker.json</code>. All workers in a deployment must point to the same Redis instance and a reachable Node gateway.</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>homeDir</code></td>
+              <td>Base directory used by the worker for temporary files during job execution.</td>
+            </tr>
+            <tr>
+              <td><code>gateway.host / port / tls / authToken</code></td>
+              <td>Connection details for the Node's gateway API. The worker uses this as a file bridge — no direct filesystem access to the Node is required.</td>
+            </tr>
+            <tr>
+              <td><code>redis.host / port / password / tls</code></td>
+              <td>Redis connection details. Must point to the same Redis instance used by the Node.</td>
+            </tr>
+            <tr>
+              <td><code>node.url / token</code></td>
+              <td>Node API URL and authentication token used for callbacks and result delivery.</td>
+            </tr>
+            <tr>
+              <td><code>concurrency</code></td>
+              <td>Maximum number of <code>scalyclaw-tools</code> jobs processed simultaneously within this worker process. Increase for higher throughput or lower to reduce resource pressure during CPU-intensive code execution.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>For high <code>execute_code</code> throughput, run additional worker processes rather than increasing <code>concurrency</code>. Multiple worker processes provide true parallelism across the <code>scalyclaw-tools</code> queue; high concurrency within a single process can cause resource contention during CPU-intensive code execution.</p>
+        </div>
+
+        <h2 id="monitoring">Monitoring</h2>
+
+        <p>The ScalyClaw dashboard provides two dedicated pages for worker and job observability: <strong>Workers</strong> and <strong>Jobs</strong>.</p>
+
+        <h3>Workers Page</h3>
+
+        <p>The Workers page lists every worker process that has connected to Redis. For each worker it shows:</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Health status</td>
+              <td><strong>Online</strong> if a heartbeat was received within the last 30 seconds, <strong>Offline</strong> otherwise.</td>
+            </tr>
+            <tr>
+              <td>Uptime</td>
+              <td>How long the worker process has been running since its last start.</td>
+            </tr>
+            <tr>
+              <td>Concurrency</td>
+              <td>The <code>concurrency</code> value from <code>worker.json</code> this worker process is using for the <code>scalyclaw-tools</code> queue.</td>
+            </tr>
+            <tr>
+              <td>Version</td>
+              <td>ScalyClaw version string, useful when running a mixed-version deployment during a rolling upgrade.</td>
+            </tr>
+            <tr>
+              <td>Last heartbeat</td>
+              <td>Exact timestamp of the most recent heartbeat written to Redis.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>Workers write a heartbeat to Redis every 10 seconds. If a worker process dies unexpectedly, the dashboard detects it and marks it Offline within 30 seconds — no manual polling required.</p>
+        </div>
+
+        <h3>Jobs Page</h3>
+
+        <p>The Jobs page gives a live view into all six BullMQ queues. You can inspect, filter, retry, and clean jobs without touching Redis directly.</p>
+
+        <table>
+          <thead>
+            <tr><th>Feature</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Queue selector</td>
+              <td>Switch between <code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-tools</code>, <code>scalyclaw-proactive</code>, <code>scalyclaw-scheduler</code>, and <code>scalyclaw-system</code> queues.</td>
+            </tr>
+            <tr>
+              <td>Status filter</td>
+              <td>Filter jobs by <strong>waiting</strong>, <strong>active</strong>, <strong>completed</strong>, or <strong>failed</strong> state.</td>
+            </tr>
+            <tr>
+              <td>Job detail</td>
+              <td>Click any job to inspect its full payload, timestamps, attempt count, and return value or error stack trace.</td>
+            </tr>
+            <tr>
+              <td>Retry</td>
+              <td>Re-enqueue a failed job with its original payload. Useful for transient failures such as a temporary network error to an MCP server.</td>
+            </tr>
+            <tr>
+              <td>Clean</td>
+              <td>Remove completed or failed jobs older than a given age to keep Redis memory usage bounded. The dashboard cleans in bulk per queue.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Failed jobs are not lost
+          </div>
+          <p>BullMQ moves failed jobs to a separate failed set rather than deleting them. They remain inspectable and retryable until you explicitly clean them. Jobs that exceed their configured retry limit appear in the failed set with the full error recorded against each attempt.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="mcp.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">MCP</span>
+          </a>
+          <a href="scheduler.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Scheduler</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

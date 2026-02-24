@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MCP — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>MCP</h1>
+        <p>The Model Context Protocol (MCP) is an open standard for connecting LLMs to external tools and data sources. ScalyClaw supports MCP natively — register a server, and its tools are auto-discovered and made available to the LLM alongside all built-in tools, with no additional prompt engineering required.</p>
+
+        <h2 id="integration">Integration</h2>
+
+        <p>MCP defines a structured, transport-agnostic protocol between a <strong>host</strong> (ScalyClaw) and one or more <strong>servers</strong> (external processes that expose tools). The host connects to a server, calls <code>tools/list</code> to discover what tools are available, and then forwards <code>tools/call</code> requests as the LLM uses those tools during conversation. The LLM sees MCP tools exactly the same way it sees built-in tools — as named functions with a JSON Schema input definition.</p>
+
+        <p>ScalyClaw supports three MCP transports:</p>
+
+        <table>
+          <thead>
+            <tr><th>Transport</th><th>Description</th><th>Best for</th><th>Considerations</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>stdio</code></td>
+              <td>ScalyClaw spawns the MCP server as a child process and communicates over stdin/stdout using newline-delimited JSON.</td>
+              <td>Local tools — filesystem access, shell commands, local databases. Zero network overhead, tight lifecycle coupling.</td>
+              <td>Server process runs on the same machine. If ScalyClaw restarts, the server process is also restarted.</td>
+            </tr>
+            <tr>
+              <td><code>http</code></td>
+              <td>ScalyClaw connects to an MCP server exposed over HTTP. Requests and responses are JSON over standard HTTP POST.</td>
+              <td>Remote tools, shared infrastructure, servers that need to run independently and serve multiple clients.</td>
+              <td>Requires network access. Server lifecycle is independent — it can be deployed anywhere and upgraded without restarting ScalyClaw.</td>
+            </tr>
+            <tr>
+              <td><code>sse</code></td>
+              <td>Server-Sent Events variant of HTTP transport. The server pushes streaming responses over a persistent connection.</td>
+              <td>Tools that produce long-running or incremental results — web scraping, large file processing, streaming search.</td>
+              <td>Requires an SSE-compatible server. Adds connection-management overhead compared to plain HTTP.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Auto-Discovery</h3>
+
+        <p>When a connection to an MCP server is established, ScalyClaw immediately calls <code>tools/list</code> to retrieve the server's full tool manifest. Each tool in the manifest — its name, description, and JSON Schema input definition — is merged into the active tool set and injected into the system prompt. The LLM sees them as first-class tools with no distinction from built-in ones.</p>
+
+        <p>Discovery also runs on hot-reload. When a <code>scalyclaw:skills:reload</code> pub/sub signal is published to Redis, ScalyClaw re-queries all connected MCP servers and refreshes the tool list without a restart. This means you can update an MCP server's tool manifest and have the change picked up within seconds.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Execution stays in the worker
+          </div>
+          <p>MCP tool calls are routed through the <code>tools</code> BullMQ queue, not executed inline in the Node process. The worker holds the MCP client connections and handles all <code>tools/call</code> requests on behalf of the orchestrator. This means MCP tools benefit from the same isolation and back-pressure handling as <code>execute_code</code> and <code>execute_skill</code>.</p>
+        </div>
+
+        <h2 id="connecting">Connecting Servers</h2>
+
+        <p>MCP servers are managed from the <strong>Settings &rarr; MCP Servers</strong> page in the ScalyClaw dashboard. The workflow is:</p>
+
+        <ol>
+          <li><strong>Add a server.</strong> Click <em>Add MCP Server</em> and fill in the name, transport type, and either the command (for <code>stdio</code>) or URL (for <code>http</code> / <code>sse</code>). For <code>stdio</code> servers you can also specify environment variables — these are resolved from the secret vault at connection time, so you can reference secrets by name rather than embedding values directly.</li>
+          <li><strong>Test the connection.</strong> The dashboard sends a <code>tools/list</code> request and displays the discovered tools. If the connection fails, a structured error is shown — see the troubleshooting notes below.</li>
+          <li><strong>Save.</strong> The server configuration is persisted to Redis. ScalyClaw connects to it immediately and the discovered tools become available to the LLM in the next conversation turn.</li>
+        </ol>
+
+        <h3>Configuration JSON</h3>
+
+        <p>You can bulk-import server configurations by pasting or uploading a JSON object. This is useful when migrating an existing MCP setup or when you want to version-control your server list. The format follows the MCP client configuration convention:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"mcpServers"</span>: {
+    <span class="prop">"filesystem"</span>: {
+      <span class="prop">"transport"</span>: <span class="str">"stdio"</span>,
+      <span class="prop">"command"</span>: <span class="str">"npx"</span>,
+      <span class="prop">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@modelcontextprotocol/server-filesystem"</span>, <span class="str">"/home/user/documents"</span>],
+      <span class="prop">"env"</span>: {}
+    },
+    <span class="prop">"github"</span>: {
+      <span class="prop">"transport"</span>: <span class="str">"stdio"</span>,
+      <span class="prop">"command"</span>: <span class="str">"npx"</span>,
+      <span class="prop">"args"</span>: [<span class="str">"-y"</span>, <span class="str">"@modelcontextprotocol/server-github"</span>],
+      <span class="prop">"env"</span>: {
+        <span class="prop">"GITHUB_PERSONAL_ACCESS_TOKEN"</span>: <span class="str">"secret:github_token"</span>
+      }
+    },
+    <span class="prop">"web-search"</span>: {
+      <span class="prop">"transport"</span>: <span class="str">"http"</span>,
+      <span class="prop">"url"</span>: <span class="str">"https://mcp.example.com/search"</span>,
+      <span class="prop">"headers"</span>: {
+        <span class="prop">"Authorization"</span>: <span class="str">"secret:search_api_key"</span>
+      }
+    }
+  }
+}</pre>
+        </div>
+
+        <p>Values prefixed with <code>secret:</code> are resolved from the ScalyClaw secret vault at connection time. The raw secret value is never stored in the server configuration — only the reference name is persisted to Redis.</p>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Popular MCP servers to try
+          </div>
+          <p>The MCP ecosystem has a growing library of ready-to-use servers. A few well-maintained options: <strong>@modelcontextprotocol/server-filesystem</strong> for reading and writing local files, <strong>@modelcontextprotocol/server-github</strong> for interacting with GitHub repositories and issues, <strong>@modelcontextprotocol/server-postgres</strong> for querying a PostgreSQL database, and <strong>@modelcontextprotocol/server-brave-search</strong> for live web search via the Brave Search API. All are available on npm and work with the <code>stdio</code> transport.</p>
+        </div>
+
+        <h3>Troubleshooting</h3>
+
+        <table>
+          <thead>
+            <tr><th>Error</th><th>Likely cause</th><th>Fix</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Command not found</td>
+              <td>The executable specified in <code>command</code> is not on the PATH of the process running the ScalyClaw worker.</td>
+              <td>Use an absolute path to the binary, or ensure the relevant package is installed globally. For <code>npx</code>-based servers, verify Node and npm are installed in the worker's environment.</td>
+            </tr>
+            <tr>
+              <td>Connection refused</td>
+              <td>For <code>http</code> or <code>sse</code> transports: the server is not running at the specified URL, or a firewall is blocking the connection.</td>
+              <td>Confirm the server is running and reachable from the machine hosting the ScalyClaw worker. Check port bindings and firewall rules.</td>
+            </tr>
+            <tr>
+              <td>Timeout on <code>tools/list</code></td>
+              <td>The server process started but is not responding to the initial handshake. Common with <code>stdio</code> servers that have slow startup (e.g. JVM or Python startup overhead).</td>
+              <td>Increase the connection timeout in the server settings. If the server is consistently slow to start, consider switching to <code>http</code> transport and running it as a persistent service.</td>
+            </tr>
+            <tr>
+              <td>Secret not resolved</td>
+              <td>An environment variable or header value references a secret name that does not exist in the vault.</td>
+              <td>Go to <strong>Settings &rarr; Secrets</strong> and add the missing secret. The key must match the name used after the <code>secret:</code> prefix exactly.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <nav class="docs-page-nav">
+          <a href="security.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Security</span>
+          </a>
+          <a href="workers.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Workers</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

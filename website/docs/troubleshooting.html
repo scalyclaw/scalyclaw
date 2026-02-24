@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Troubleshooting — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Troubleshooting</h1>
+        <p>Common issues and their solutions, organized by category. For detailed error output, open the dashboard <strong>Logs</strong> page — every worker, processor, and channel adapter writes structured logs there in real time.</p>
+
+        <h2 id="common-issues">Common Issues</h2>
+
+        <h3>Redis</h3>
+
+        <h4>Connection refused</h4>
+        <p>Redis is not running or is not reachable at the configured address. ScalyClaw cannot start without a Redis connection.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Check if Redis is running</span>
+<span class="cmd">redis-cli ping</span>
+<span class="cmt"># Should respond: PONG</span>
+
+<span class="cmt"># Start Redis (macOS with Homebrew)</span>
+<span class="cmd">brew services start redis</span>
+
+<span class="cmt"># Start Redis (Linux with systemd)</span>
+<span class="cmd">sudo systemctl start redis</span>
+
+<span class="cmt"># Start Redis manually (foreground, default port)</span>
+<span class="cmd">redis-server</span>
+
+<span class="cmt"># Verify ScalyClaw can reach it</span>
+<span class="cmd">redis-cli -u "$REDIS_URL" ping</span></pre>
+        </div>
+
+        <p>Make sure <code>REDIS_URL</code> in your environment matches where Redis is actually listening. The default is <code>redis://127.0.0.1:6379</code>.</p>
+
+        <h4>NOAUTH — Authentication required</h4>
+        <p>Your Redis instance requires a password but the connection URL does not include one. Any command sent without auth is rejected with <code>NOAUTH Authentication required</code>.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Include the password in the connection URL</span>
+<span class="kw">export</span> <span class="prop">REDIS_URL</span>=<span class="str">"redis://:yourpassword@127.0.0.1:6379"</span>
+
+<span class="cmt"># With a username (Redis 6+ ACLs)</span>
+<span class="kw">export</span> <span class="prop">REDIS_URL</span>=<span class="str">"redis://scalyclaw:yourpassword@127.0.0.1:6379"</span>
+
+<span class="cmt"># Test the authenticated connection</span>
+<span class="cmd">redis-cli -u "$REDIS_URL" ping</span></pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Store REDIS_URL as a secret
+          </div>
+          <p>Once ScalyClaw is running, you can store <code>REDIS_URL</code> in your process environment or a <code>.env</code> file. The initial connection is required to boot — after that, all other secrets are pulled from Redis at runtime.</p>
+        </div>
+
+        <h4>Memory limit exceeded</h4>
+        <p>Redis has hit its <code>maxmemory</code> limit and is refusing write operations. This can cause BullMQ jobs to fail to enqueue and session state writes to error.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Check current memory usage and limit</span>
+<span class="cmd">redis-cli info memory | grep -E "used_memory_human|maxmemory"</span>
+
+<span class="cmt"># Set a higher limit (runtime — resets on restart)</span>
+<span class="cmd">redis-cli config set maxmemory 512mb</span>
+
+<span class="cmt"># Set a safe eviction policy so Redis evicts expired keys first</span>
+<span class="cmd">redis-cli config set maxmemory-policy allkeys-lru</span></pre>
+        </div>
+
+        <p>For a permanent fix, set <code>maxmemory</code> and <code>maxmemory-policy</code> in your <code>redis.conf</code>. ScalyClaw's queues use TTL-aware keys for completed jobs, so an LRU eviction policy is safe for most deployments.</p>
+
+        <h3>Channels</h3>
+
+        <h4>Bot not responding</h4>
+        <p>Messages arrive but the bot sends no reply. Check each of the following in order:</p>
+
+        <ul>
+          <li>Open the dashboard <strong>Channels</strong> page and confirm the channel is enabled.</li>
+          <li>Verify the token or credentials are correct. An expired or revoked token silently stops message delivery on some platforms.</li>
+          <li>Check the dashboard <strong>Logs</strong> page for errors from the channel adapter. Look for authentication errors, missing permissions, or deserialization failures.</li>
+          <li>Confirm the worker is running — a stopped worker means queued jobs are never processed. See <a href="#workers">Workers</a> below.</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Check the Jobs page
+          </div>
+          <p>The dashboard <strong>Jobs</strong> page shows every BullMQ job and its status. If jobs are piling up in <em>waiting</em> without moving to <em>active</em>, the worker is not processing them. If jobs are in <em>failed</em>, expand them to read the error stack trace.</p>
+        </div>
+
+        <h4>Webhook errors</h4>
+        <p>Platforms that push events via webhook require a publicly reachable HTTPS URL. Common failure modes:</p>
+
+        <ul>
+          <li><strong>URL not reachable</strong> — The platform cannot connect to your server. Ensure your host and port are publicly accessible, or use a tunnel during development.</li>
+          <li><strong>SSL certificate errors</strong> — Most platforms reject self-signed certificates. Use a certificate from Let's Encrypt or a trusted CA, or configure your reverse proxy (nginx, Caddy) to terminate TLS.</li>
+          <li><strong>Wrong path</strong> — Confirm the webhook URL registered with the platform matches the route ScalyClaw listens on.</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Expose a local port for webhook development with ngrok</span>
+<span class="cmd">ngrok http 3000</span>
+
+<span class="cmt"># ngrok prints a public HTTPS URL, e.g.:</span>
+<span class="cmt"># Forwarding  https://abc123.ngrok.io -> http://localhost:3000</span>
+<span class="cmt"># Use that URL as the webhook base in the dashboard Channel settings</span></pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Use ngrok for local development
+          </div>
+          <p>ngrok provides a stable HTTPS tunnel to your local machine. Run <code>ngrok http 3000</code> (adjust the port to match your ScalyClaw server), then paste the generated <code>https://</code> URL into the channel webhook field. The URL changes each time you restart ngrok unless you use a paid static domain.</p>
+        </div>
+
+        <h4>Message not delivered</h4>
+        <p>A message was received and processed but the reply never reached the user. This is often caused by a stuck session state or a stale entry in the pending message queue.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Inspect the pending queue for a channel</span>
+<span class="cmd">redis-cli lrange "scalyclaw:pending:CHANNEL_ID" 0 -1</span>
+
+<span class="cmt"># Inspect the session state for a channel</span>
+<span class="cmd">redis-cli hgetall "scalyclaw:session:CHANNEL_ID"</span>
+
+<span class="cmt"># Reset a stuck session state (replaces CHANNEL_ID with your channel ID)</span>
+<span class="cmd">redis-cli del "scalyclaw:session:CHANNEL_ID"</span>
+
+<span class="cmt"># Clear the pending queue for a channel</span>
+<span class="cmd">redis-cli del "scalyclaw:pending:CHANNEL_ID"</span></pre>
+        </div>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Deleting session state drops context
+          </div>
+          <p>Deleting a session key resets that channel to the <em>idle</em> state and discards any in-flight processing context. Any message that was being assembled or held in the pending queue is abandoned. Use this only when the session is clearly stuck and you are prepared to lose the in-progress exchange.</p>
+        </div>
+
+        <h3>Workers</h3>
+
+        <h4>No workers connected</h4>
+        <p>The dashboard shows zero active workers, or the Jobs page shows jobs sitting in <em>waiting</em> indefinitely. Either the worker process was never started or it cannot connect to Redis.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Start the worker from the project root</span>
+<span class="cmd">bun run worker</span>
+
+<span class="cmt"># Or with an explicit Redis URL</span>
+<span class="kw">REDIS_URL</span>=<span class="str">"redis://127.0.0.1:6379"</span> <span class="cmd">bun run worker</span>
+
+<span class="cmt"># Confirm the worker can reach Redis before starting</span>
+<span class="cmd">redis-cli -u "$REDIS_URL" ping</span></pre>
+        </div>
+
+        <p>If the worker starts but immediately exits, check the terminal output and the dashboard Logs page for a connection error or a missing environment variable.</p>
+
+        <h4>Jobs stuck in waiting</h4>
+        <p>Jobs are enqueued but never move to <em>active</em>. The worker may have crashed after the last restart, or all concurrency slots are occupied by long-running jobs.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Restart the worker</span>
+<span class="cmd">bun run worker</span>
+
+<span class="cmt"># Check how many jobs are active vs waiting in each queue</span>
+<span class="cmd">redis-cli llen "bull:messages:active"</span>
+<span class="cmd">redis-cli llen "bull:messages:wait"</span>
+<span class="cmd">redis-cli llen "bull:tools:active"</span>
+<span class="cmd">redis-cli llen "bull:tools:wait"</span></pre>
+        </div>
+
+        <p>If the active count equals the configured concurrency limit, the worker is saturated. Either increase the concurrency setting in the dashboard under <strong>Settings &rarr; Workers</strong>, add another worker process, or investigate why active jobs are not completing.</p>
+
+        <h4>Code execution timeout</h4>
+        <p>A skill invocation fails with a timeout error. The skill's code is taking longer than the configured maximum execution time.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Check the failed job for the timeout error in BullMQ</span>
+<span class="cmd">redis-cli lrange "bull:tools:failed" 0 4</span>
+
+<span class="cmt"># Run the skill manually to profile it</span>
+<span class="cmd">bun run /path/to/skill/index.ts</span></pre>
+        </div>
+
+        <p>To resolve a timeout: increase the skill timeout via the dashboard <strong>Skills</strong> editor (set a higher <code>timeout</code> in the skill definition), or optimize the skill code to complete faster. Common causes include slow external API calls without timeouts, large data processing in a single pass, or missing <code>await</code> on async operations.</p>
+
+        <h3>Models</h3>
+
+        <h4>API key invalid</h4>
+        <p>The LLM provider rejects the request with a 401 or 403 error. The API key stored in the vault may be incorrect, expired, or copied with extra whitespace.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Retrieve the stored secret value to verify it</span>
+<span class="cmd">redis-cli get "scalyclaw:secret:ANTHROPIC_API_KEY"</span>
+
+<span class="cmt"># Test the key directly with the provider (Anthropic example)</span>
+<span class="cmd">curl https://api.anthropic.com/v1/messages \
+  -H "x-api-key: $ANTHROPIC_API_KEY" \
+  -H "anthropic-version: 2023-06-01" \
+  -H "content-type: application/json" \
+  -d '{"model":"claude-haiku-4-5","max_tokens":10,"messages":[{"role":"user","content":"ping"}]}'</span>
+
+<span class="cmt"># Update the secret in Redis with the correct key</span>
+<span class="cmd">redis-cli set "scalyclaw:secret:ANTHROPIC_API_KEY" "sk-ant-..."</span></pre>
+        </div>
+
+        <p>After updating a secret in Redis, no restart is needed — the vault resolves secrets at runtime on each invocation.</p>
+
+        <h4>Rate limit exceeded</h4>
+        <p>The provider returns 429 errors. You have exceeded the provider's request-per-minute or token-per-minute limits for your tier.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Check current token usage in the dashboard, or query Redis directly</span>
+<span class="cmd">redis-cli get "scalyclaw:usage:today"</span></pre>
+        </div>
+
+        <p>To reduce rate limit pressure:</p>
+        <ul>
+          <li>Configure a <strong>fallback model</strong> in the dashboard <strong>Models</strong> page. ScalyClaw will route requests to the fallback when the primary model is rate-limited or unavailable.</li>
+          <li>Adjust per-model rate limit settings to stay within your provider quota.</li>
+          <li>Switch to a lower-tier model for non-critical tasks by assigning a cheaper model to specific agents or skills.</li>
+        </ul>
+
+        <h4>Budget exceeded</h4>
+        <p>ScalyClaw has hit the configured spend limit and is blocking new LLM requests. In <em>hard</em> mode, all requests are refused until the budget resets. In <em>soft</em> mode, a warning is logged but requests continue.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Check the current spend against the budget limit</span>
+<span class="cmd">redis-cli get "scalyclaw:budget:spend"</span>
+
+<span class="cmt"># Temporarily switch to soft mode via the dashboard config, or directly:</span>
+<span class="cmd">redis-cli json.set "scalyclaw:config" "$.models.budget.mode" '"soft"'</span>
+
+<span class="cmt"># Reset the spend counter manually (use with care)</span>
+<span class="cmd">redis-cli set "scalyclaw:budget:spend" "0"</span></pre>
+        </div>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Soft mode allows unlimited spending
+          </div>
+          <p>Switching to soft budget mode removes the hard spending ceiling. Use it only as a temporary measure while you raise your budget limit — do not leave it enabled permanently in production.</p>
+        </div>
+
+        <h2 id="faq">FAQ</h2>
+
+        <h4>Can I use local LLMs?</h4>
+        <p>Yes. Any model that exposes an OpenAI-compatible API endpoint works with ScalyClaw. <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> is the most common choice — run <code>ollama serve</code>, then add a model in the dashboard <strong>Models</strong> page pointing to <code>http://localhost:11434/v1</code> as the base URL and set the model ID to the Ollama model name (e.g. <code>llama3.2</code>). No API key is required for local endpoints.</p>
+
+        <h4>Where is data stored?</h4>
+        <p>All persistent data lives in two places: a SQLite file (memory, conversation history, vector embeddings) and Redis (configuration, secrets, session state, BullMQ queues). There is no external database to provision or manage. The SQLite file path is set via the <code>SQLITE_PATH</code> environment variable; Redis is configured via <code>REDIS_URL</code>.</p>
+
+        <h4>How do I back up my data?</h4>
+        <p>Back up both the SQLite file and the Redis dataset.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Back up the SQLite memory database (stop writes first for consistency)</span>
+<span class="cmd">cp /path/to/scalyclaw.db /backups/scalyclaw-$(date +%Y%m%d).db</span>
+
+<span class="cmt"># Or use SQLite's built-in online backup (safe while running)</span>
+<span class="cmd">sqlite3 /path/to/scalyclaw.db ".backup /backups/scalyclaw-$(date +%Y%m%d).db"</span>
+
+<span class="cmt"># Trigger a Redis RDB snapshot and copy it</span>
+<span class="cmd">redis-cli bgsave</span>
+<span class="cmd">redis-cli lastsave</span>
+<span class="cmd">cp /var/lib/redis/dump.rdb /backups/redis-$(date +%Y%m%d).rdb</span>
+
+<span class="cmt"># Or export all keys as commands for a portable backup</span>
+<span class="cmd">redis-cli --rdb /backups/redis-$(date +%Y%m%d).rdb</span></pre>
+        </div>
+
+        <p>For secrets specifically, note that they are stored in Redis under <code>scalyclaw:secret:*</code>. A full Redis backup captures them. If you only need to migrate secrets, export them individually and re-import via the dashboard Vault page or with <code>redis-cli set</code>.</p>
+
+        <h4>Can I run multiple nodes?</h4>
+        <p>No. ScalyClaw is designed to run as a single orchestrator node. The per-channel session state machine and pending message queue are designed around a single writer, and running two orchestrator instances against the same Redis would cause race conditions in session state. To scale throughput, add more <strong>worker</strong> processes instead — workers are stateless and safe to run in parallel. Multiple workers share the same BullMQ queues and distribute job processing without any coordination issues.</p>
+
+        <h4>How much disk space does it need?</h4>
+        <p>Very little. The SQLite memory database grows slowly — roughly 1 MB per 10,000 stored memories including vector embeddings. Redis is in-memory and its footprint depends on queue depth and the number of active sessions, but a typical idle instance uses well under 50 MB. The ScalyClaw codebase itself (including dependencies) is under 200 MB after <code>bun install</code>.</p>
+
+        <h4>Is it production-ready?</h4>
+        <p>Yes, with proper Redis hardening. ScalyClaw itself is stable for production use. The critical requirement is that your Redis instance is secured: enable authentication (<code>requirepass</code>), use TLS for any connections that cross a network boundary, bind Redis to a private interface only, configure ACLs to restrict what the ScalyClaw service account can do, and enable Redis persistence (<code>appendonly yes</code> or scheduled <code>BGSAVE</code>) so queued jobs and session state survive a Redis restart. See the <a href="security.html">Security</a> page for additional guidance.</p>
+
+        <h4>Can I contribute?</h4>
+        <p>Yes. ScalyClaw is open-source. Visit the <a href="https://github.com/scalyclaw/scalyclaw" target="_blank" rel="noopener">GitHub repository</a> to browse the code, open issues, or submit pull requests. Contributions of all sizes are welcome — bug fixes, documentation improvements, new channel adapters, and skill ideas.</p>
+
+        <nav class="docs-page-nav">
+          <a href="use-cases.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Use Cases</span>
+          </a>
+          <div></div>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

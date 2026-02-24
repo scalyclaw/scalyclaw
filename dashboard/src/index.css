@@ -1,0 +1,141 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ── Light theme (default) ── */
+
+@theme {
+  --color-background: oklch(1 0 0);
+  --color-foreground: oklch(0.145 0 0);
+  --color-card: oklch(1 0 0);
+  --color-card-foreground: oklch(0.145 0 0);
+  --color-popover: oklch(1 0 0);
+  --color-popover-foreground: oklch(0.145 0 0);
+  --color-primary: oklch(0.205 0 0);
+  --color-primary-foreground: oklch(0.985 0 0);
+  --color-secondary: oklch(0.97 0 0);
+  --color-secondary-foreground: oklch(0.205 0 0);
+  --color-muted: oklch(0.97 0 0);
+  --color-muted-foreground: oklch(0.556 0 0);
+  --color-accent: oklch(0.97 0 0);
+  --color-accent-foreground: oklch(0.205 0 0);
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.577 0.245 27.325);
+  --color-border: oklch(0.922 0 0);
+  --color-input: oklch(0.922 0 0);
+  --color-ring: oklch(0.708 0 0);
+  --color-chart-1: oklch(0.646 0.222 41.116);
+  --color-chart-2: oklch(0.6 0.118 184.704);
+  --color-chart-3: oklch(0.398 0.07 227.392);
+  --color-chart-4: oklch(0.828 0.189 84.429);
+  --color-chart-5: oklch(0.769 0.188 70.08);
+  --color-sidebar-background: oklch(0.985 0 0);
+  --color-sidebar-foreground: oklch(0.445 0 0);
+  --color-sidebar-primary: oklch(0.205 0 0);
+  --color-sidebar-primary-foreground: oklch(0.985 0 0);
+  --color-sidebar-accent: oklch(0.97 0 0);
+  --color-sidebar-accent-foreground: oklch(0.205 0 0);
+  --color-sidebar-border: oklch(0.922 0 0);
+  --color-sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.625rem;
+}
+
+/* ── Dark theme ── */
+
+.dark {
+  /* Backgrounds — near-black like landing page */
+  --color-background: #050505;
+  --color-foreground: #e5e5e5;
+  --color-card: #0a0a0a;
+  --color-card-foreground: #e5e5e5;
+  --color-popover: #0a0a0a;
+  --color-popover-foreground: #e5e5e5;
+
+  /* Primary — emerald */
+  --color-primary: #10b981;
+  --color-primary-foreground: #050505;
+
+  /* Secondary / Accent — subtle hover surfaces */
+  --color-secondary: #111111;
+  --color-secondary-foreground: #e5e5e5;
+  --color-muted: #0f0f0f;
+  --color-muted-foreground: #737373;
+  --color-accent: #111111;
+  --color-accent-foreground: #e5e5e5;
+
+  /* Destructive */
+  --color-destructive: oklch(0.396 0.141 25.723);
+  --color-destructive-foreground: oklch(0.637 0.237 25.331);
+
+  /* Borders / Input — subtle lines */
+  --color-border: #1a1a1a;
+  --color-input: #1a1a1a;
+  --color-ring: #10b981;
+
+  /* Charts — emerald-first palette */
+  --color-chart-1: #10b981;
+  --color-chart-2: #3b82f6;
+  --color-chart-3: #8b5cf6;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #06b6d4;
+
+  /* Sidebar — even darker */
+  --color-sidebar-background: #030303;
+  --color-sidebar-foreground: #737373;
+  --color-sidebar-primary: #10b981;
+  --color-sidebar-primary-foreground: #050505;
+  --color-sidebar-accent: #0a0a0a;
+  --color-sidebar-accent-foreground: #e5e5e5;
+  --color-sidebar-border: #1a1a1a;
+  --color-sidebar-ring: #10b981;
+}
+
+/* ── Custom scrollbar ── */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* ── Font smoothing ── */
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Card glow — emerald top-line on hover ── */
+
+.card-glow {
+  position: relative;
+  overflow: hidden;
+}
+
+.card-glow::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #10b981, transparent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.card-glow:hover::before {
+  opacity: 1;
+}

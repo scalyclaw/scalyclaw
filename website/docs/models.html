@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Models &amp; Providers — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Models &amp; Providers</h1>
+        <p>ScalyClaw routes LLM calls through a configurable provider stack. You can register multiple models from different providers, assign priorities and weights for load balancing, and define fallback chains so that a single provider outage never stops the system. All model configuration lives in Redis — no config files on disk — and changes take effect immediately without a restart.</p>
+
+        <h2 id="configuration">Model Configuration</h2>
+
+        <p>Models are added and managed in the dashboard under <strong>Settings &rarr; Models</strong>. Each entry in the model list describes a single provider/model combination. You can have as many entries as you need; the orchestrator selects the right one at call time based on priority, weight, and the capabilities required by that particular request.</p>
+
+        <h3>Model Properties</h3>
+
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>id</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Unique identifier for this model entry within ScalyClaw. Used internally and in logs — choose something readable like <code>gpt4o-primary</code> or <code>claude-opus-main</code>.</td>
+            </tr>
+            <tr>
+              <td><code>name</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>The model name as the provider expects it — e.g. <code>gpt-4o</code>, <code>claude-sonnet-4-20250514</code>, <code>gemini-1.5-pro</code>. For local/Ollama, this is the tag pulled in Ollama.</td>
+            </tr>
+            <tr>
+              <td><code>provider</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Key into the <code>providers</code> map — e.g. <code>openai</code>, <code>anthropic</code>, <code>google</code>. Determines which configured provider credentials and base URL are used.</td>
+            </tr>
+            <tr>
+              <td><code>enabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Toggle this model on or off without removing it from the config. Disabled models are never selected by the orchestrator.</td>
+            </tr>
+            <tr>
+              <td><code>priority</code></td>
+              <td><span class="badge badge-blue">integer</span></td>
+              <td>Lower number = higher priority. The orchestrator always tries the lowest-numbered priority group first. If every model in that group fails, it falls back to the next group. Models with <code>priority: 1</code> are tried before <code>priority: 2</code>.</td>
+            </tr>
+            <tr>
+              <td><code>weight</code></td>
+              <td><span class="badge badge-blue">integer</span></td>
+              <td>Relative weight (0–100) for load balancing among models sharing the same priority. A model with <code>weight: 3</code> receives three times as many requests as one with <code>weight: 1</code>. Useful for spreading load across multiple keys for the same provider.</td>
+            </tr>
+            <tr>
+              <td><code>temperature</code></td>
+              <td><span class="badge badge-blue">number</span></td>
+              <td>Sampling temperature for this model. Range 0.0–2.0 depending on provider; 0.7 is a reasonable default for conversational use.</td>
+            </tr>
+            <tr>
+              <td><code>maxTokens</code></td>
+              <td><span class="badge badge-blue">integer</span></td>
+              <td>Maximum number of tokens the model may generate in a single response.</td>
+            </tr>
+            <tr>
+              <td><code>contextWindow</code></td>
+              <td><span class="badge badge-blue">integer</span></td>
+              <td>Total context window size for this model in tokens, including both input and output. Used to guard against prompts that would exceed the model's limit.</td>
+            </tr>
+            <tr>
+              <td><code>toolEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model supports tool/function calling. The orchestrator only selects this model for tool-enabled requests when this is <code>true</code>.</td>
+            </tr>
+            <tr>
+              <td><code>imageEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model can process image inputs.</td>
+            </tr>
+            <tr>
+              <td><code>audioEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model can process audio inputs.</td>
+            </tr>
+            <tr>
+              <td><code>videoEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model can process video inputs.</td>
+            </tr>
+            <tr>
+              <td><code>documentEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model can process document inputs (e.g. PDFs).</td>
+            </tr>
+            <tr>
+              <td><code>reasoningEnabled</code></td>
+              <td><span class="badge badge-blue">boolean</span></td>
+              <td>Whether this model supports extended thinking / reasoning mode.</td>
+            </tr>
+            <tr>
+              <td><code>inputPricePerMillion</code></td>
+              <td><span class="badge badge-blue">number</span></td>
+              <td>Cost in USD per one million input tokens. Used for budget tracking and spend estimates.</td>
+            </tr>
+            <tr>
+              <td><code>outputPricePerMillion</code></td>
+              <td><span class="badge badge-blue">number</span></td>
+              <td>Cost in USD per one million output tokens. Used for budget tracking and spend estimates.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Fallback Chain</h3>
+
+        <p>When a model call fails — due to a network error, rate-limit, timeout, or provider outage — ScalyClaw automatically tries the next available model. The fallback order is determined entirely by the <code>priority</code> field:</p>
+
+        <ol>
+          <li>All models with the lowest priority value are candidates for the first attempt. If there are multiple, they share load according to their <code>weight</code>.</li>
+          <li>If every model in that priority group fails (or none has the required capabilities), the orchestrator moves to the next priority group.</li>
+          <li>This continues until either a call succeeds or all models are exhausted, in which case an error is returned to the channel.</li>
+        </ol>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            How weight works
+          </div>
+          <p>Weights within the same priority level are used for weighted-random selection, not strict round-robin. Each candidate's probability of being chosen equals its weight divided by the sum of all weights in that group. A weight of <code>0</code> disables a model without removing it from the config.</p>
+        </div>
+
+        <h3>Supported Providers</h3>
+
+        <p>Providers are registered under <code>config.models.providers</code> as a map from a provider key to an object with an optional <code>apiKey</code> and optional <code>baseUrl</code>. Each model entry's <code>provider</code> field references one of these keys.</p>
+
+        <table>
+          <thead>
+            <tr><th>Provider</th><th><code>provider</code> key</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>OpenAI</strong></td>
+              <td><code>openai</code></td>
+              <td>GPT-4o, GPT-4o-mini, o1, o3, and future models. Set <code>apiKey</code> to your OpenAI API key.</td>
+            </tr>
+            <tr>
+              <td><strong>Anthropic</strong></td>
+              <td><code>anthropic</code></td>
+              <td>Claude Opus, Sonnet, and Haiku family. Extended thinking supported where available. Set <code>apiKey</code> to your Anthropic API key.</td>
+            </tr>
+            <tr>
+              <td><strong>Google AI</strong></td>
+              <td><code>google</code></td>
+              <td>Gemini 1.5 Pro, Flash, and 2.0 series. Uses the Gemini API (not Vertex AI). Set <code>apiKey</code> to your Google AI API key.</td>
+            </tr>
+            <tr>
+              <td><strong>Azure OpenAI</strong></td>
+              <td><code>azure</code></td>
+              <td>Set <code>apiKey</code> to your Azure API key and <code>baseUrl</code> to your Azure endpoint. Use the deployment name as the model's <code>name</code> field.</td>
+            </tr>
+            <tr>
+              <td><strong>Local / Ollama</strong></td>
+              <td><code>local</code></td>
+              <td>Any OpenAI-compatible local server (Ollama, LM Studio, llama.cpp). Set <code>baseUrl</code> to the local address (e.g. <code>http://localhost:11434/v1</code>). <code>apiKey</code> can be omitted or left empty.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Example Configuration</h3>
+
+        <p>The following shows a realistic multi-provider setup: Anthropic as the primary model, OpenAI as a same-priority peer with lower weight, and a local Ollama model as a last-resort fallback for basic requests.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"models"</span>: {
+    <span class="prop">"providers"</span>: {
+      <span class="prop">"anthropic"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-ant-..."</span> },
+      <span class="prop">"openai"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-..."</span> },
+      <span class="prop">"local"</span>: { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
+    },
+    <span class="prop">"models"</span>: [
+      {
+        <span class="prop">"id"</span>: <span class="str">"claude-primary"</span>,
+        <span class="prop">"name"</span>: <span class="str">"claude-opus-4-6"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"anthropic"</span>,
+        <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"priority"</span>: <span class="num">1</span>,
+        <span class="prop">"weight"</span>: <span class="num">75</span>,
+        <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
+        <span class="prop">"maxTokens"</span>: <span class="num">8192</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">200000</span>,
+        <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"documentEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">15.00</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">75.00</span>
+      },
+      {
+        <span class="prop">"id"</span>: <span class="str">"gpt4o-secondary"</span>,
+        <span class="prop">"name"</span>: <span class="str">"gpt-4o"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"openai"</span>,
+        <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"priority"</span>: <span class="num">1</span>,
+        <span class="prop">"weight"</span>: <span class="num">25</span>,
+        <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
+        <span class="prop">"maxTokens"</span>: <span class="num">4096</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">128000</span>,
+        <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"documentEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">2.50</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">10.00</span>
+      },
+      {
+        <span class="prop">"id"</span>: <span class="str">"local-fallback"</span>,
+        <span class="prop">"name"</span>: <span class="str">"llama3.2"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"local"</span>,
+        <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"priority"</span>: <span class="num">2</span>,
+        <span class="prop">"weight"</span>: <span class="num">100</span>,
+        <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
+        <span class="prop">"maxTokens"</span>: <span class="num">2048</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">8192</span>,
+        <span class="prop">"toolEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"imageEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"documentEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">0</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">0</span>
+      }
+    ],
+    <span class="prop">"embeddingModels"</span>: []
+  }
+}</pre>
+        </div>
+
+        <p>With this config, 75% of priority-1 requests go to Claude (weight 75 out of 100) and 25% go to GPT-4o (weight 25 out of 100). If both fail, the local Llama 3.2 instance handles the request — but only for requests that do not require tools or multimodal inputs, since those capability flags are <code>false</code> for the fallback.</p>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Capability matching is strict
+          </div>
+          <p>If a request requires tool use (because the LLM is expected to call tools) and no model in any priority group has <code>toolEnabled: true</code>, the call will fail immediately rather than fall through to an incapable model and produce a broken response. Always ensure at least one enabled model has the required capability flags set for each feature you rely on.</p>
+        </div>
+
+        <h2 id="embedding">Embedding Models</h2>
+
+        <p>ScalyClaw's memory system stores every saved memory entry alongside a high-dimensional vector embedding. When the orchestrator retrieves relevant context before an LLM call, it runs a cosine-similarity search using sqlite-vec against those stored vectors. The accuracy of that search depends entirely on the quality of the embedding model you choose.</p>
+
+        <h3>How Embeddings Are Generated</h3>
+
+        <p>When a memory entry is saved — either automatically by the orchestrator or explicitly via the <code>save_memory</code> tool — ScalyClaw calls the configured embedding model to convert the text into a float32 vector. That vector is stored in the SQLite database alongside the entry. At retrieval time, the query text is embedded on the fly using the same model, and sqlite-vec finds the nearest stored vectors by cosine distance.</p>
+
+        <div class="callout callout-danger">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            Do not change embedding models mid-deployment
+          </div>
+          <p>All stored vectors must come from the same model. Switching to a different embedding model produces incompatible vectors — semantic search will return nonsense results. If you need to switch models, re-embed all existing memories first using <strong>Settings &rarr; Memory &rarr; Re-embed all</strong> in the dashboard.</p>
+        </div>
+
+        <h3>Recommended Models</h3>
+
+        <table>
+          <thead>
+            <tr><th>Model</th><th>Provider</th><th>Dimensions</th><th>Recommended for</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>text-embedding-3-small</code></td>
+              <td><span class="badge badge-green">OpenAI</span></td>
+              <td>1536</td>
+              <td>Best cost-to-quality ratio for most deployments. Good multilingual support. Default recommendation.</td>
+            </tr>
+            <tr>
+              <td><code>text-embedding-3-large</code></td>
+              <td><span class="badge badge-green">OpenAI</span></td>
+              <td>3072</td>
+              <td>Higher accuracy for large, diverse memory stores. Higher cost and storage per entry.</td>
+            </tr>
+            <tr>
+              <td><code>text-embedding-ada-002</code></td>
+              <td><span class="badge badge-green">OpenAI</span></td>
+              <td>1536</td>
+              <td>Legacy model. Use <code>text-embedding-3-small</code> instead for new deployments.</td>
+            </tr>
+            <tr>
+              <td><code>nomic-embed-text</code></td>
+              <td><span class="badge badge-purple">Local / Ollama</span></td>
+              <td>768</td>
+              <td>Fully local, no API cost. Good quality for English-primary content. Pull with <code>ollama pull nomic-embed-text</code>.</td>
+            </tr>
+            <tr>
+              <td><code>mxbai-embed-large</code></td>
+              <td><span class="badge badge-purple">Local / Ollama</span></td>
+              <td>1024</td>
+              <td>Higher-quality local embedding. Slightly larger and slower than nomic-embed-text but better recall.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Embedding Configuration</h3>
+
+        <p>Embedding models live in <code>config.models.embeddingModels</code>, the same config section as chat models but in a separate array. You can use a different provider for embeddings than for chat — for example, use Anthropic for chat but OpenAI's cheaper embedding API for memory. Each entry shares the same <code>providers</code> map as chat models.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"models"</span>: {
+    <span class="prop">"providers"</span>: {
+      <span class="prop">"openai"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-..."</span> }
+    },
+    <span class="prop">"models"</span>: [ <span class="cmt">/* ... chat models ... */</span> ],
+    <span class="prop">"embeddingModels"</span>: [
+      {
+        <span class="prop">"id"</span>: <span class="str">"openai-embed"</span>,
+        <span class="prop">"name"</span>: <span class="str">"text-embedding-3-small"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"openai"</span>,
+        <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"priority"</span>: <span class="num">1</span>,
+        <span class="prop">"weight"</span>: <span class="num">100</span>,
+        <span class="prop">"dimensions"</span>: <span class="num">1536</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">0.02</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">0</span>
+      }
+    ]
+  }
+}</pre>
+        </div>
+
+        <p>For a fully local setup with Ollama, add the local provider to the providers map and point the embedding model at it:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"models"</span>: {
+    <span class="prop">"providers"</span>: {
+      <span class="prop">"local"</span>: { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
+    },
+    <span class="prop">"models"</span>: [ <span class="cmt">/* ... chat models ... */</span> ],
+    <span class="prop">"embeddingModels"</span>: [
+      {
+        <span class="prop">"id"</span>: <span class="str">"local-embed"</span>,
+        <span class="prop">"name"</span>: <span class="str">"nomic-embed-text"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"local"</span>,
+        <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"priority"</span>: <span class="num">1</span>,
+        <span class="prop">"weight"</span>: <span class="num">100</span>,
+        <span class="prop">"dimensions"</span>: <span class="num">768</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">0</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">0</span>
+      }
+    ]
+  }
+}</pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>The <code>dimensions</code> field must exactly match what the model actually produces. If you set it wrong, sqlite-vec will reject the insert. Check your model's documentation for the exact output dimension before setting this value.</p>
+        </div>
+
+        <h2 id="budget">Budget Control</h2>
+
+        <p>LLM API calls cost money. ScalyClaw tracks token usage per model and per day, accumulates spending estimates based on the <code>inputPricePerMillion</code> and <code>outputPricePerMillion</code> values you configure on each model, and enforces configurable global daily and monthly limits. Budget is a single global config block — there are no per-model budget caps. You can choose between hard enforcement (block all calls when the limit is reached) or soft enforcement (warn but continue).</p>
+
+        <h3>Enforcement Modes</h3>
+
+        <table>
+          <thead>
+            <tr><th>Mode</th><th>Behavior when limit is reached</th><th>Use when</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Hard</strong> <span class="badge badge-amber">stop</span></td>
+              <td>All LLM calls are blocked immediately. The system returns an error message to the channel explaining the budget limit has been reached. No calls go out until the limit resets (midnight UTC for daily, first of month for monthly).</td>
+              <td>Production deployments with strict cost controls, shared installations, or when you want to guarantee a monthly maximum spend.</td>
+            </tr>
+            <tr>
+              <td><strong>Soft</strong> <span class="badge badge-blue">warn</span></td>
+              <td>LLM calls continue normally. A warning is emitted to the dashboard logs and, optionally, to a configured alert channel. The system does not stop; it only signals that the threshold has been crossed.</td>
+              <td>Personal deployments where uninterrupted service matters more than strict spend enforcement, or when you want visibility without interruption.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Per-Model Cost Tracking</h3>
+
+        <p>Every LLM call records the number of input tokens, output tokens, and the estimated cost in USD using the pricing table ScalyClaw maintains for each known model. Costs are stored in Redis and aggregated by day and by month. The dashboard usage page displays:</p>
+
+        <ul>
+          <li>Daily and monthly spend broken down by model</li>
+          <li>Token usage histograms per model per day</li>
+          <li>Budget consumption as a percentage of configured limits</li>
+          <li>A list of the most expensive individual requests</li>
+        </ul>
+
+        <p>For models with custom or unknown pricing (e.g., local models or new provider releases), set <code>inputPricePerMillion</code> and <code>outputPricePerMillion</code> directly on the model entry in <code>config.models.models</code>. ScalyClaw uses those figures for all cost tracking and budget accounting for that model. Set both to <code>0</code> for free local models.</p>
+
+        <h3>Budget Configuration</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"budget"</span>: {
+    <span class="prop">"monthlyLimit"</span>: <span class="num">150</span>,
+    <span class="prop">"dailyLimit"</span>: <span class="num">10</span>,
+    <span class="prop">"hardLimit"</span>: <span class="kw">true</span>,
+    <span class="prop">"alertThresholds"</span>: [<span class="num">50</span>, <span class="num">80</span>, <span class="num">90</span>]
+  }
+}</pre>
+        </div>
+
+        <p>Budget is a single global block — there are no per-model caps. The fields are:</p>
+
+        <ul>
+          <li><code>monthlyLimit</code> — maximum USD spend per calendar month. Set to <code>0</code> for unlimited.</li>
+          <li><code>dailyLimit</code> — maximum USD spend per day (resets at midnight UTC). Set to <code>0</code> for unlimited.</li>
+          <li><code>hardLimit</code> — when <code>true</code>, all LLM calls are blocked once a limit is reached. When <code>false</code>, the system continues but emits warnings.</li>
+          <li><code>alertThresholds</code> — array of percentage values (e.g. <code>[50, 80, 90]</code>). A warning is emitted to dashboard logs and any configured alert channels each time cumulative spend crosses one of these thresholds — giving you advance notice before a hard stop occurs.</li>
+        </ul>
+
+        <h3>Custom Pricing</h3>
+
+        <p>Set <code>inputPricePerMillion</code> and <code>outputPricePerMillion</code> directly on any model entry. ScalyClaw uses those values for all cost tracking for that model:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"id"</span>: <span class="str">"my-azure-deployment"</span>,
+  <span class="prop">"name"</span>: <span class="str">"my-gpt4o-deployment"</span>,
+  <span class="prop">"provider"</span>: <span class="str">"azure"</span>,
+  <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+  <span class="prop">"priority"</span>: <span class="num">1</span>,
+  <span class="prop">"weight"</span>: <span class="num">100</span>,
+  <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
+  <span class="prop">"maxTokens"</span>: <span class="num">4096</span>,
+  <span class="prop">"contextWindow"</span>: <span class="num">128000</span>,
+  <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
+  <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
+  <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
+  <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
+  <span class="prop">"documentEnabled"</span>: <span class="kw">false</span>,
+  <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+  <span class="prop">"inputPricePerMillion"</span>: <span class="num">2.50</span>,
+  <span class="prop">"outputPricePerMillion"</span>: <span class="num">10.00</span>
+}</pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>Set <code>monthlyLimit</code> and <code>dailyLimit</code> conservatively with <code>hardLimit: true</code> in production. The <code>alertThresholds</code> array lets you get warnings at e.g. 50%, 80%, and 90% of the limit so you can react before the system blocks calls entirely.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="channels.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Channels</span>
+          </a>
+          <a href="memory.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Memory</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

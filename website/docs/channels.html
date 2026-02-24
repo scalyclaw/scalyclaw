@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Channels — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Channels</h1>
+        <p>ScalyClaw connects to seven messaging platforms simultaneously. One memory, one personality, one configuration — across all of them. Each channel is an independent adapter that normalises platform-specific message formats into a shared internal envelope before handing off to the orchestrator.</p>
+
+        <h2 id="overview">Overview</h2>
+
+        <p>All channels share the same orchestrator, memory system, and personality defined in your <code>mind/</code> files. Per-channel session state is stored in Redis at <code>scalyclaw:session:{channelId}</code> using a Lua-atomic state machine, so a busy Telegram conversation never blocks a simultaneous Discord one.</p>
+
+        <table>
+          <thead>
+            <tr><th>Channel</th><th>Transport</th><th>Features</th><th>Status</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Telegram</strong></td>
+              <td>Bot API</td>
+              <td>Text, images, voice, documents, inline buttons</td>
+              <td><span class="badge badge-green">Stable</span></td>
+            </tr>
+            <tr>
+              <td><strong>Discord</strong></td>
+              <td>Gateway WebSocket</td>
+              <td>Text, embeds, threads, reactions</td>
+              <td><span class="badge badge-green">Stable</span></td>
+            </tr>
+            <tr>
+              <td><strong>Slack</strong></td>
+              <td>Socket Mode WebSocket</td>
+              <td>Text, Block Kit, threads, reactions, slash commands</td>
+              <td><span class="badge badge-green">Stable</span></td>
+            </tr>
+            <tr>
+              <td><strong>WhatsApp</strong></td>
+              <td>Meta Cloud API (webhook)</td>
+              <td>Text, images, documents</td>
+              <td><span class="badge badge-blue">Beta</span></td>
+            </tr>
+            <tr>
+              <td><strong>Signal</strong></td>
+              <td>signald REST bridge</td>
+              <td>Text, attachments</td>
+              <td><span class="badge badge-amber">Experimental</span></td>
+            </tr>
+            <tr>
+              <td><strong>Teams</strong></td>
+              <td>Azure Bot Framework</td>
+              <td>Text, Adaptive Cards</td>
+              <td><span class="badge badge-blue">Beta</span></td>
+            </tr>
+            <tr>
+              <td><strong>Web Gateway</strong></td>
+              <td>HTTP REST + WebSocket</td>
+              <td>Full API access, real-time streaming, custom UIs</td>
+              <td><span class="badge badge-green">Stable</span></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 id="telegram">Telegram</h2>
+
+        <p>The Telegram adapter uses the official Bot API. You can restrict access to specific Telegram user IDs via the allowlist, and independently control whether direct messages and group messages are accepted.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>Open Telegram and start a chat with <strong>@BotFather</strong>.</li>
+          <li>Send <code>/newbot</code>, follow the prompts, and copy the bot token.</li>
+          <li>In the ScalyClaw dashboard, go to <strong>Channels &rarr; Telegram</strong>.</li>
+          <li>Paste the token into the <strong>Bot Token</strong> field and save.</li>
+          <li>Set <strong>DM Policy</strong> to <code>allow</code> or <code>allowlist</code> and <strong>Group Policy</strong> to <code>allow</code> or <code>deny</code>.</li>
+          <li>Optionally add Telegram user IDs to the <strong>Allowlist</strong>.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages (UTF-8, Markdown V2 formatting)</li>
+          <li>Photo and document uploads — forwarded to the orchestrator as attachments</li>
+          <li>Voice messages — transcribed before processing</li>
+          <li>Inline keyboards returned as button payloads</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.telegram</span>
+{
+  <span class="prop">"botToken"</span>: <span class="str">"1234567890:ABC-your-bot-token-here"</span>,
+  <span class="prop">"allowlist"</span>: [<span class="str">"123456789"</span>],       <span class="cmt">// Telegram user IDs; empty = allow all</span>
+  <span class="prop">"dmPolicy"</span>: <span class="str">"allowlist"</span>,           <span class="cmt">// "allow" | "allowlist"</span>
+  <span class="prop">"groupPolicy"</span>: <span class="str">"deny"</span>,             <span class="cmt">// "allow" | "deny"</span>
+  <span class="prop">"textChunkLimit"</span>: <span class="num">4096</span>,            <span class="cmt">// max chars per message</span>
+  <span class="prop">"mediaMaxMb"</span>: <span class="num">20</span>                   <span class="cmt">// max media size in MB</span>
+}</pre>
+        </div>
+
+        <h2 id="discord">Discord</h2>
+
+        <p>The Discord adapter uses the Gateway WebSocket API. You will need to create an application in the Discord Developer Portal and configure the correct gateway intents so ScalyClaw can read message content.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>Go to the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> and create a new application.</li>
+          <li>Navigate to the <strong>Bot</strong> tab, click <strong>Add Bot</strong>, and copy the bot token.</li>
+          <li>Under <strong>Privileged Gateway Intents</strong>, enable <strong>Message Content Intent</strong> and <strong>Server Members Intent</strong>.</li>
+          <li>Use the OAuth2 URL generator to invite the bot to your server with the <code>bot</code> scope and <code>Send Messages</code>, <code>Read Message History</code>, and <code>Add Reactions</code> permissions.</li>
+          <li>In the ScalyClaw dashboard, go to <strong>Channels &rarr; Discord</strong> and paste the bot token.</li>
+          <li>Optionally restrict to specific guild IDs or channel IDs.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages with Discord Markdown</li>
+          <li>Rich embeds for structured responses</li>
+          <li>Thread creation and participation</li>
+          <li>Reaction-based interactions</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.discord</span>
+{
+  <span class="prop">"botToken"</span>: <span class="str">"your-discord-bot-token-here"</span>,
+  <span class="prop">"allowlist"</span>: [<span class="str">"1234567890"</span>],       <span class="cmt">// guild or channel IDs; empty = allow all</span>
+  <span class="prop">"textChunkLimit"</span>: <span class="num">2000</span>             <span class="cmt">// max chars per message</span>
+}</pre>
+        </div>
+
+        <h2 id="slack">Slack</h2>
+
+        <p>The Slack adapter uses Socket Mode, which means no public webhook URL is required. ScalyClaw connects to Slack over a persistent WebSocket, making it suitable for private or firewalled deployments.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> and create a new app from scratch.</li>
+          <li>Under <strong>Socket Mode</strong>, enable it and generate an <strong>App-Level Token</strong> with the <code>connections:write</code> scope. Copy it.</li>
+          <li>Under <strong>OAuth &amp; Permissions</strong>, add the following bot token scopes: <code>chat:write</code>, <code>channels:history</code>, <code>groups:history</code>, <code>im:history</code>, <code>reactions:write</code>, <code>commands</code>.</li>
+          <li>Install the app to your workspace and copy the <strong>Bot User OAuth Token</strong>.</li>
+          <li>Under <strong>Event Subscriptions</strong>, subscribe to <code>message.channels</code>, <code>message.groups</code>, <code>message.im</code>.</li>
+          <li>In the ScalyClaw dashboard, paste both tokens into <strong>Channels &rarr; Slack</strong>.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages and Block Kit formatting for rich layouts</li>
+          <li>Thread-aware replies — ScalyClaw tracks thread timestamps</li>
+          <li>Emoji reactions for lightweight acknowledgements</li>
+          <li>Slash commands registered at install time</li>
+        </ul>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.slack</span>
+{
+  <span class="prop">"botToken"</span>: <span class="str">"xoxb-your-bot-token-here"</span>,   <span class="cmt">// xoxb-… Bot User OAuth Token</span>
+  <span class="prop">"appToken"</span>: <span class="str">"xapp-your-app-token-here"</span>,   <span class="cmt">// xapp-… Socket Mode App-Level Token</span>
+  <span class="prop">"textChunkLimit"</span>: <span class="num">3000</span>                   <span class="cmt">// max chars per message</span>
+}</pre>
+        </div>
+
+        <h2 id="whatsapp">WhatsApp</h2>
+
+        <p>The WhatsApp adapter uses the Meta Cloud API. Incoming messages arrive via a webhook registered with Meta; ScalyClaw verifies the webhook signature and responds through the same API. No WhatsApp Business App is required — everything goes through Meta's cloud infrastructure.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>Create a Meta Business account and a Meta App at <a href="https://developers.facebook.com" target="_blank" rel="noopener">developers.facebook.com</a>.</li>
+          <li>Add the <strong>WhatsApp</strong> product to your app and complete business verification.</li>
+          <li>Under <strong>WhatsApp &rarr; Configuration</strong>, set the <strong>Webhook URL</strong> to <code>https://your-domain.com/webhook/whatsapp</code> and enter a <strong>Verify Token</strong> you choose.</li>
+          <li>Subscribe to the <code>messages</code> webhook field.</li>
+          <li>Copy the <strong>Phone Number ID</strong>, <strong>Access Token</strong>, and <strong>Verify Token</strong> into the ScalyClaw dashboard under <strong>Channels &rarr; WhatsApp</strong>.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages with basic formatting</li>
+          <li>Image and document uploads received as media URLs</li>
+          <li>Read receipts handled automatically</li>
+        </ul>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Meta Business Verification
+          </div>
+          <p>Meta requires <strong>business verification</strong> before you can send messages to arbitrary phone numbers. During development, you can only message numbers explicitly added as test numbers in the Meta Developer Portal. Production access requires completing Meta's review process, which can take several days.</p>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.whatsapp</span>
+{
+  <span class="prop">"phoneNumberId"</span>: <span class="str">"1234567890"</span>,
+  <span class="prop">"accessToken"</span>: <span class="str">"your-meta-access-token"</span>,
+  <span class="prop">"verifyToken"</span>: <span class="str">"your-webhook-verify-token"</span>,
+  <span class="prop">"appSecret"</span>: <span class="str">"your-app-secret"</span>,          <span class="cmt">// optional, for signature verification</span>
+  <span class="prop">"apiVersion"</span>: <span class="str">"v21.0"</span>,
+  <span class="prop">"textChunkLimit"</span>: <span class="num">4096</span>                   <span class="cmt">// max chars per message</span>
+}</pre>
+        </div>
+
+        <h2 id="signal">Signal</h2>
+
+        <p>Signal does not provide an official bot API. ScalyClaw connects to Signal through <strong>signald</strong>, an open-source daemon that links a Signal account and exposes a local REST/socket interface. You run signald alongside ScalyClaw and configure the endpoint.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>Install signald by following the <a href="https://signald.org/articles/install/" target="_blank" rel="noopener">signald installation guide</a>.</li>
+          <li>Register or link a Signal number with signald: <code>signaldctl account register +15555550100</code></li>
+          <li>Start the signald daemon. It listens on a Unix socket or a configurable HTTP port.</li>
+          <li>In the ScalyClaw dashboard, go to <strong>Channels &rarr; Signal</strong> and provide the signald endpoint and your linked phone number.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages (end-to-end encrypted, same as native Signal)</li>
+          <li>File and image attachments</li>
+          <li>Group message support (read and reply)</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Third-party bridge
+          </div>
+          <p>signald is an independent open-source project maintained by the community. It is not affiliated with Signal Messenger LLC. Using it may violate Signal's Terms of Service. ScalyClaw does not bundle or maintain signald — you are responsible for running and updating it.</p>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.signal</span>
+{
+  <span class="prop">"apiUrl"</span>: <span class="str">"http://localhost:9080"</span>,  <span class="cmt">// signald REST URL</span>
+  <span class="prop">"phoneNumber"</span>: <span class="str">"+15555550100"</span>,      <span class="cmt">// linked Signal number</span>
+  <span class="prop">"pollIntervalMs"</span>: <span class="num">2000</span>,             <span class="cmt">// polling interval in milliseconds</span>
+  <span class="prop">"textChunkLimit"</span>: <span class="num">4096</span>              <span class="cmt">// max chars per message</span>
+}</pre>
+        </div>
+
+        <h2 id="teams">Teams</h2>
+
+        <p>The Microsoft Teams adapter is built on the <strong>Azure Bot Framework</strong>. ScalyClaw registers as a bot in Azure, and messages flow through the Bot Framework's activity relay. Responses can use Adaptive Cards for richly structured output.</p>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>In the <a href="https://portal.azure.com" target="_blank" rel="noopener">Azure Portal</a>, create a new <strong>Bot Channels Registration</strong> resource. Copy the <strong>App ID</strong> and generate a <strong>Client Secret</strong>.</li>
+          <li>Set the messaging endpoint to <code>https://your-domain.com/webhook/teams</code>.</li>
+          <li>In the Azure portal's Bot resource, open <strong>Channels</strong> and add the <strong>Microsoft Teams</strong> channel.</li>
+          <li>Create a Teams app manifest using App Studio or the Developer Portal and sideload it to your tenant, or publish it through the Teams admin center.</li>
+          <li>In the ScalyClaw dashboard, go to <strong>Channels &rarr; Teams</strong> and enter the App ID and Client Secret.</li>
+        </ol>
+
+        <h3>Supported Capabilities</h3>
+        <ul>
+          <li>Text messages with Markdown formatting</li>
+          <li>Adaptive Cards for interactive and structured responses</li>
+          <li>Personal chats and channel mentions</li>
+        </ul>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            Azure subscription required
+          </div>
+          <p>The Teams channel requires an active Azure subscription. The <strong>Bot Channels Registration</strong> resource itself is free, but you need a subscription to create it. Outbound messages from ScalyClaw count against the Bot Framework's standard rate limits.</p>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — channels.teams</span>
+{
+  <span class="prop">"appId"</span>: <span class="str">"xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"</span>,
+  <span class="prop">"appPassword"</span>: <span class="str">"your-azure-client-secret"</span>,  <span class="cmt">// Azure client secret</span>
+  <span class="prop">"textChunkLimit"</span>: <span class="num">4096</span>                     <span class="cmt">// max chars per message</span>
+}</pre>
+        </div>
+
+        <h2 id="web">Web Gateway</h2>
+
+        <p>The Web Gateway is the only channel that requires no external service or third-party account. ScalyClaw exposes an HTTP REST endpoint and a WebSocket endpoint directly. It is the fastest way to test the system, build custom UIs, or integrate ScalyClaw into an existing application.</p>
+
+        <h3>Endpoints</h3>
+        <table>
+          <thead>
+            <tr><th>Method</th><th>Path</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><code>POST</code></td><td><code>/api/message</code></td><td>Send a message and receive the response synchronously</td></tr>
+            <tr><td><code>GET</code></td><td><code>/api/history</code></td><td>Retrieve recent conversation history</td></tr>
+            <tr><td><code>WebSocket</code></td><td><code>/ws</code></td><td>Real-time bidirectional stream — send messages, receive streaming tokens</td></tr>
+          </tbody>
+        </table>
+
+        <h3>Setup</h3>
+        <ol>
+          <li>In the ScalyClaw dashboard, go to <strong>Channels &rarr; Web</strong> and enable it.</li>
+          <li>Set the port (default <code>3000</code>). The gateway starts automatically when the process starts.</li>
+          <li>Optionally set <code>authType</code> to <code>bearer</code> or <code>basic</code> and provide an <code>authValue</code> to restrict access.</li>
+        </ol>
+
+        <h3>REST Example</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Send a message and get a response</span>
+curl -X POST http://localhost:3000/api/message \
+  -H <span class="str">"Content-Type: application/json"</span> \
+  -H <span class="str">"Authorization: Bearer your-auth-value"</span> \
+  -d <span class="str">'{"text": "What is the weather like today?", "channelId": "web-default"}'</span></pre>
+        </div>
+
+        <h3>WebSocket Example</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">typescript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="kw">const</span> ws = <span class="kw">new</span> <span class="typ">WebSocket</span>(<span class="str">"ws://localhost:3000/ws"</span>);
+
+ws.<span class="fn">onopen</span> = () <span class="op">=&gt;</span> {
+  ws.<span class="fn">send</span>(<span class="typ">JSON</span>.<span class="fn">stringify</span>({ <span class="prop">text</span>: <span class="str">"Hello, ScalyClaw!"</span>, <span class="prop">channelId</span>: <span class="str">"web-default"</span> }));
+};
+
+ws.<span class="fn">onmessage</span> = (event) <span class="op">=&gt;</span> {
+  <span class="kw">const</span> msg = <span class="typ">JSON</span>.<span class="fn">parse</span>(event.data);
+  <span class="kw">if</span> (msg.type === <span class="str">"token"</span>) process.stdout.<span class="fn">write</span>(msg.text);  <span class="cmt">// streaming token</span>
+  <span class="kw">if</span> (msg.type === <span class="str">"done"</span>)  console.<span class="fn">log</span>(<span class="str">"\n[done]"</span>);
+};</pre>
+        </div>
+
+        <h3>Config</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw:config — gateway (NOT config.channels)</span>
+{
+  <span class="prop">"host"</span>: <span class="str">"127.0.0.1"</span>,
+  <span class="prop">"port"</span>: <span class="num">3000</span>,
+  <span class="prop">"bind"</span>: <span class="str">"127.0.0.1"</span>,
+  <span class="prop">"authType"</span>: <span class="str">"bearer"</span>,            <span class="cmt">// "none" | "bearer" | "basic"</span>
+  <span class="prop">"authValue"</span>: <span class="str">"your-secret-token"</span>, <span class="cmt">// null to disable auth</span>
+  <span class="prop">"tls"</span>: { <span class="prop">"cert"</span>: <span class="str">""</span>, <span class="prop">"key"</span>: <span class="str">""</span> },
+  <span class="prop">"cors"</span>: [<span class="str">"http://localhost:5173"</span>] <span class="cmt">// allowed origins for browser clients</span>
+}</pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>The Web Gateway is also what the ScalyClaw dashboard uses internally for its built-in chat widget. You can use the same WebSocket endpoint to embed a chat interface in any web application — no extra server code needed.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="mind.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">The Mind</span>
+          </a>
+          <a href="models.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Models &amp; Providers</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

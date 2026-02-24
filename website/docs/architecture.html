@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Architecture — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Architecture</h1>
+        <p>ScalyClaw is built around three independent processes — <strong>Node</strong>, <strong>Worker</strong>, and <strong>Dashboard</strong> — connected entirely through <strong>Redis</strong>. There are no direct inter-process HTTP calls; every coordination happens through Redis data structures, BullMQ queues, and pub/sub channels. This design means each component can be scaled, restarted, or replaced independently without affecting the others.</p>
+
+        <h2 id="overview">Overview</h2>
+
+        <p>Each process has a focused responsibility. The Node is the stateful brain: it owns channel connections, the orchestrator, and LLM calls. The Worker is the stateless execution engine: it picks up jobs from BullMQ queues and executes code, agents, and tools without holding any in-memory state. The Dashboard is a React 19 single-page application that reads and writes through a WebSocket-capable API, reflecting system state in real time.</p>
+
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Technology</th><th>Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Node</strong> <span class="badge badge-green">stateful</span></td>
+              <td>Bun, TypeScript</td>
+              <td>Channel adapters, session state machine, guards, orchestrator, system prompt assembly, LLM routing, queue producers</td>
+            </tr>
+            <tr>
+              <td><strong>Worker</strong> <span class="badge badge-blue">stateless</span></td>
+              <td>Bun, TypeScript, BullMQ</td>
+              <td>BullMQ queue consumer for the <code>scalyclaw-tools</code> queue only — sandboxed code execution, skill invocations, and shell commands</td>
+            </tr>
+            <tr>
+              <td><strong>Dashboard</strong> <span class="badge badge-purple">UI</span></td>
+              <td>React 19, Vite, WebSocket</td>
+              <td>16-page admin SPA — config management, channel setup, mind editor, memory browser, skill/agent management, real-time logs</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>All three components connect to the same Redis instance. Redis plays six distinct roles in the system:</p>
+
+        <ul>
+          <li><strong>Message bus</strong> — BullMQ queues for all async work</li>
+          <li><strong>Session store</strong> — per-channel state machine data</li>
+          <li><strong>Pending queue</strong> — structured message buffer per channel</li>
+          <li><strong>Config store</strong> — live system configuration at <code>scalyclaw:config</code></li>
+          <li><strong>Secret vault</strong> — encrypted secrets at <code>scalyclaw:secret:*</code></li>
+          <li><strong>Pub/sub</strong> — hot-reload signals for skills, agents, and config</li>
+        </ul>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Design principle
+          </div>
+          <p>ScalyClaw intentionally avoids config files on disk for runtime configuration. Everything the running system needs — API keys, model settings, channel tokens, feature flags — lives in Redis and can be changed live from the dashboard without a restart.</p>
+        </div>
+
+        <h3>Component Diagram</h3>
+
+        <div class="flow-diagram">
+<span class="node">Telegram</span>  <span class="node">Discord</span>  <span class="node">Slack</span>  <span class="node">Web</span>  <span class="node">...</span>
+          <span class="arrow">↓</span>                  <span class="arrow">↓</span>               <span class="arrow">↓</span>        <span class="arrow">↓</span>
+                   <span class="node">NODE  (channel adapters → orchestrator → LLM)</span>
+                             <span class="arrow">↕  Redis (BullMQ + pub/sub)</span>
+                   <span class="node">WORKER  (message · agents · tools · scheduler)</span>
+                             <span class="arrow">↕  Redis (config + WebSocket events)</span>
+                   <span class="node">DASHBOARD  (React 19 SPA · real-time WebSocket)</span>
+        </div>
+
+        <h2 id="message-flow">Message Flow</h2>
+
+        <p>Every inbound message follows a deterministic pipeline. The pipeline is designed so that each stage can short-circuit cleanly — a guard rejection or session conflict stops processing early without leaking state.</p>
+
+        <div class="flow-diagram">
+<span class="node">1. Channel receives message</span>
+           <span class="arrow">↓</span>
+<span class="node">2. Session state machine  (Redis Lua — atomic check-and-set)</span>
+           <span class="arrow">↓  accepted → PROCESSING state</span>
+<span class="node">3. Pending queue  (scalyclaw:pending:{channelId})</span>
+           <span class="arrow">↓  dequeue next message</span>
+<span class="node">4. Echo guard  (reject messages from self)</span>
+           <span class="arrow">↓  passed</span>
+<span class="node">5. Content guard  (LLM-based policy check)</span>
+           <span class="arrow">↓  approved</span>
+<span class="node">6. Orchestrator builds system prompt</span>
+           <span class="arrow">↓  disk files + code sections + dynamic data</span>
+<span class="node">7. LLM call  (streamed, with tool-use support)</span>
+           <span class="arrow">↓</span>
+<span class="node">8. Tool execution?  (local / tools queue / agents queue)</span>
+           <span class="arrow">↓  loop until done</span>
+<span class="node">9. Response sent back to channel</span>
+           <span class="arrow">↓</span>
+<span class="node">10. Session state → IDLE  (Lua atomic)</span>
+        </div>
+
+        <h3>Session State Machine</h3>
+
+        <p>Each channel gets its own isolated session state stored in Redis at <code>scalyclaw:session:{channelId}</code>. The state machine has six states:</p>
+
+        <table>
+          <thead><tr><th>State</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td><code>IDLE</code></td><td>No active request; ready to accept a new message</td></tr>
+            <tr><td><code>PROCESSING</code></td><td>Orchestrator pipeline is running for this channel</td></tr>
+            <tr><td><code>TOOL_EXEC</code></td><td>Waiting for a BullMQ tool or agent job to complete</td></tr>
+            <tr><td><code>RESPONDING</code></td><td>Streaming or sending the LLM response back to the channel</td></tr>
+            <tr><td><code>DRAINING</code></td><td>Finishing the current turn; will pick up the next pending message</td></tr>
+            <tr><td><code>CANCELLING</code></td><td>Abort requested; cleaning up and returning to IDLE</td></tr>
+          </tbody>
+        </table>
+
+        <p>All state transitions are performed by a Lua script executed atomically inside Redis. This guarantees that no two concurrent requests — even with multiple worker instances — can race into the <code>PROCESSING</code> state for the same channel simultaneously. The Lua atomicity also ensures the pending queue and session state stay consistent with each other at all times.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">lua</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">-- Atomic transition: IDLE → PROCESSING</span>
+<span class="cmt">-- Returns 1 if acquired, 0 if already busy</span>
+<span class="kw">local</span> key = KEYS[<span class="num">1</span>]           <span class="cmt">-- scalyclaw:session:{channelId}</span>
+<span class="kw">local</span> state = <span class="fn">redis.call</span>(<span class="str">"GET"</span>, key)
+<span class="kw">if</span> state == <span class="str">"PROCESSING"</span> <span class="kw">then</span>
+  <span class="kw">return</span> <span class="num">0</span>                    <span class="cmt">-- enqueue, do not process now</span>
+<span class="kw">end</span>
+<span class="fn">redis.call</span>(<span class="str">"SET"</span>, key, <span class="str">"PROCESSING"</span>, <span class="str">"EX"</span>, <span class="num">300</span>)
+<span class="kw">return</span> <span class="num">1</span>                      <span class="cmt">-- caller may proceed</span></pre>
+        </div>
+
+        <h3>System Prompt Assembly</h3>
+
+        <p>The orchestrator builds the system prompt fresh for every LLM call. It combines three sources:</p>
+
+        <ul>
+          <li><strong>Disk files</strong> — <code>mind/IDENTITY.md</code>, <code>mind/SOUL.md</code>, <code>mind/USER.md</code> (user-editable personality)</li>
+          <li><strong>Code sections</strong> — six hardcoded sections in <code>scalyclaw/src/prompt/</code>: orchestrator, home, memory, vault, agents, skills</li>
+          <li><strong>Dynamic data</strong> — current time, active channel, recent memories retrieved via semantic search, resolved secrets from vault, skill manifests, agent definitions</li>
+        </ul>
+
+        <h3>Tool Execution Routing</h3>
+
+        <p>When the LLM emits a tool call, the unified tool router in <code>tool-impl.ts</code> decides where to execute it. Local tools run inline in the Node process. Heavy or sandboxed tools are dispatched to BullMQ queues and the Node awaits the result:</p>
+
+        <table>
+          <thead><tr><th>Tool</th><th>Execution Target</th><th>Queue</th></tr></thead>
+          <tbody>
+            <tr><td><code>execute_code</code></td><td>Worker sandbox</td><td><code>scalyclaw-tools</code></td></tr>
+            <tr><td><code>execute_skill</code></td><td>Worker skill runner</td><td><code>scalyclaw-tools</code></td></tr>
+            <tr><td><code>execute_command</code></td><td>Worker shell executor</td><td><code>scalyclaw-tools</code></td></tr>
+            <tr><td><code>delegate_agent</code></td><td>Node agent executor</td><td><code>scalyclaw-agents</code></td></tr>
+            <tr><td>Everything else</td><td>Node — inline (direct execution)</td><td>— (no queue)</td></tr>
+          </tbody>
+        </table>
+
+        <h2 id="queues">Queue System</h2>
+
+        <p>ScalyClaw uses six BullMQ queues. The separate Worker process consumes only the <code>scalyclaw-tools</code> queue. The Node process runs its own BullMQ workers for the remaining five queues. Jobs are persistent — Redis stores them until acknowledged — so a restart never loses work in progress.</p>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            BullMQ queue naming
+          </div>
+          <p>BullMQ forbids colons (<code>:</code>) in queue names because it uses colons internally as key separators in Redis. All ScalyClaw queue names use hyphens — e.g. <code>scalyclaw-messages</code>, not <code>scalyclaw:messages</code>.</p>
+        </div>
+
+        <table>
+          <thead>
+            <tr><th>Queue name</th><th>Consumed by</th><th>Concurrency</th><th>Job types</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>scalyclaw-messages</code></td>
+              <td>Node (<code>message-processor.ts</code>)</td>
+              <td>3</td>
+              <td><code>message-processing</code>, <code>command</code></td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw-agents</code></td>
+              <td>Node (<code>agent-processor.ts</code>)</td>
+              <td>3</td>
+              <td><code>agent-task</code></td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw-tools</code></td>
+              <td>Worker (<code>tool-processor.ts</code>)</td>
+              <td>—</td>
+              <td><code>tool-execution</code>, <code>skill-execution</code></td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw-proactive</code></td>
+              <td>Node (<code>proactive-processor.ts</code>)</td>
+              <td>1</td>
+              <td><code>proactive-check</code></td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw-scheduler</code></td>
+              <td>Node (<code>scheduler-processor.ts</code>)</td>
+              <td>2</td>
+              <td><code>reminder</code>, <code>recurrent-reminder</code>, <code>task</code>, <code>recurrent-task</code></td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw-system</code></td>
+              <td>Node (<code>system-processor.ts</code>)</td>
+              <td>2</td>
+              <td><code>memory-extraction</code>, <code>scheduled-fire</code>, <code>proactive-fire</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Worker Scaling</h3>
+
+        <p>Because the Worker is stateless and only consumes the <code>scalyclaw-tools</code> queue, you can run as many Worker processes as you need to scale tool throughput. Each Worker connects to the same Redis and competes with peers for jobs. BullMQ handles distributed locking internally — a job is processed by exactly one worker even when many are running. The five Node-internal queues (<code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-proactive</code>, <code>scalyclaw-scheduler</code>, <code>scalyclaw-system</code>) are always consumed by the Node process itself.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Run two workers for higher tool throughput</span>
+scalyclaw worker start &amp;
+scalyclaw worker start &amp;</pre>
+        </div>
+
+        <h2 id="configuration">Configuration</h2>
+
+        <p>ScalyClaw stores all runtime configuration in Redis at the key <code>scalyclaw:config</code> as a JSON object. There are <strong>no config files on disk</strong> — the install is self-contained and portable. When you change a setting in the dashboard, it writes directly to Redis; all processes pick it up without a restart.</p>
+
+        <h3>Config Structure</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"orchestrator"</span>: {
+    <span class="prop">"id"</span>: <span class="str">"default"</span>,
+    <span class="prop">"maxIterations"</span>: <span class="num">50</span>,
+    <span class="prop">"models"</span>: [{ <span class="prop">"model"</span>: <span class="str">"claude-sonnet-4-20250514"</span>, <span class="prop">"weight"</span>: <span class="num">100</span>, <span class="prop">"priority"</span>: <span class="num">1</span> }],
+    <span class="prop">"skills"</span>: [],
+    <span class="prop">"agents"</span>: []
+  },
+  <span class="prop">"gateway"</span>: {
+    <span class="prop">"host"</span>: <span class="str">"127.0.0.1"</span>,
+    <span class="prop">"port"</span>: <span class="num">3000</span>,
+    <span class="prop">"bind"</span>: <span class="str">"127.0.0.1"</span>,
+    <span class="prop">"authType"</span>: <span class="str">"none"</span>,
+    <span class="prop">"authValue"</span>: <span class="kw">null</span>,
+    <span class="prop">"tls"</span>: { <span class="prop">"cert"</span>: <span class="str">""</span>, <span class="prop">"key"</span>: <span class="str">""</span> },
+    <span class="prop">"cors"</span>: [<span class="str">"*"</span>]
+  },
+  <span class="prop">"logs"</span>: { <span class="prop">"level"</span>: <span class="str">"info"</span>, <span class="prop">"format"</span>: <span class="str">"json"</span>, <span class="prop">"type"</span>: <span class="str">"console"</span> },
+  <span class="prop">"memory"</span>: {
+    <span class="prop">"topK"</span>: <span class="num">10</span>,
+    <span class="prop">"scoreThreshold"</span>: <span class="num">0.5</span>,
+    <span class="prop">"embeddingModel"</span>: <span class="str">"auto"</span>
+  },
+  <span class="prop">"queue"</span>: {
+    <span class="prop">"lockDuration"</span>: <span class="num">120000</span>,
+    <span class="prop">"stalledInterval"</span>: <span class="num">30000</span>,
+    <span class="prop">"limiter"</span>: { <span class="prop">"max"</span>: <span class="num">10</span>, <span class="prop">"duration"</span>: <span class="num">1000</span> },
+    <span class="prop">"removeOnComplete"</span>: { <span class="prop">"age"</span>: <span class="num">86400</span>, <span class="prop">"count"</span>: <span class="num">1000</span> },
+    <span class="prop">"removeOnFail"</span>: { <span class="prop">"age"</span>: <span class="num">604800</span> }
+  },
+  <span class="prop">"models"</span>: {
+    <span class="prop">"providers"</span>: {
+      <span class="prop">"anthropic"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-ant-..."</span> },
+      <span class="prop">"openai"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-..."</span> }
+    },
+    <span class="prop">"models"</span>: [{
+      <span class="prop">"id"</span>: <span class="str">"claude-sonnet"</span>,
+      <span class="prop">"name"</span>: <span class="str">"claude-sonnet-4-20250514"</span>,
+      <span class="prop">"provider"</span>: <span class="str">"anthropic"</span>,
+      <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"priority"</span>: <span class="num">1</span>,
+      <span class="prop">"weight"</span>: <span class="num">100</span>,
+      <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
+      <span class="prop">"maxTokens"</span>: <span class="num">8192</span>,
+      <span class="prop">"contextWindow"</span>: <span class="num">200000</span>,
+      <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
+      <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
+      <span class="prop">"documentEnabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+      <span class="prop">"inputPricePerMillion"</span>: <span class="num">3</span>,
+      <span class="prop">"outputPricePerMillion"</span>: <span class="num">15</span>
+    }],
+    <span class="prop">"embeddingModels"</span>: [{
+      <span class="prop">"id"</span>: <span class="str">"text-embedding-3-small"</span>,
+      <span class="prop">"name"</span>: <span class="str">"text-embedding-3-small"</span>,
+      <span class="prop">"provider"</span>: <span class="str">"openai"</span>,
+      <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"priority"</span>: <span class="num">1</span>,
+      <span class="prop">"weight"</span>: <span class="num">100</span>,
+      <span class="prop">"dimensions"</span>: <span class="num">1536</span>,
+      <span class="prop">"inputPricePerMillion"</span>: <span class="num">0.02</span>,
+      <span class="prop">"outputPricePerMillion"</span>: <span class="num">0</span>
+    }]
+  },
+  <span class="prop">"guards"</span>: {
+    <span class="prop">"message"</span>: {
+      <span class="prop">"enabled"</span>: <span class="kw">false</span>,
+      <span class="prop">"model"</span>: <span class="str">""</span>,
+      <span class="prop">"echoGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"similarityThreshold"</span>: <span class="num">0.9</span> },
+      <span class="prop">"contentGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span> }
+    },
+    <span class="prop">"skill"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
+    <span class="prop">"agent"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> }
+  },
+  <span class="prop">"budget"</span>: {
+    <span class="prop">"monthlyLimit"</span>: <span class="num">0</span>,
+    <span class="prop">"dailyLimit"</span>: <span class="num">0</span>,
+    <span class="prop">"hardLimit"</span>: <span class="kw">false</span>,
+    <span class="prop">"alertThresholds"</span>: [<span class="num">50</span>, <span class="num">80</span>, <span class="num">90</span>]
+  },
+  <span class="prop">"proactive"</span>: {
+    <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+    <span class="prop">"model"</span>: <span class="str">""</span>,
+    <span class="prop">"cronPattern"</span>: <span class="str">"*/15 * * * *"</span>,
+    <span class="prop">"idleThresholdMinutes"</span>: <span class="num">120</span>,
+    <span class="prop">"cooldownSeconds"</span>: <span class="num">14400</span>,
+    <span class="prop">"maxPerDay"</span>: <span class="num">3</span>,
+    <span class="prop">"quietHours"</span>: {
+      <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+      <span class="prop">"start"</span>: <span class="num">22</span>,
+      <span class="prop">"end"</span>: <span class="num">8</span>,
+      <span class="prop">"timezone"</span>: <span class="str">"UTC"</span>
+    },
+    <span class="prop">"triggers"</span>: {
+      <span class="prop">"undeliveredResults"</span>: <span class="kw">true</span>,
+      <span class="prop">"firedScheduledItems"</span>: <span class="kw">true</span>,
+      <span class="prop">"unansweredMessages"</span>: <span class="kw">true</span>
+    }
+  },
+  <span class="prop">"channels"</span>: {},
+  <span class="prop">"skills"</span>: [],
+  <span class="prop">"mcpServers"</span>: {}
+}</pre>
+        </div>
+
+        <h3>Hot Reload via Pub/Sub</h3>
+
+        <p>When skills or agents change — whether edited in the dashboard or auto-created by the LLM — Redis pub/sub signals all running processes to reload their in-memory manifests without a restart. The Node subscribes to these channels at startup and refreshes its internal registry immediately on receipt.</p>
+
+        <table>
+          <thead><tr><th>Pub/sub channel</th><th>Triggered by</th><th>Effect</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>scalyclaw:skills:reload</code></td>
+              <td>Dashboard skill editor, LLM skill creation tool</td>
+              <td>Node reloads all skill manifests from Redis; worker flushes its skill module cache</td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw:agents:reload</code></td>
+              <td>Dashboard agent editor, LLM agent creation tool</td>
+              <td>Node reloads all agent definitions; next <code>delegate_agent</code> call uses updated config</td>
+            </tr>
+            <tr>
+              <td><code>scalyclaw:config:reload</code></td>
+              <td>Dashboard config editor</td>
+              <td>All processes re-read <code>scalyclaw:config</code> from Redis and apply the new settings without a restart</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">typescript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Node subscribes at startup</span>
+<span class="kw">const</span> subscriber = redis.<span class="fn">duplicate</span>();
+<span class="kw">await</span> subscriber.<span class="fn">subscribe</span>(
+  <span class="str">"scalyclaw:skills:reload"</span>,
+  <span class="str">"scalyclaw:agents:reload"</span>,
+  <span class="str">"scalyclaw:config:reload"</span>,
+);
+
+subscriber.<span class="fn">on</span>(<span class="str">"message"</span>, <span class="kw">async</span> (channel) <span class="op">=&gt;</span> {
+  <span class="kw">if</span> (channel === <span class="str">"scalyclaw:skills:reload"</span>) {
+    <span class="kw">await</span> <span class="fn">reloadSkills</span>();
+  } <span class="kw">else if</span> (channel === <span class="str">"scalyclaw:agents:reload"</span>) {
+    <span class="kw">await</span> <span class="fn">reloadAgents</span>();
+  } <span class="kw">else if</span> (channel === <span class="str">"scalyclaw:config:reload"</span>) {
+    <span class="kw">await</span> <span class="fn">reloadConfig</span>();
+  }
+});</pre>
+        </div>
+
+        <h3>Secrets</h3>
+
+        <p>API keys and tokens are stored in the config object directly (e.g., <code>providers.anthropic.apiKey</code>). For additional secrets (channel tokens, MCP headers, etc.), use the vault at <code>scalyclaw:secret:{name}</code> in Redis. Secrets are managed via the dashboard Vault page and never written to disk.</p>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Tip
+          </div>
+          <p>You can inspect the live config at any time with <code>redis-cli GET scalyclaw:config | jq</code>. Changes written by the dashboard are immediately visible there.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="getting-started.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Getting Started</span>
+          </a>
+          <a href="mind.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">The Mind</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

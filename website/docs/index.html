@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Introduction — ScalyClaw Docs</title>
+  <meta name="description" content="ScalyClaw documentation — the personal AI assistant that scales with your ambition." />
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>ScalyClaw Documentation</h1>
+        <p>Welcome to the official documentation for <strong>ScalyClaw</strong> — the personal AI assistant that scales with your ambition. One mind, every channel, infinite memory.</p>
+
+        <p>ScalyClaw is a self-hosted, open-source AI assistant platform designed for a single user. It connects to your messaging channels (Telegram, Discord, Slack, WhatsApp, Signal, Teams) and presents a unified, continuous personality backed by persistent memory, extensible skills, and autonomous agents.</p>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            New here?
+          </div>
+          <p>Start with the <a href="getting-started.html">Getting Started</a> guide to have ScalyClaw up and running in minutes.</p>
+        </div>
+
+        <h2 id="what">What is ScalyClaw?</h2>
+        <p>ScalyClaw is <strong>not</strong> a chatbot framework or an API wrapper. It's a complete AI platform that gives you:</p>
+
+        <div class="docs-features">
+          <div class="docs-feature">
+            <h4>One Mind</h4>
+            <p>A single personality shaped by three editable files — identity, soul, and user context. It knows who it is and who you are.</p>
+          </div>
+          <div class="docs-feature">
+            <h4>Every Channel</h4>
+            <p>Seven messaging channels out of the box. Talk to it on Telegram in the morning, Discord at night — same memory, same context.</p>
+          </div>
+          <div class="docs-feature">
+            <h4>Infinite Memory</h4>
+            <p>Hybrid SQLite + vector search. It remembers your preferences, past conversations, and key facts — automatically.</p>
+          </div>
+          <div class="docs-feature">
+            <h4>Extensible Skills</h4>
+            <p>Write skills in JavaScript, Python, Rust, or Bash. Hot-reloaded instantly. The AI can even create skills on its own.</p>
+          </div>
+          <div class="docs-feature">
+            <h4>Autonomous Agents</h4>
+            <p>Delegate complex tasks to sub-agents with custom prompts, models, and tool permissions.</p>
+          </div>
+          <div class="docs-feature">
+            <h4>Defense in Depth</h4>
+            <p>Four security layers — echo guard, content guard, skill guard, and vault — all fail-closed by default.</p>
+          </div>
+        </div>
+
+        <h2 id="how-it-works">How It Works</h2>
+        <p>ScalyClaw consists of three main processes:</p>
+
+        <table>
+          <thead><tr><th>Component</th><th>Role</th></tr></thead>
+          <tbody>
+            <tr><td><strong>Node</strong></td><td>The brain — handles channel connections, the orchestrator, LLM calls, guards, and system coordination.</td></tr>
+            <tr><td><strong>Worker</strong></td><td>Stateless execution engine — processes the tools queue (code execution, skill invocation, shell commands). The main Node process handles the remaining five queues (messages, agents, proactive, scheduler, system).</td></tr>
+            <tr><td><strong>Dashboard</strong></td><td>A 16-page React admin interface — configure everything visually with real-time WebSocket updates.</td></tr>
+          </tbody>
+        </table>
+
+        <p>All three connect through <strong>Redis</strong>, which serves as the message bus (BullMQ), session store, config store, secret vault, and pub/sub channel for hot-reloading.</p>
+
+        <h2 id="quick-start">Quick Start</h2>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Install ScalyClaw</span>
+curl -fsSL https://scalyclaw.netlify.app/install.sh | sh
+
+<span class="cmt"># Run the setup wizard</span>
+scalyclaw setup
+
+<span class="cmt"># Start everything</span>
+scalyclaw node start
+scalyclaw worker start
+scalyclaw dashboard start</pre>
+        </div>
+
+        <p>After setup, open the dashboard at <code>http://localhost:3000</code>, configure a channel, and send your first message.</p>
+
+        <h2 id="explore">Explore the Docs</h2>
+
+        <table>
+          <thead><tr><th>Section</th><th>What You'll Learn</th></tr></thead>
+          <tbody>
+            <tr><td><a href="getting-started.html">Getting Started</a></td><td>Prerequisites, installation, first run</td></tr>
+            <tr><td><a href="architecture.html">Architecture</a></td><td>System design, message flow, configuration</td></tr>
+            <tr><td><a href="mind.html">The Mind</a></td><td>Personality files and how to customize them</td></tr>
+            <tr><td><a href="channels.html">Channels</a></td><td>Setting up each messaging platform</td></tr>
+            <tr><td><a href="models.html">Models</a></td><td>LLM providers, embedding, budget control</td></tr>
+            <tr><td><a href="memory.html">Memory</a></td><td>How auto-memory and vector search work</td></tr>
+            <tr><td><a href="skills.html">Skills</a></td><td>Writing and deploying custom skills</td></tr>
+            <tr><td><a href="agents.html">Agents</a></td><td>Autonomous sub-agents for complex tasks</td></tr>
+            <tr><td><a href="security.html">Security</a></td><td>Guards, vault, and defense-in-depth</td></tr>
+            <tr><td><a href="use-cases.html">Use Cases</a></td><td>Real-world scenarios and setups</td></tr>
+          </tbody>
+        </table>
+
+        <nav class="docs-page-nav">
+          <div></div>
+          <a href="getting-started.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Getting Started</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

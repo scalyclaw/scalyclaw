@@ -1,0 +1,2131 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ScalyClaw — The AI That Scales With You</title>
+  <meta name="description" content="The personal AI assistant that scales with your ambition. One mind, every channel, infinite memory. Self-hosted, extensible, unstoppable." />
+  <meta name="theme-color" content="#10b981" />
+  <link rel="icon" type="image/svg+xml" href="assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ─── Reset & Base ──────────────────────────────── */
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    :root {
+      --bg: #050505;
+      --bg-card: #0a0a0a;
+      --bg-card-hover: #111111;
+      --border: #1a1a1a;
+      --border-hover: #2a2a2a;
+      --text: #e5e5e5;
+      --text-muted: #737373;
+      --text-dim: #525252;
+      --accent: #10b981;
+      --accent-light: #34d399;
+      --accent-dark: #059669;
+      --accent-glow: rgba(16, 185, 129, 0.15);
+      --purple: #8b5cf6;
+      --blue: #3b82f6;
+      --cyan: #06b6d4;
+      --amber: #f59e0b;
+      --rose: #f43f5e;
+      --font: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+    html { font-size: 16px; }
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+    a { color: inherit; text-decoration: none; }
+    button { font-family: inherit; cursor: pointer; border: none; background: none; }
+    img { max-width: 100%; display: block; }
+
+    /* ─── Scrollbar ─────────────────────────────────── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+    /* ─── Utility ───────────────────────────────────── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+    .container-lg { max-width: 1400px; margin: 0 auto; padding: 0 24px; }
+    .section { padding: 120px 0; position: relative; }
+    .section-sm { padding: 80px 0; position: relative; }
+    .text-gradient {
+      background: linear-gradient(135deg, var(--accent-light), var(--accent), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .text-gradient-purple {
+      background: linear-gradient(135deg, var(--purple), var(--blue));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ─── Animations ────────────────────────────────── */
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-10px); }
+    }
+    @keyframes pulse-glow {
+      0%, 100% { box-shadow: 0 0 20px rgba(16,185,129,0.1); }
+      50% { box-shadow: 0 0 40px rgba(16,185,129,0.25); }
+    }
+    @keyframes gradient-shift {
+      0% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
+      100% { background-position: 0% 50%; }
+    }
+    @keyframes scale-orbit {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @keyframes slideInLeft {
+      from { opacity: 0; transform: translateX(-40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes slideInRight {
+      from { opacity: 0; transform: translateX(40px); }
+      to { opacity: 1; transform: translateX(0); }
+    }
+    @keyframes grid-fade {
+      0% { opacity: 0.03; }
+      50% { opacity: 0.06; }
+      100% { opacity: 0.03; }
+    }
+    @keyframes pipe-flow {
+      0% { top: -6px; opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { top: calc(100% + 6px); opacity: 0; }
+    }
+
+    .animate-on-scroll {
+      opacity: 0;
+      transform: translateY(30px);
+      transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .animate-on-scroll.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .animate-on-scroll.visible.delay-1 { transition-delay: 0.1s; }
+    .animate-on-scroll.visible.delay-2 { transition-delay: 0.2s; }
+    .animate-on-scroll.visible.delay-3 { transition-delay: 0.3s; }
+    .animate-on-scroll.visible.delay-4 { transition-delay: 0.4s; }
+    .animate-on-scroll.visible.delay-5 { transition-delay: 0.5s; }
+
+    /* ─── Nav ───────────────────────────────────────── */
+    .nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 16px 0;
+      transition: all 0.3s ease;
+      backdrop-filter: blur(0px);
+    }
+    .nav.scrolled {
+      background: rgba(5, 5, 5, 0.8);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 0;
+    }
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .nav-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-weight: 700;
+      font-size: 1.25rem;
+      letter-spacing: -0.02em;
+    }
+    .nav-logo svg, .nav-logo img { width: 32px; height: 32px; }
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+    .nav-links a {
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 20px;
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+      font-size: 0.875rem;
+      border-radius: 8px;
+      transition: all 0.2s;
+    }
+    .nav-cta:hover {
+      background: var(--accent-light);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(16,185,129,0.3);
+    }
+    .nav-mobile-toggle {
+      display: none;
+      width: 32px;
+      height: 32px;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      gap: 5px;
+    }
+    .nav-mobile-toggle span {
+      display: block;
+      width: 20px;
+      height: 2px;
+      background: var(--text);
+      border-radius: 1px;
+      transition: all 0.3s;
+    }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .nav-cta-wrapper { display: none; }
+      .nav-mobile-toggle { display: flex; }
+    }
+
+    /* ─── Hero ──────────────────────────────────────── */
+    .hero {
+      position: relative;
+      display: flex;
+      align-items: center;
+      padding: 120px 0 20px;
+      overflow: hidden;
+    }
+    .hero-bg {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+    }
+    .hero-grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(16,185,129,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(16,185,129,0.03) 1px, transparent 1px);
+      background-size: 60px 60px;
+      animation: grid-fade 8s ease-in-out infinite;
+      mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+      -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 70%);
+    }
+    .hero-orb {
+      position: absolute;
+      border-radius: 50%;
+      filter: blur(80px);
+      opacity: 0.4;
+    }
+    .hero-orb-1 {
+      width: 600px;
+      height: 600px;
+      background: radial-gradient(circle, rgba(16,185,129,0.15), transparent 70%);
+      top: -100px;
+      right: -100px;
+    }
+    .hero-orb-2 {
+      width: 500px;
+      height: 500px;
+      background: radial-gradient(circle, rgba(6,182,212,0.1), transparent 70%);
+      bottom: -100px;
+      left: -100px;
+    }
+    .hero-orb-3 {
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(139,92,246,0.08), transparent 70%);
+      top: 40%;
+      left: 30%;
+    }
+    .hero-content {
+      position: relative;
+      z-index: 2;
+      text-align: center;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 16px;
+      border: 1px solid var(--border);
+      border-radius: 100px;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+      animation: fadeInUp 0.8s ease both;
+      background: rgba(10,10,10,0.5);
+      backdrop-filter: blur(10px);
+    }
+    .hero-badge-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      animation: pulse-glow 2s ease-in-out infinite;
+    }
+    .hero-subtitle {
+      font-size: clamp(1.25rem, 2.5vw, 1.75rem);
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      line-height: 1.2;
+      white-space: nowrap;
+      margin-bottom: 16px;
+      animation: fadeInUp 0.8s ease 0.15s both;
+    }
+    .hero-title {
+      font-size: clamp(0.95rem, 1.5vw, 1.125rem);
+      color: var(--text-muted);
+      max-width: 640px;
+      margin: 0 auto 20px;
+      line-height: 1.7;
+      font-weight: 400;
+      animation: fadeInUp 0.8s ease 0.3s both;
+    }
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      animation: fadeInUp 0.8s ease 0.45s both;
+    }
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: var(--accent);
+      color: #000;
+      font-weight: 600;
+      font-size: 0.9375rem;
+      border-radius: 10px;
+      transition: all 0.25s;
+    }
+    .btn-primary:hover {
+      background: var(--accent-light);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(16,185,129,0.3);
+    }
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: transparent;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 0.9375rem;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      transition: all 0.25s;
+    }
+    .btn-secondary:hover {
+      border-color: var(--border-hover);
+      background: rgba(255,255,255,0.03);
+      transform: translateY(-2px);
+    }
+    .hero-terminal {
+      margin-top: 64px;
+      animation: fadeInUp 0.8s ease 0.6s both;
+    }
+
+    /* ─── Terminal ───────────────────────────────────── */
+    .terminal {
+      background: #0c0c0c;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      text-align: left;
+      max-width: 680px;
+      margin: 0 auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .terminal-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+    .terminal-dot-red { background: #ff5f57; }
+    .terminal-dot-yellow { background: #febc2e; }
+    .terminal-dot-green { background: #28c840; }
+
+    /* ─── Install Block ────────────────────────────── */
+    .install-block {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+    .install-tab-brand {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .install-tab-brand img { width: 16px; height: 16px; }
+    .install-about {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin: -4px 0;
+    }
+    .install-about-left {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .install-about-title {
+      font-size: 1.125rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+    }
+    .install-about-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    .install-about-right {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .install-about-tag {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.6875rem;
+      color: var(--text-muted);
+    }
+    .install-about-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+    .install-tabs {
+      display: flex;
+      gap: 0;
+      margin-bottom: 0;
+    }
+    .install-tab {
+      padding: 10px 24px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--text-dim);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-radius: 8px 8px 0 0;
+      cursor: pointer;
+      transition: all 0.2s;
+      font-family: var(--font);
+    }
+    .install-tab:not(:first-child) {
+      margin-left: -1px;
+    }
+    .install-tab.active {
+      color: var(--accent);
+      background: #0c0c0c;
+      border-color: var(--border);
+    }
+    .install-tab:not(.active):hover {
+      color: var(--text-muted);
+    }
+    .install-cmd-box {
+      background: #0c0c0c;
+      border: 1px solid var(--border);
+      border-radius: 0 12px 12px 12px;
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.03);
+    }
+    .install-cmd {
+      font-family: var(--mono);
+      font-size: 0.9375rem;
+      line-height: 1.6;
+      color: var(--text);
+      white-space: nowrap;
+      overflow-x: auto;
+    }
+    .install-cmd .prompt { color: var(--accent); }
+    .install-copy-btn {
+      flex-shrink: 0;
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      color: var(--text-dim);
+      transition: all 0.2s;
+      background: transparent;
+    }
+    .install-copy-btn:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    .install-copy-btn.copied {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+    @media (max-width: 900px) {
+      .install-cmd { font-size: 0.8125rem; }
+    }
+    @media (max-width: 500px) {
+      .install-tab { padding: 8px 14px; font-size: 0.75rem; }
+      .install-cmd-box { padding: 14px 16px; }
+      .install-cmd { font-size: 0.75rem; }
+    }
+
+    /* ─── Section Header ────────────────────────────── */
+    .section-header {
+      text-align: center;
+      margin-bottom: 64px;
+    }
+    .section-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 16px;
+    }
+    .section-tag svg { width: 16px; height: 16px; }
+    .section-title {
+      font-size: clamp(2rem, 4vw, 3rem);
+      font-weight: 800;
+      letter-spacing: -0.03em;
+      line-height: 1.15;
+      margin-bottom: 16px;
+    }
+    .section-desc {
+      font-size: 1.125rem;
+      color: var(--text-muted);
+      max-width: 560px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    /* ─── Features Grid ─────────────────────────────── */
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .feature-card {
+      background: var(--bg-card);
+      padding: 40px 32px;
+      transition: all 0.3s ease;
+      position: relative;
+      overflow: hidden;
+    }
+    .feature-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+    .feature-card:hover {
+      background: var(--bg-card-hover);
+    }
+    .feature-card:hover::before {
+      opacity: 1;
+    }
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      font-size: 1.25rem;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.02);
+    }
+    .feature-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+    .feature-card h3 {
+      font-size: 1.125rem;
+      font-weight: 700;
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+    .feature-card p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    @media (max-width: 900px) {
+      .features-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .features-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ─── (old channels ring removed — now in topo) ── */
+
+    /* ─── Channel Bubbles + Funnel (entering Node) ── */
+    .topo-funnel {
+      position: relative;
+      width: 100%;
+    }
+    .topo-channels {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      position: relative;
+      z-index: 2;
+    }
+    .topo-ch {
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s;
+      position: relative;
+    }
+    .topo-ch:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(16,185,129,0.2);
+      transform: translateY(-3px);
+    }
+    .topo-ch svg { width: 22px; height: 22px; }
+    .topo-ch-label {
+      position: absolute;
+      bottom: -18px;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.5625rem;
+      color: var(--text-dim);
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .topo-ch:hover .topo-ch-label { opacity: 1; }
+
+    /* SVG funnel lines from each bubble to center bottom */
+    .topo-funnel-svg {
+      display: block;
+      width: 100%;
+      height: 60px;
+      position: relative;
+      z-index: 1;
+    }
+    .topo-funnel-line {
+      stroke: rgba(16,185,129,0.2);
+      stroke-width: 1.5;
+      fill: none;
+    }
+    .topo-funnel-dot {
+      r: 3;
+      fill: var(--accent);
+      filter: drop-shadow(0 0 4px rgba(16,185,129,0.7));
+    }
+    @keyframes funnel-travel {
+      0%   { offset-distance: 0%; opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { offset-distance: 100%; opacity: 0; }
+    }
+
+    @media (max-width: 768px) {
+      .topo-channels { gap: 10px; }
+      .topo-ch { width: 38px; height: 38px; }
+      .topo-ch svg { width: 18px; height: 18px; }
+      .topo-funnel-svg { height: 48px; }
+    }
+    @media (max-width: 500px) {
+      .topo-channels { gap: 8px; }
+      .topo-ch { width: 34px; height: 34px; }
+      .topo-ch svg { width: 16px; height: 16px; }
+    }
+
+    /* Worker funnel (Redis → Workers): same style, inverted direction */
+    .topo-worker-funnel-svg {
+      height: 50px;
+    }
+    .topo-worker-funnel-line {
+      stroke: rgba(59,130,246,0.2);
+      stroke-width: 1.5;
+      fill: none;
+    }
+    .topo-worker-funnel-dot {
+      r: 3;
+      fill: var(--blue);
+      filter: drop-shadow(0 0 4px rgba(59,130,246,0.7));
+    }
+    @keyframes worker-funnel-travel {
+      0%   { offset-distance: 0%; opacity: 0; }
+      10%  { opacity: 1; }
+      90%  { opacity: 1; }
+      100% { offset-distance: 100%; opacity: 0; }
+    }
+
+    /* ─── Architecture Topology ────────────────────── */
+    .topo {
+      max-width: 720px;
+      margin: 0 auto 80px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .topo-guards {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 14px 24px;
+      background: rgba(244,63,94,0.04);
+      border: 1px solid rgba(244,63,94,0.2);
+      border-radius: 12px;
+      margin-bottom: 16px;
+      position: relative;
+    }
+    .topo-guards::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--rose), transparent);
+    }
+    .topo-guards-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--rose);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .topo-guards-label svg { width: 14px; height: 14px; }
+    .topo-guards-items {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .topo-guards-items span {
+      font-size: 0.6875rem;
+      padding: 3px 12px;
+      border-radius: 6px;
+      background: rgba(244,63,94,0.06);
+      border: 1px solid rgba(244,63,94,0.15);
+      color: var(--text-muted);
+    }
+    .topo-guard-pipe {
+      display: flex;
+      justify-content: center;
+    }
+    .topo-guard-pipe .topo-pipe {
+      height: 24px;
+    }
+    .topo-guard-pipe .topo-pipe span {
+      background: var(--rose);
+      box-shadow: 0 0 10px rgba(244,63,94,0.6);
+    }
+    .topo-node {
+      width: 100%;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 28px 32px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+      animation: pulse-glow 4s ease-in-out infinite;
+    }
+    .topo-node::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    }
+    .topo-node-hdr {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .topo-node-hdr svg, .topo-node-hdr img { width: 24px; height: 24px; }
+    .topo-node-hdr .topo-title {
+      font-size: 1.25rem;
+      font-weight: 700;
+    }
+    .topo-badge {
+      font-size: 0.6875rem;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .topo-badge-g { background: rgba(16,185,129,0.1); color: var(--accent); }
+    .topo-badge-b { background: rgba(59,130,246,0.1); color: var(--blue); }
+    .topo-modules {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .topo-modules span {
+      font-size: 0.75rem;
+      padding: 4px 14px;
+      border-radius: 6px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .topo-sub {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+    }
+    /* Connector */
+    .topo-conn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .topo-pipe {
+      width: 2px;
+      height: 32px;
+      background: var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .topo-pipe span {
+      position: absolute;
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--blue);
+      box-shadow: 0 0 10px rgba(59,130,246,0.6);
+      left: -2px;
+      animation: pipe-flow 2s ease-in-out infinite;
+    }
+    .topo-queue {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 28px;
+      border-radius: 24px;
+      background: rgba(59,130,246,0.06);
+      border: 1px solid rgba(59,130,246,0.15);
+      font-size: 0.8125rem;
+      font-weight: 600;
+      color: var(--blue);
+      letter-spacing: 0.04em;
+    }
+    .topo-queue svg { width: 16px; height: 16px; }
+    /* Workers row */
+    .topo-workers {
+      display: flex;
+      justify-content: center;
+      gap: 16px;
+      width: 100%;
+    }
+    .topo-worker {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px 16px;
+      text-align: center;
+      flex: 1;
+      max-width: 160px;
+      position: relative;
+      overflow: hidden;
+    }
+    .topo-worker::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, transparent, var(--blue), transparent);
+      opacity: 0.5;
+    }
+    .topo-worker svg {
+      width: 20px;
+      height: 20px;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+    .topo-worker-name {
+      font-size: 0.8125rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .topo-worker-desc {
+      font-size: 0.6875rem;
+      color: var(--text-dim);
+    }
+    .topo-add {
+      border-style: dashed;
+      border-color: rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-dim);
+      font-size: 1.5rem;
+      font-weight: 600;
+    }
+    .topo-add::before { display: none; }
+    .topo-hint {
+      margin-top: 20px;
+      font-size: 0.8125rem;
+      color: var(--text-dim);
+      text-align: center;
+    }
+    /* Security Visual */
+    .arch-row {
+      display: grid;
+      grid-template-columns: 1fr 1.3fr;
+      gap: 64px;
+      align-items: stretch;
+    }
+    .arch-text {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .arch-text h3 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+    }
+    .arch-text p {
+      font-size: 1rem;
+      color: var(--text-muted);
+      line-height: 1.7;
+      margin-bottom: 20px;
+    }
+    .arch-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .arch-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 0.9375rem;
+      color: var(--text-muted);
+    }
+    .arch-list li svg {
+      width: 18px;
+      height: 18px;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .arch-visual {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 40px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .arch-visual::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--rose), transparent);
+      opacity: 0.5;
+    }
+    .security-layers {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      height: 100%;
+      justify-content: center;
+    }
+    .security-layer {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      padding: 18px 20px;
+      background: rgba(255,255,255,0.02);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      transition: all 0.3s;
+    }
+    .security-layer:hover {
+      border-color: var(--rose);
+      background: rgba(244,63,94,0.03);
+    }
+    .security-num {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 0.875rem;
+      flex-shrink: 0;
+    }
+    .security-num-1 { background: rgba(245,158,11,0.1); color: var(--amber); }
+    .security-num-2 { background: rgba(244,63,94,0.1); color: var(--rose); }
+    .security-num-3 { background: rgba(139,92,246,0.1); color: var(--purple); }
+    .security-num-4 { background: rgba(16,185,129,0.1); color: var(--accent); }
+    .security-num-5 { background: rgba(59,130,246,0.1); color: var(--blue); }
+    .security-info h4 {
+      font-size: 0.9375rem;
+      font-weight: 600;
+      margin-bottom: 2px;
+    }
+    .security-info p {
+      font-size: 0.8125rem;
+      color: var(--text-dim);
+    }
+    @media (max-width: 768px) {
+      .topo-workers { flex-wrap: wrap; }
+      .topo-worker { max-width: none; flex: 1 1 40%; }
+      .arch-row { grid-template-columns: 1fr; gap: 32px; }
+    }
+
+    /* ─── Dashboard Mockup ──────────────────────────── */
+    .db { max-width: 1060px; margin: 0 auto; }
+    .db-frame { border-radius: 16px; overflow: hidden; border: 1px solid var(--border); background: #050505; box-shadow: 0 40px 80px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.03); }
+    .db-top { display: flex; align-items: center; gap: 8px; padding: 12px 18px; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); }
+    .db-top-t { flex: 1; text-align: center; font-size: 0.6875rem; color: var(--text-dim); font-family: var(--mono); }
+    .db-body { display: grid; grid-template-columns: 160px 1fr; min-height: 520px; }
+    .db-side { border-right: 1px solid var(--border); padding: 8px 0; background: #030303; overflow-y: auto; max-height: 520px; }
+    .db-si { display: flex; align-items: center; gap: 8px; padding: 7px 14px; font-size: 0.6875rem; color: #525252; cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent; white-space: nowrap; }
+    .db-si:hover { color: var(--text-muted); background: rgba(255,255,255,0.02); }
+    .db-si.active { color: var(--accent); border-left-color: var(--accent); background: rgba(16,185,129,0.04); }
+    .db-si svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .db-main { position: relative; overflow: hidden; background: #050505; display: flex; flex-direction: column; }
+    .db-toolbar { display: flex; align-items: center; justify-content: space-between; padding: 10px 24px; border-bottom: 1px solid var(--border); background: rgba(5,5,5,0.8); backdrop-filter: blur(8px); flex-shrink: 0; z-index: 2; }
+    .db-toolbar-title { font-size: 0.8125rem; font-weight: 600; color: #e5e5e5; }
+    .db-toolbar-actions { display: flex; align-items: center; gap: 12px; }
+    .db-pages { position: relative; flex: 1; overflow: hidden; }
+    .db-pg { position: absolute; inset: 0; padding: 20px 24px; opacity: 0; transition: opacity 0.4s; pointer-events: none; overflow-y: auto; }
+    .db-pg.active { opacity: 1; pointer-events: auto; }
+    /* Mock components */
+    .db-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+    .db-hdr h3 { font-size: 1rem; font-weight: 700; color: #e5e5e5; }
+    .db-btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; font-size: 0.625rem; border-radius: 6px; border: 1px solid var(--border); color: var(--text-muted); background: transparent; font-family: var(--font); }
+    .db-btn-p { background: var(--accent); color: #050505; border-color: var(--accent); }
+    .db-sg { display: grid; gap: 10px; margin-bottom: 16px; }
+    .db-sg-2 { grid-template-columns: repeat(2, 1fr); }
+    .db-sg-3 { grid-template-columns: repeat(3, 1fr); }
+    .db-sg-4 { grid-template-columns: repeat(4, 1fr); }
+    .db-sc { padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #0a0a0a; }
+    .db-sc-l { font-size: 0.5625rem; color: #525252; margin-bottom: 2px; }
+    .db-sc-v { font-size: 0.9375rem; font-weight: 700; color: #e5e5e5; }
+    .db-tbl { width: 100%; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; border-collapse: separate; border-spacing: 0; font-size: 0.625rem; }
+    .db-tbl th { text-align: left; padding: 8px 10px; color: #525252; font-weight: 500; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); }
+    .db-tbl td { padding: 7px 10px; color: var(--text-muted); border-bottom: 1px solid rgba(26,26,26,0.5); }
+    .db-tbl tr:last-child td { border-bottom: none; }
+    .db-tbl .mono { font-family: var(--mono); font-size: 0.5625rem; color: #e5e5e5; }
+    .db-bdg { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 0.5625rem; font-weight: 500; }
+    .db-bdg-g { background: rgba(16,185,129,0.12); color: var(--accent); }
+    .db-bdg-b { background: rgba(59,130,246,0.12); color: var(--blue); }
+    .db-bdg-p { background: rgba(139,92,246,0.12); color: var(--purple); }
+    .db-bdg-r { background: rgba(244,63,94,0.12); color: var(--rose); }
+    .db-bdg-o { background: rgba(245,158,11,0.12); color: var(--amber); }
+    .db-bdg-s { background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); }
+    .db-sw { width: 28px; height: 16px; border-radius: 8px; background: #333; position: relative; display: inline-block; }
+    .db-sw::after { content: ''; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #666; transition: 0.2s; }
+    .db-sw.on { background: var(--accent); }
+    .db-sw.on::after { left: 14px; background: #fff; }
+    .db-tabs { display: flex; gap: 0; margin-bottom: 12px; background: rgba(255,255,255,0.03); border-radius: 6px; padding: 2px; }
+    .db-tab { padding: 4px 10px; font-size: 0.5625rem; color: var(--text-dim); border-radius: 4px; font-family: var(--font); }
+    .db-tab.active { background: #1a1a1a; color: #e5e5e5; }
+    .db-inp { width: 100%; padding: 5px 8px; font-size: 0.5625rem; background: transparent; border: 1px solid var(--border); border-radius: 6px; color: var(--text-muted); font-family: var(--mono); }
+    .db-ta { width: 100%; min-height: 160px; padding: 10px 12px; font-size: 0.5625rem; background: transparent; border: 1px solid var(--border); border-radius: 8px; color: var(--text-muted); font-family: var(--mono); line-height: 1.6; resize: none; }
+    .db-bars { display: flex; align-items: flex-end; gap: 6px; height: 120px; padding: 12px; border: 1px solid var(--border); border-radius: 8px; background: #0a0a0a; }
+    .db-bar { flex: 1; border-radius: 3px 3px 0 0; min-height: 4px; background: linear-gradient(to top, #059669, #10b981); }
+
+    .db-log { font-family: var(--mono); font-size: 0.5625rem; line-height: 1.8; padding: 12px; background: #0a0a0a; border: 1px solid var(--border); border-radius: 8px; max-height: 200px; overflow: hidden; }
+    .db-log .t { color: #333; }
+    .db-log .i { color: #3b82f6; }
+    .db-log .w { color: #f59e0b; }
+    .db-log .e { color: #f43f5e; }
+    .db-log .m { color: var(--text-muted); }
+    .db-field { margin-bottom: 10px; }
+    .db-field-l { font-size: 0.5625rem; color: #525252; margin-bottom: 3px; }
+    .db-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; font-size: 0.5625rem; }
+    .db-row-l { color: #525252; }
+    .db-row-v { color: var(--text-muted); font-family: var(--mono); }
+    .db-pbar { height: 6px; border-radius: 3px; background: #1a1a1a; overflow: hidden; }
+    .db-pbar-f { height: 100%; border-radius: 3px; background: var(--accent); }
+    .db-dot { width: 6px; height: 6px; border-radius: 50%; display: inline-block; }
+    .db-dot-g { background: var(--accent); }
+    /* Nav */
+    .db-nav { display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 24px; }
+    .db-nav-btn { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-muted); display: flex; align-items: center; justify-content: center; transition: all 0.2s; cursor: pointer; }
+    .db-nav-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .db-nav-btn svg { width: 18px; height: 18px; }
+    .db-counter { font-size: 0.75rem; color: var(--text-dim); font-family: var(--mono); }
+    .db-desc { text-align: center; font-size: 0.9375rem; color: var(--text-muted); max-width: 100%; margin: 0 0 20px; line-height: 1.6; transition: opacity 0.3s; min-height: 1.6em; }
+    @media (max-width: 768px) {
+      .db-body { grid-template-columns: 1fr; }
+      .db-side { display: none; }
+    }
+
+
+
+    /* ─── Footer ────────────────────────────────────── */
+    .footer {
+      border-top: 1px solid var(--border);
+      padding: 48px 0;
+    }
+    .footer-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .footer-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 1rem;
+      color: var(--text-muted);
+    }
+    .footer-logo svg, .footer-logo img { width: 24px; height: 24px; }
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      list-style: none;
+    }
+    .footer-links a {
+      font-size: 0.875rem;
+      color: var(--text-dim);
+      transition: color 0.2s;
+    }
+    .footer-links a:hover { color: var(--text); }
+    .footer-copy {
+      font-size: 0.8125rem;
+      color: var(--text-dim);
+    }
+
+    @media (max-width: 640px) {
+      .footer-inner {
+        flex-direction: column;
+        gap: 24px;
+        text-align: center;
+      }
+    }
+
+    /* ─── Tooltips & Misc ───────────────────────────── */
+    .glow-line {
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--accent), transparent);
+      opacity: 0.2;
+    }
+    .divider {
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* ─── Skill Cards ───────────────────────────────── */
+    .skill-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .skill-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 0.8125rem;
+      color: var(--text-muted);
+      font-family: var(--mono);
+    }
+    .skill-tag svg { width: 14px; height: 14px; }
+
+    /* ─── Floating Particles ────────────────────────── */
+    .particles {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- ═══════════════════ NAV ═══════════════════ -->
+  <nav class="nav" id="nav">
+    <div class="container-lg">
+      <div class="nav-inner">
+        <a href="#" class="nav-logo">
+          <img src="assets/logo.svg" alt="ScalyClaw" />
+          ScalyClaw
+        </a>
+        <ul class="nav-links">
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="docs/" target="_blank">Docs</a></li>
+        </ul>
+        <div class="nav-cta-wrapper" style="display:flex; align-items:center; gap:10px;">
+          <a href="https://github.com/scalyclaw/scalyclaw" class="nav-cta" target="_blank" style="background:transparent; border:1px solid var(--border); color:var(--text);">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            GitHub
+          </a>
+        </div>
+        <button class="nav-mobile-toggle" id="mobileToggle" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- ═══════════════════ HERO ═══════════════════ -->
+  <section class="hero">
+    <div class="hero-bg">
+      <div class="hero-grid"></div>
+      <div class="hero-orb hero-orb-1"></div>
+      <div class="hero-orb hero-orb-2"></div>
+      <div class="hero-orb hero-orb-3"></div>
+    </div>
+    <div class="container">
+      <div class="hero-content">
+      </div>
+    </div>
+  </section>
+
+  <div style="padding: 0 0 40px; overflow: hidden;">
+    <div class="container" style="max-width: 720px;">
+      <div class="install-block animate-on-scroll">
+        <div class="install-tabs">
+          <button class="install-tab active" data-platform="about" onclick="switchInstall('about')"><span class="install-tab-brand"><img src="assets/logo.svg" alt="" /> ScalyClaw</span></button>
+          <button class="install-tab" data-platform="install" onclick="switchInstall('install')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install</button>
+        </div>
+        <div class="install-cmd-box">
+          <div class="install-about" id="installAbout">
+            <div class="install-about-left">
+              <div class="install-about-title">The AI That <span class="text-gradient">Scales With You</span>.</div>
+              <div class="install-about-sub">One Mind. All Channels. Continuous Relationship.</div>
+            </div>
+            <div class="install-about-right">
+              <div class="install-about-tag"><span class="install-about-dot"></span> Open Source</div>
+              <div class="install-about-tag"><span class="install-about-dot"></span> Self-Hosted</div>
+              <div class="install-about-tag"><span class="install-about-dot"></span> Security First</div>
+            </div>
+          </div>
+          <div class="install-cmd" id="installCmd" style="display:none">
+            <span class="prompt">$</span> curl -fsSL https://scalyclaw.netlify.app/install.sh | sh
+          </div>
+          <button class="install-copy-btn" id="installCopy" onclick="copyInstall()" title="Copy to clipboard" style="display:none">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 0 0 40px; overflow: hidden;" id="architecture">
+    <div class="container">
+      <div class="topo">
+        <!-- Channel bubbles + funnel lines into the node -->
+        <div class="topo-funnel" id="channels">
+          <div class="topo-channels animate-on-scroll">
+            <div class="topo-ch" title="Discord">
+              <svg viewBox="0 0 24 24" fill="#5865F2"><path d="M20.317 4.37a19.791 19.791 0 00-4.885-1.515.074.074 0 00-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 00-5.487 0 12.64 12.64 0 00-.617-1.25.077.077 0 00-.079-.037A19.736 19.736 0 003.677 4.37a.07.07 0 00-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 00.031.057 19.9 19.9 0 005.993 3.03.078.078 0 00.084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 00-.041-.106 13.107 13.107 0 01-1.872-.892.077.077 0 01-.008-.128 10.2 10.2 0 00.372-.292.074.074 0 01.077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 01.078.01c.12.098.246.198.373.292a.077.077 0 01-.006.127 12.299 12.299 0 01-1.873.892.077.077 0 00-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 00.084.028 19.839 19.839 0 006.002-3.03.077.077 0 00.032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 00-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.095 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              <span class="topo-ch-label">Discord</span>
+            </div>
+            <div class="topo-ch" title="Telegram">
+              <svg viewBox="0 0 24 24" fill="#26A5E4"><path d="M11.944 0A12 12 0 000 12a12 12 0 0012 12 12 12 0 0012-12A12 12 0 0012 0h-.056zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 01.171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+              <span class="topo-ch-label">Telegram</span>
+            </div>
+            <div class="topo-ch" title="Slack">
+              <svg viewBox="0 0 24 24" fill="none"><path d="M5.042 15.165a2.528 2.528 0 01-2.52 2.523A2.528 2.528 0 010 15.165a2.527 2.527 0 012.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 012.521-2.52 2.527 2.527 0 012.521 2.52v6.313A2.528 2.528 0 018.834 24a2.528 2.528 0 01-2.521-2.522v-6.313z" fill="#E01E5A"/><path d="M8.834 5.042a2.528 2.528 0 01-2.521-2.52A2.528 2.528 0 018.834 0a2.528 2.528 0 012.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 012.521 2.521 2.528 2.528 0 01-2.521 2.521H2.522A2.528 2.528 0 010 8.834a2.528 2.528 0 012.522-2.521h6.312z" fill="#36C5F0"/><path d="M18.956 8.834a2.528 2.528 0 012.522-2.521A2.528 2.528 0 0124 8.834a2.528 2.528 0 01-2.522 2.521h-2.522V8.834zm-1.27 0a2.528 2.528 0 01-2.523 2.521 2.527 2.527 0 01-2.52-2.521V2.522A2.527 2.527 0 0115.163 0a2.528 2.528 0 012.523 2.522v6.312z" fill="#2EB67D"/><path d="M15.163 18.956a2.528 2.528 0 012.523 2.522A2.528 2.528 0 0115.163 24a2.527 2.527 0 01-2.52-2.522v-2.522h2.52zm0-1.27a2.527 2.527 0 01-2.52-2.523 2.527 2.527 0 012.52-2.52h6.315A2.528 2.528 0 0124 15.163a2.528 2.528 0 01-2.522 2.523h-6.315z" fill="#ECB22E"/></svg>
+              <span class="topo-ch-label">Slack</span>
+            </div>
+            <div class="topo-ch" title="WhatsApp">
+              <svg viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+              <span class="topo-ch-label">WhatsApp</span>
+            </div>
+            <div class="topo-ch" title="Signal">
+              <svg viewBox="0 0 24 24" fill="#3A76F0"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.562 8.248l-6.5 8.5a.75.75 0 01-1.124.1l-3.5-3.5a.75.75 0 111.06-1.06l2.893 2.892 5.97-7.81a.75.75 0 111.2.9v-.022z"/></svg>
+              <span class="topo-ch-label">Signal</span>
+            </div>
+            <div class="topo-ch" title="Microsoft Teams">
+              <svg viewBox="0 0 24 24" fill="#6264A7"><path d="M20.625 8.5h-3.75c-.69 0-1.25.56-1.25 1.25v5c0 .69.56 1.25 1.25 1.25h2.5V18.5c0 .828-.672 1.5-1.5 1.5h-.375a3.5 3.5 0 01-3.5-3.5V10c0-1.105.895-2 2-2h4.625z"/><circle cx="19.5" cy="5.5" r="2.5" fill="#6264A7"/><path d="M14.5 7H4.25C3.56 7 3 7.56 3 8.25v7.5c0 .69.56 1.25 1.25 1.25H5v3l3-3h6.5c.69 0 1.25-.56 1.25-1.25V8.25c0-.69-.56-1.25-1.25-1.25z"/><circle cx="9" cy="4" r="3" fill="#6264A7"/></svg>
+              <span class="topo-ch-label">Teams</span>
+            </div>
+            <div class="topo-ch" title="Web Gateway">
+              <svg viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+              <span class="topo-ch-label">Web</span>
+            </div>
+          </div>
+          <!-- SVG funnel: lines from each bubble converging to center bottom -->
+          <svg class="topo-funnel-svg" id="funnelSvg" preserveAspectRatio="none"></svg>
+        </div>
+
+        <div class="topo-guards animate-on-scroll">
+          <div class="topo-guards-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            Guards
+          </div>
+          <div class="topo-guards-items">
+            <span>Echo Guard</span>
+            <span>Content Guard</span>
+            <span>Skill Guard</span>
+            <span>Agent Guard</span>
+          </div>
+        </div>
+
+        <div class="topo-guard-pipe animate-on-scroll">
+          <div class="topo-pipe"><span></span></div>
+        </div>
+
+        <div class="topo-node animate-on-scroll">
+          <div class="topo-node-hdr">
+            <img src="assets/logo.svg" alt="ScalyClaw" />
+            <span class="topo-title">ScalyClaw Node</span>
+          </div>
+          <div class="topo-modules">
+            <span>Orchestrator</span>
+            <span>Memory</span>
+            <span>Models</span>
+            <span>Agents</span>
+            <span>Skills</span>
+            <span>Vault</span>
+            <span>MCP</span>
+            <span>Scheduler</span>
+          </div>
+        </div>
+
+        <div class="topo-conn animate-on-scroll">
+          <div class="topo-pipe"><span></span></div>
+        </div>
+
+        <div class="topo-queue animate-on-scroll">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+          Queue
+        </div>
+
+        <div class="topo-conn animate-on-scroll">
+          <div class="topo-pipe"><span></span></div>
+        </div>
+
+        <!-- SVG funnel: lines from Redis queue fanning out to each worker -->
+        <svg class="topo-funnel-svg topo-worker-funnel-svg" id="workerFunnelSvg" preserveAspectRatio="none"></svg>
+
+        <div class="topo-workers animate-on-scroll">
+          <div class="topo-worker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+            <div class="topo-worker-name">Worker 1</div>
+            <div class="topo-worker-desc">Code &middot; Skills &middot; Commands</div>
+          </div>
+          <div class="topo-worker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+            <div class="topo-worker-name">Worker 2</div>
+            <div class="topo-worker-desc">Code &middot; Skills &middot; Commands</div>
+          </div>
+          <div class="topo-worker">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+            <div class="topo-worker-name">Worker 3</div>
+            <div class="topo-worker-desc">Code &middot; Skills &middot; Commands</div>
+          </div>
+          <div class="topo-worker topo-add">
+            + N
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 10px 0 80px; overflow: hidden;" id="dashboard">
+    <div class="container">
+      <div class="section-header animate-on-scroll">
+        <div class="section-tag">
+          <svg viewBox="0 0 16 16" fill="none"><rect x="1" y="1" width="14" height="14" rx="2" stroke="currentColor" stroke-width="1.5" fill="none"/><path d="M1 5h14" stroke="currentColor" stroke-width="1.5"/><circle cx="3.5" cy="3" r="0.75" fill="currentColor"/><circle cx="6" cy="3" r="0.75" fill="currentColor"/></svg>
+          Dashboard
+        </div>
+      </div>
+      <div class="db animate-on-scroll">
+        <p class="db-desc" id="dashDesc">Real-time system health at a glance — node status, models, budget, channels, and workers, all auto-refreshing.</p>
+        <div class="db-frame">
+          <div class="db-top">
+            <span class="terminal-dot terminal-dot-red"></span>
+            <span class="terminal-dot terminal-dot-yellow"></span>
+            <span class="terminal-dot terminal-dot-green"></span>
+            <span class="db-top-t" id="dashTitle">ScalyClaw Dashboard</span>
+          </div>
+          <div class="db-body">
+            <div class="db-side" id="dashSide">
+              <div class="db-si active"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg> Overview</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2C8.13 2 5 5.13 5 9c0 3 2 5.4 5 6.7V18h4v-2.3c3-1.3 5-3.7 5-6.7 0-3.87-3.13-7-7-7z"/><line x1="9" y1="22" x2="15" y2="22"/></svg> Mind</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg> Usage</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 010 8.49M7.76 16.24a6 6 0 010-8.49"/></svg> Channels</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 14h3M20 9h3M20 14h3"/></svg> Models</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="3"/><path d="M8 15h.01M16 15h.01"/></svg> Agents</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg> Skills</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8"/></svg> Memory</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg> Vault</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22v-5M9 7V2M15 7V2M5 12h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v2a2 2 0 002 2z"/></svg> MCP</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg> Scheduler</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg> Engagement</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg> Security</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><line x1="10" y1="9" x2="8" y2="9"/></svg> Logs</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg> Workers</div>
+              <div class="db-si"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M9 14l2 2 4-4"/></svg> Jobs</div>
+
+            </div>
+            <div class="db-main">
+              <div class="db-toolbar" id="dashToolbar">
+                <span class="db-toolbar-title" id="dashToolbarTitle">Overview</span>
+                <div class="db-toolbar-actions">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;color:#525252;cursor:pointer"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:13px;height:13px;color:#525252;cursor:pointer"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                  <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.5625rem;color:#525252"><span style="width:6px;height:6px;border-radius:50%;background:#10b981;display:inline-block"></span> Connected</span>
+                </div>
+              </div>
+              <div class="db-pages">
+              <!-- Page 0: Overview -->
+              <div class="db-pg active">
+                <div class="db-hdr"><h3>Overview</h3><span class="db-btn">&#8635; Refresh</span></div>
+                <div class="db-sg db-sg-4">
+                  <div class="db-sc"><div class="db-sc-l">Node</div><div class="db-row"><span class="db-row-l">Hostname</span><span class="db-row-v">mac-studio</span></div><div class="db-row"><span class="db-row-l">Address</span><span class="db-row-v" style="font-family:var(--mono);font-size:0.5625rem">localhost:3000</span></div><div class="db-row"><span class="db-row-l">Uptime</span><span class="db-row-v">6h 32m</span></div><div class="db-row"><span class="db-row-l">Version</span><span class="db-row-v">1.4.2</span></div><div class="db-row"><span class="db-row-l">Memory</span><span class="db-row-v">128 MB</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Models</div><div class="db-row"><span class="db-row-l">Chat</span><span class="db-row-v">3</span></div><div class="db-row"><span class="db-row-l">Embedding</span><span class="db-row-v">1</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Usage</div><div class="db-row"><span class="db-row-l">Messages</span><span class="db-row-v">312</span></div><div class="db-row"><span class="db-row-l">Input Tokens</span><span class="db-row-v">271,300</span></div><div class="db-row"><span class="db-row-l">Output Tokens</span><span class="db-row-v">16,700</span></div><div class="db-row"><span class="db-row-l">Total Calls</span><span class="db-row-v">594</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Budget</div><div class="db-row"><span class="db-row-l">Month Cost</span><span class="db-row-v">$12.4832</span></div><div class="db-row"><span class="db-row-l">Limit</span><span class="db-row-v">$50.00</span></div><div class="db-row"><span class="db-row-l">Mode</span><span class="db-row-v">Hard</span></div><div style="margin-top:4px"><div class="db-pbar"><div class="db-pbar-f" style="width:25%"></div></div><div style="text-align:right;font-size:0.5rem;color:#525252;margin-top:2px">of $50.00</div></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Agents</div><div class="db-row"><span class="db-row-l">Count</span><span class="db-row-v">3</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Skills</div><div class="db-row"><span class="db-row-l">Count</span><span class="db-row-v">5</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Memory</div><div class="db-row"><span class="db-row-l">Stored</span><span class="db-row-v">847</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Channels</div><div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px"><span class="db-bdg db-bdg-s">telegram</span><span class="db-bdg db-bdg-s">discord</span><span class="db-bdg db-bdg-s">slack</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">MCP</div><div class="db-row"><span class="db-row-l">Servers</span><span class="db-row-v">2</span></div><div class="db-row"><span class="db-row-l">Tools</span><span class="db-row-v">17</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Workers</div><div class="db-row"><span class="db-row-l">Count</span><span class="db-row-v">2</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Scheduler</div><div class="db-row"><span class="db-row-l">Active Jobs</span><span class="db-row-v">4</span></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Jobs</div><div class="db-row"><span class="db-row-l">Active</span><span class="db-row-v">12</span></div></div>
+                </div>
+              </div>
+              <!-- Page 1: Mind -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Mind</h3><div><span class="db-btn db-btn-p">Save</span></div></div>
+                <div class="db-tabs"><span class="db-tab active">IDENTITY.md</span><span class="db-tab">SOUL.md</span><span class="db-tab">USER.md</span></div>
+                <textarea class="db-ta" style="min-height:280px"># Identity
+
+You are ScalyClaw, a personal AI assistant.
+You are helpful, concise, and friendly.
+You remember everything about your user.
+
+## Personality Traits
+- Curious and proactive
+- Direct but warm
+- Technical expertise with accessibility
+- Never condescending</textarea>
+              </div>
+              <!-- Page 2: Usage -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Usage</h3><div><span class="db-btn">&#9881; Settings</span> <span class="db-btn">&#8635;</span></div></div>
+                <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;flex-wrap:wrap">
+                  <span class="db-tab active">Today</span><span class="db-tab">7d</span><span class="db-tab">30d</span><span class="db-tab">This Month</span><span class="db-tab">All Time</span>
+                  <span style="font-size:0.5625rem;color:var(--text-dim);margin-left:4px">From</span><input class="db-inp" type="date" style="width:100px;padding:3px 6px;font-size:0.5625rem"/>
+                  <span style="font-size:0.5625rem;color:var(--text-dim)">To</span><input class="db-inp" type="date" style="width:100px;padding:3px 6px;font-size:0.5625rem"/>
+                </div>
+                <div class="db-sg db-sg-3">
+                  <div class="db-sc"><div class="db-sc-l">Today's Cost</div><div class="db-sc-v" style="color:var(--accent)">$2.48</div><div style="margin-top:4px"><div class="db-pbar"><div class="db-pbar-f" style="width:49%"></div></div><div style="text-align:right;font-size:0.5rem;color:#525252;margin-top:2px">of $5.00/day</div></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Month Cost</div><div class="db-sc-v">$12.48</div><div style="margin-top:4px"><div class="db-pbar"><div class="db-pbar-f" style="width:25%"></div></div><div style="text-align:right;font-size:0.5rem;color:#525252;margin-top:2px">of $50.00/mo</div></div></div>
+                  <div class="db-sc"><div class="db-sc-l">Total Cost</div><div class="db-sc-v">$12.48</div></div>
+                  <div class="db-sc"><div class="db-sc-l">Input Tokens</div><div class="db-sc-v">271,300</div></div>
+                  <div class="db-sc"><div class="db-sc-l">Output Tokens</div><div class="db-sc-v">16,700</div></div>
+                  <div class="db-sc"><div class="db-sc-l">API Calls</div><div class="db-sc-v">594</div></div>
+                </div>
+                <div class="db-tabs" style="margin-top:12px"><span class="db-tab active">By Model</span><span class="db-tab">By Type</span></div>
+                <table class="db-tbl"><thead><tr><th>Model</th><th>Provider</th><th>In Tokens</th><th>Out Tokens</th><th>In Cost</th><th>Out Cost</th><th>Total</th><th>Calls</th></tr></thead><tbody>
+                  <tr><td class="mono">claude-sonnet-4-6</td><td>Anthropic</td><td>98,400</td><td>34,300</td><td>$0.30</td><td>$0.20</td><td>$0.50</td><td>312</td></tr>
+                  <tr><td class="mono">gpt-4o</td><td>OpenAI</td><td>71,200</td><td>23,300</td><td>$0.18</td><td>$0.10</td><td>$0.28</td><td>187</td></tr>
+                  <tr><td class="mono">gemini-2.0-flash</td><td>Google</td><td>38,700</td><td>5,400</td><td>$0.02</td><td>$0.01</td><td>$0.03</td><td>95</td></tr>
+                </tbody></table>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px">
+                  <div class="db-sc"><div class="db-sc-l" style="margin-bottom:8px">Daily Cost</div><div class="db-bars"><div class="db-bar" style="height:30%"></div><div class="db-bar" style="height:45%"></div><div class="db-bar" style="height:72%"></div><div class="db-bar" style="height:58%"></div><div class="db-bar" style="height:90%"></div><div class="db-bar" style="height:66%"></div><div class="db-bar" style="height:82%"></div></div></div>
+                  <div class="db-sc"><div class="db-sc-l" style="margin-bottom:8px">Daily Tokens</div><div class="db-bars"><div class="db-bar" style="height:50%;background:linear-gradient(to top,var(--accent) 70%,var(--blue) 30%)"></div><div class="db-bar" style="height:65%;background:linear-gradient(to top,var(--accent) 65%,var(--blue) 35%)"></div><div class="db-bar" style="height:80%;background:linear-gradient(to top,var(--accent) 75%,var(--blue) 25%)"></div><div class="db-bar" style="height:55%;background:linear-gradient(to top,var(--accent) 60%,var(--blue) 40%)"></div><div class="db-bar" style="height:92%;background:linear-gradient(to top,var(--accent) 70%,var(--blue) 30%)"></div><div class="db-bar" style="height:72%;background:linear-gradient(to top,var(--accent) 68%,var(--blue) 32%)"></div><div class="db-bar" style="height:85%;background:linear-gradient(to top,var(--accent) 72%,var(--blue) 28%)"></div></div></div>
+                </div>
+              </div>
+              <!-- Page 3: Channels -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Channels</h3><span class="db-btn db-btn-p">Save</span></div>
+                <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Telegram</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Discord</span><span class="db-tab">Slack</span><span class="db-tab">WhatsApp</span><span class="db-tab">Signal</span><span class="db-tab">Teams</span></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:0.625rem;color:var(--text-muted)">Enabled</span><span class="db-sw on"></span></div>
+                <div class="db-field"><div class="db-field-l">Bot Token</div><input class="db-inp" value="7023841:AAH..." readonly/></div>
+                <div class="db-field"><div class="db-field-l">Allowlist (User IDs)</div><input class="db-inp" value="12345678, 87654321" readonly/></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px"><div class="db-field"><div class="db-field-l">DM Policy</div><input class="db-inp" value="allowlist" readonly/></div><div class="db-field"><div class="db-field-l">Group Policy</div><input class="db-inp" value="closed" readonly/></div><div class="db-field"><div class="db-field-l">Text Chunk Limit</div><input class="db-inp" value="4096" readonly/></div><div class="db-field"><div class="db-field-l">Media Max MB</div><input class="db-inp" value="20" readonly/></div></div>
+              </div>
+              <!-- Page 4: Models -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Models</h3><div><span class="db-btn db-btn-p">+ Add Model</span> <span class="db-btn db-btn-p">+ Add Embedding</span> <span class="db-btn">&#8635;</span></div></div>
+                <div class="db-tabs"><span class="db-tab active">Chat Models</span><span class="db-tab">Embedding Models</span></div>
+                <table class="db-tbl"><thead><tr><th>ID</th><th>Name</th><th>Provider</th><th>Temp</th><th>Max Tok</th><th>Context</th><th>Pri</th><th>Wt</th><th>In $/M</th><th>Out $/M</th><th>Capabilities</th><th>On</th><th></th></tr></thead><tbody>
+                  <tr><td class="mono" style="font-size:0.5rem">cs46</td><td class="mono">claude-sonnet-4-6</td><td>Anthropic</td><td>0.7</td><td>4096</td><td>200K</td><td>1</td><td>1</td><td>$3</td><td>$15</td><td><span class="db-bdg db-bdg-g">tool</span> <span class="db-bdg db-bdg-b">image</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span> <span class="db-btn" style="font-size:0.5rem">Test</span></td></tr>
+                  <tr><td class="mono" style="font-size:0.5rem">gpt4o</td><td class="mono">gpt-4o</td><td>OpenAI</td><td>0.7</td><td>4096</td><td>128K</td><td>2</td><td>1</td><td>$2.5</td><td>$10</td><td><span class="db-bdg db-bdg-g">tool</span> <span class="db-bdg db-bdg-b">image</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span> <span class="db-btn" style="font-size:0.5rem">Test</span></td></tr>
+                  <tr><td class="mono" style="font-size:0.5rem">gf20</td><td class="mono">gemini-2.0-flash</td><td>Google</td><td>0.5</td><td>8192</td><td>1M</td><td>3</td><td>1</td><td>$0.1</td><td>$0.4</td><td><span class="db-bdg db-bdg-g">tool</span></td><td><span class="db-sw"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span> <span class="db-btn" style="font-size:0.5rem">Test</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 5: Agents -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Agents</h3><div><span class="db-btn db-btn-p">+ New Agent</span> <span class="db-btn">&#8635;</span></div></div>
+                <table class="db-tbl"><thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Models</th><th>Skills</th><th>Tools</th><th>MCPs</th><th>On</th><th></th></tr></thead><tbody>
+                  <tr><td class="mono">research</td><td class="mono">research-agent</td><td>Web research &amp; summarize</td><td><span class="db-bdg db-bdg-s">auto</span></td><td><span class="db-bdg db-bdg-b">web-search</span></td><td>8</td><td><span class="db-bdg db-bdg-s">filesystem</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">code</td><td class="mono">code-agent</td><td>Write &amp; review code</td><td><span class="db-bdg db-bdg-s">claude-sonnet</span></td><td><span class="db-bdg db-bdg-b">exec-js</span> <span class="db-bdg db-bdg-b">exec-py</span></td><td>12</td><td>&mdash;</td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">skill-creator</td><td class="mono">skill-creator</td><td>Creates new skills</td><td><span class="db-bdg db-bdg-s">auto</span></td><td>&mdash;</td><td>5</td><td>&mdash;</td><td><span class="db-sw on"></span></td><td style="color:var(--text-dim);font-size:0.5rem">locked</td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 6: Skills -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Skills</h3><div><span class="db-btn db-btn-p">&#11014; Upload</span> <span class="db-btn">&#8635;</span></div></div>
+                <table class="db-tbl"><thead><tr><th>ID</th><th>Name</th><th>Description</th><th>Lang</th><th>On</th><th></th></tr></thead><tbody>
+                  <tr><td class="mono">web-search</td><td>Web Search</td><td>Search using Brave API</td><td><span class="db-bdg db-bdg-s">js</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#128196;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">summarize</td><td>Summarizer</td><td>Condenses text to bullets</td><td><span class="db-bdg db-bdg-s">python</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#128196;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">exec-code</td><td>Code Runner</td><td>Execute arbitrary code</td><td><span class="db-bdg db-bdg-s">js</span></td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#128196;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 7: Memory -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Memory</h3><div><span class="db-btn db-btn-p">+ Store</span> <span class="db-btn">&#9881;</span></div></div>
+                <div style="margin-bottom:12px"><input class="db-inp" placeholder="Search memories..." style="max-width:320px"/></div>
+                <table class="db-tbl"><thead><tr><th style="width:16px"></th><th>Subject</th><th>Type</th><th>Tags</th><th>Confidence</th><th>Updated</th><th></th></tr></thead><tbody>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td>User prefers dark mode UI</td><td><span class="db-bdg db-bdg-g">fact</span></td><td><span class="db-bdg db-bdg-s">preference</span></td><td><span class="db-dot db-dot-g" style="margin-right:4px"></span>High</td><td>Feb 24</td><td><span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td>Project uses Bun runtime</td><td><span class="db-bdg db-bdg-g">fact</span></td><td><span class="db-bdg db-bdg-s">project</span></td><td><span class="db-dot db-dot-g" style="margin-right:4px"></span>High</td><td>Feb 23</td><td><span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td>Alice's deadline is March 1</td><td><span class="db-bdg db-bdg-p">analysis</span></td><td><span class="db-bdg db-bdg-s">person</span></td><td><span class="db-dot" style="background:var(--amber);margin-right:4px"></span>Low</td><td>Feb 22</td><td><span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 8: Vault -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Vault</h3><div><span class="db-btn db-btn-p">+ Add Secret</span> <span class="db-btn">&#8635;</span></div></div>
+                <table class="db-tbl"><thead><tr><th>Name</th><th>Value</th><th>Actions</th></tr></thead><tbody>
+                  <tr><td class="mono">OPENAI_API_KEY</td><td class="mono">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</td><td><span class="db-btn">Reveal</span> <span class="db-btn">Copy</span> <span class="db-btn" style="color:var(--rose)">Delete</span></td></tr>
+                  <tr><td class="mono">ANTHROPIC_API_KEY</td><td class="mono">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</td><td><span class="db-btn">Reveal</span> <span class="db-btn">Copy</span> <span class="db-btn" style="color:var(--rose)">Delete</span></td></tr>
+                  <tr><td class="mono">TELEGRAM_BOT_TOKEN</td><td class="mono">&bull;&bull;&bull;&bull;&bull;&bull;&bull;&bull;</td><td><span class="db-btn">Reveal</span> <span class="db-btn">Copy</span> <span class="db-btn" style="color:var(--rose)">Delete</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 9: MCP -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>MCP Servers</h3><div><span class="db-btn db-btn-p">+ Add Server</span> <span class="db-btn">Import JSON</span> <span class="db-btn">&#8635;</span></div></div>
+                <table class="db-tbl"><thead><tr><th style="width:16px"></th><th>ID</th><th>Transport</th><th>Status</th><th>Tools</th><th>On</th><th></th></tr></thead><tbody>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td class="mono">filesystem</td><td><span class="db-bdg db-bdg-s">stdio</span></td><td><span class="db-bdg db-bdg-g">connected</span></td><td>12</td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem">&#8635;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td class="mono">web-search</td><td><span class="db-bdg db-bdg-s">http</span></td><td><span class="db-bdg db-bdg-r">error</span></td><td>0</td><td><span class="db-sw on"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem">&#8635;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td style="color:var(--text-dim);cursor:pointer">&#9656;</td><td class="mono">code-runner</td><td><span class="db-bdg db-bdg-s">sse</span></td><td><span class="db-bdg db-bdg-s">disconnected</span></td><td>5</td><td><span class="db-sw"></span></td><td><span class="db-btn" style="font-size:0.5rem">&#9998;</span> <span class="db-btn" style="font-size:0.5rem">&#8635;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 10: Scheduler -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Scheduler</h3><div><span class="db-btn db-btn-p">+ Reminder</span> <span class="db-btn db-btn-p">+ Recurrent</span> <span class="db-btn">&#8635;</span></div></div>
+                <div class="db-tabs"><span class="db-tab active">Reminders</span><span class="db-tab">Tasks</span></div>
+                <div class="db-tabs" style="margin-bottom:12px"><span class="db-tab active">Active</span><span class="db-tab">All</span><span class="db-tab">Completed</span><span class="db-tab">Cancelled</span><span class="db-tab">Failed</span></div>
+                <table class="db-tbl"><thead><tr><th>ID</th><th>Type</th><th>Description</th><th>Cron</th><th>Next Run</th><th>State</th><th>Created</th><th></th></tr></thead><tbody>
+                  <tr><td class="mono">r-001</td><td>one-time</td><td>Check in with team</td><td>&mdash;</td><td>Feb 24 14:00</td><td><span class="db-bdg db-bdg-g">Active</span></td><td>Feb 24</td><td><span class="db-btn" style="font-size:0.5rem">&#10003;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">r-002</td><td>recurrent</td><td>Daily standup reminder</td><td class="mono">0 9 * * *</td><td>Feb 25 09:00</td><td><span class="db-bdg db-bdg-g">Active</span></td><td>Feb 20</td><td><span class="db-btn" style="font-size:0.5rem">&#10003;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--rose)">&#128465;</span></td></tr>
+                  <tr><td class="mono">r-003</td><td>one-time</td><td>Pay rent</td><td>&mdash;</td><td>&mdash;</td><td><span class="db-bdg db-bdg-r">Cancelled</span></td><td>Feb 18</td><td><span class="db-btn" style="font-size:0.5rem;color:var(--text-dim)">&#128465;</span></td></tr>
+                </tbody></table>
+              </div>
+              <!-- Page 11: Engagement -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Engagement</h3><div><span class="db-btn">Trigger Now</span> <span class="db-btn">Discard</span> <span class="db-btn db-btn-p">Save</span></div></div>
+                <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>General</span><span class="db-tab">Quiet Hours</span><span class="db-tab">Triggers</span></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:0.625rem;color:var(--text-muted)">Enabled</span><span class="db-sw on"></span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+                  <div class="db-field"><div class="db-field-l">Model</div><input class="db-inp" value="Auto (weighted)" readonly/></div>
+                  <div class="db-field"><div class="db-field-l">Cron Pattern</div><input class="db-inp" value="*/15 * * * *" readonly/></div>
+                  <div class="db-field"><div class="db-field-l">Idle Threshold (min)</div><input class="db-inp" value="30" readonly/></div>
+                  <div class="db-field"><div class="db-field-l">Cooldown (sec)</div><input class="db-inp" value="900" readonly/></div>
+                  <div class="db-field"><div class="db-field-l">Max Per Day</div><input class="db-inp" value="5" readonly/></div>
+                </div>
+              </div>
+              <!-- Page 12: Security -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Security</h3><div><span class="db-btn">Discard</span> <span class="db-btn db-btn-p">Save</span></div></div>
+                <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Message Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Skill Guard</span><span class="db-tab">Agent Guard</span></div>
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:0.625rem;color:var(--text-muted)">Enabled</span><span class="db-sw on"></span></div>
+                <div class="db-field"><div class="db-field-l">Model</div><input class="db-inp" value="claude-sonnet-4-6" readonly/></div>
+                <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 1 &mdash; Echo Guard</span><span class="db-sw on"></span></div><div class="db-field"><div class="db-field-l">Similarity Threshold</div><input class="db-inp" value="0.9" readonly style="width:80px"/></div></div>
+                <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 2 &mdash; Content Guard</span><span class="db-sw on"></span></div><div style="font-size:0.5625rem;color:#525252;margin-top:4px">Checks for injection, social engineering, and harmful content</div></div>
+              </div>
+              <!-- Page 13: Logs -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Logs</h3><span class="db-btn">&#8635;</span></div>
+                <div class="db-tabs"><span class="db-tab active">Node</span><span class="db-tab">Workers</span></div>
+                <div class="db-tabs"><span class="db-tab">1m</span><span class="db-tab active">5m</span><span class="db-tab">10m</span><span class="db-tab">30m</span><span class="db-tab">1h</span><span class="db-tab">Range</span></div>
+                <div class="db-tabs" style="margin-bottom:8px"><span class="db-tab active">all</span><span class="db-tab">info</span><span class="db-tab">warn</span><span class="db-tab">error</span><span class="db-tab">debug</span></div>
+                <div style="margin-bottom:8px"><input class="db-inp" placeholder="Search logs..." style="max-width:280px"/></div>
+                <div class="db-log"><div><span class="t">10:32:14.521</span> <span class="i">INFO </span> <span class="m">[orchestrator] message received channelId=telegram:12345</span></div><div><span class="t">10:32:14.892</span> <span class="i">INFO </span> <span class="m">[tool] exec_code started jobId=98</span></div><div><span class="t">10:32:15.103</span> <span class="e">ERROR</span> <span class="m">[worker] connection timeout after 5000ms</span></div><div><span class="t">10:32:15.440</span> <span class="w">WARN </span> <span class="m">[guard] echo similarity 0.91 — blocked repeated message</span></div><div><span class="t">10:32:16.001</span> <span class="i">INFO </span> <span class="m">[orchestrator] tool result received jobId=98</span></div><div><span class="t">10:32:16.312</span> <span class="i">INFO </span> <span class="m">[channel] sending reply channelId=telegram:12345 chunks=2</span></div><div><span class="t">10:32:17.891</span> <span class="i">INFO </span> <span class="m">[memory] stored 3 new facts from conversation</span></div><div><span class="t">10:32:18.440</span> <span class="w">WARN </span> <span class="m">[budget] daily spend $2.48 approaching threshold (80%)</span></div></div>
+              </div>
+              <!-- Page 14: Workers -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Workers</h3><span class="db-btn">&#8635; Refresh</span></div>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px">
+                  <div class="db-sc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><span class="db-dot db-dot-g"></span><span style="font-size:0.6875rem;font-weight:600;color:#e5e5e5">mac-studio.local</span></div><span class="db-bdg db-bdg-s">localhost:4001</span></div><div class="db-row"><span class="db-row-l">Started</span><span class="db-row-v">Feb 24 08:00</span></div><div class="db-row"><span class="db-row-l">Uptime</span><span class="db-row-v">6h 32m</span></div><div class="db-row"><span class="db-row-l">Concurrency</span><span class="db-row-v">4</span></div><div class="db-row"><span class="db-row-l">Version</span><span class="db-row-v">1.4.2</span></div></div>
+                  <div class="db-sc"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div style="display:flex;align-items:center;gap:6px"><span class="db-dot db-dot-g"></span><span style="font-size:0.6875rem;font-weight:600;color:#e5e5e5">web-server-01</span></div><span class="db-bdg db-bdg-s">192.168.1.10:4001</span></div><div class="db-row"><span class="db-row-l">Started</span><span class="db-row-v">Feb 24 07:30</span></div><div class="db-row"><span class="db-row-l">Uptime</span><span class="db-row-v">7h 02m</span></div><div class="db-row"><span class="db-row-l">Concurrency</span><span class="db-row-v">8</span></div><div class="db-row"><span class="db-row-l">Version</span><span class="db-row-v">1.4.2</span></div></div>
+                </div>
+              </div>
+              <!-- Page 15: Jobs -->
+              <div class="db-pg">
+                <div class="db-hdr"><h3>Jobs</h3><div><span class="db-btn">&#9881;</span> <span class="db-btn">&#8635;</span> <span class="db-bdg db-bdg-s" style="font-size:0.5rem">Auto-refresh</span></div></div>
+                <div class="db-tabs"><span class="db-tab active">All</span><span class="db-tab">Messages</span><span class="db-tab">Agents</span><span class="db-tab">Tools</span><span class="db-tab">Proactive</span><span class="db-tab">Scheduler</span><span class="db-tab">System</span></div>
+                <div class="db-tabs" style="margin-bottom:12px"><span class="db-tab active">active</span><span class="db-tab">waiting</span><span class="db-tab">completed</span><span class="db-tab" style="color:var(--rose)">failed (2)</span><span class="db-tab">delayed</span></div>
+                <table class="db-tbl"><thead><tr><th>ID</th><th>Name</th><th>Queue</th><th>Created</th><th>Processed</th><th></th></tr></thead><tbody>
+                  <tr><td class="mono">48291</td><td>process-message</td><td><span class="db-bdg db-bdg-b">messages</span></td><td>14:01:22</td><td>14:01:23</td><td><span class="db-btn" style="font-size:0.5rem">&#128065;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--accent)">&#10003;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--amber)">&#10007;</span></td></tr>
+                  <tr><td class="mono">48290</td><td>exec-code</td><td><span class="db-bdg db-bdg-p">tools</span></td><td>14:01:10</td><td>14:01:11</td><td><span class="db-btn" style="font-size:0.5rem">&#128065;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--accent)">&#10003;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--amber)">&#10007;</span></td></tr>
+                  <tr><td class="mono">48285</td><td>delegate-agent</td><td><span class="db-bdg db-bdg-o">agents</span></td><td>13:58:44</td><td>13:58:45</td><td><span class="db-btn" style="font-size:0.5rem">&#128065;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--accent)">&#10003;</span> <span class="db-btn" style="font-size:0.5rem;color:var(--amber)">&#10007;</span></td></tr>
+                </tbody></table>
+                <div style="margin-top:14px;border-top:1px solid var(--border);padding-top:10px">
+                  <div style="font-size:0.625rem;font-weight:600;color:var(--text-muted);margin-bottom:8px">Pending Messages</div>
+                  <table class="db-tbl"><thead><tr><th>Channel</th><th>Messages</th><th>Types</th><th>Oldest</th></tr></thead><tbody>
+                    <tr><td class="mono">telegram:12345</td><td><span class="db-bdg db-bdg-b">2</span></td><td>text</td><td>14:01:20</td></tr>
+                  </tbody></table>
+                </div>
+              </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="db-nav">
+          <button class="db-nav-btn" onclick="dashPrev()" aria-label="Previous"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg></button>
+          <span class="db-counter" id="dashCounter">1 / 16</span>
+          <button class="db-nav-btn" onclick="dashNext()" aria-label="Next"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 6 15 12 9 18"/></svg></button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ═══════════════════ FEATURES ═══════════════════ -->
+  <section class="section" id="features">
+    <div class="container">
+      <div class="section-header animate-on-scroll">
+        <div class="section-tag">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5L8 1z" fill="currentColor"/></svg>
+          Features
+        </div>
+      </div>
+      <div class="features-grid animate-on-scroll">
+        <!-- Feature 1: Memory -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--accent);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          </div>
+          <h3>Persistent Memory</h3>
+          <p>Hybrid vector + full-text search. Your AI automatically extracts and recalls facts from every conversation. It truly learns you.</p>
+        </div>
+        <!-- Feature 2: Channels -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--blue);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          </div>
+          <h3>Every Channel</h3>
+          <p>Discord, Telegram, Slack, WhatsApp, Signal, Teams, or the built-in gateway. One assistant, one memory, all your conversations.</p>
+        </div>
+        <!-- Feature 3: Agents -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--purple);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+          </div>
+          <h3>Autonomous Agents</h3>
+          <p>Delegate complex work to specialized sub-agents with their own models, tools, and skill access. They think so you don't have to.</p>
+        </div>
+        <!-- Feature 4: Skills -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--cyan);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          </div>
+          <h3>Extensible Skills</h3>
+          <p>Write skills in JavaScript, Python, Rust, or Bash. Auto-dependency install, hot-reload, and zip deployment. Your AI can even write its own.</p>
+        </div>
+        <!-- Feature 5: Security -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--rose);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          </div>
+          <h3>Triple-Layer Security</h3>
+          <p>LLM-powered guards validate every message, skill, and agent. Echo guard, content guard, and code validation. Fail-closed by default.</p>
+        </div>
+        <!-- Feature 6: MCP -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: var(--amber);">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </div>
+          <h3>MCP Integration</h3>
+          <p>Connect any Model Context Protocol server. Tools are discovered automatically and become first-class citizens. Zero glue code required.</p>
+        </div>
+        <!-- Feature 7: Workers -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: #ef4444;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1" fill="currentColor"/><circle cx="6" cy="18" r="1" fill="currentColor"/></svg>
+          </div>
+          <h3>Scalable Workers</h3>
+          <p>Deploy workers anywhere. Same machine or remote, they auto-connect via Redis and BullMQ. Scale execution without touching the core.</p>
+        </div>
+        <!-- Feature 8: Hot Reload -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: #22d3ee;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+          </div>
+          <h3>Zero-Downtime Reload</h3>
+          <p>Skills, agents, config, and MCP servers reload live via Redis pub/sub. Update anything without restarting. No interruptions, ever.</p>
+        </div>
+        <!-- Feature 9: Budget -->
+        <div class="feature-card">
+          <div class="feature-icon" style="color: #a3e635;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+          </div>
+          <h3>Budget Control</h3>
+          <p>Monthly and daily limits with hard/soft enforcement. Per-model tracking, configurable alert thresholds. Never get a surprise bill again.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ SECURITY ═══════════════════ -->
+  <section class="section" id="security">
+    <div class="container">
+      <div class="section-header animate-on-scroll">
+        <div class="section-tag">
+          <svg viewBox="0 0 16 16" fill="none"><path d="M8 1L2 4v4c0 3.5 2.5 6.5 6 7.5 3.5-1 6-4 6-7.5V4L8 1z" stroke="currentColor" stroke-width="1.5" fill="none"/></svg>
+          Security
+        </div>
+      </div>
+      <div class="arch-row animate-on-scroll">
+        <div class="arch-text">
+          <h3 style="font-size: 2.25rem;">Security by <span style="color: var(--rose);">Default</span></h3>
+          <p>
+            Three LLM-powered guards, an encrypted vault, and container-ready workers. Every layer is designed to fail closed &mdash; if anything looks wrong, it gets blocked.
+          </p>
+          <ul class="arch-list">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Echo Guard detects prompt injection attacks
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Content Guard blocks harmful requests
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Skill &amp; Agent Guards validate code and definitions
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Vault stores secrets in Redis &mdash; never exposed in messages, memory, or logs
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              You can run Workers in containers for full execution sandboxing
+            </li>
+          </ul>
+        </div>
+        <div class="arch-visual">
+          <div class="security-layers">
+            <div class="security-layer">
+              <div class="security-num security-num-1">1</div>
+              <div class="security-info">
+                <h4>Echo Guard</h4>
+                <p>LLM repeats the message; if similarity &lt; 0.9, injection detected. Blocked.</p>
+              </div>
+            </div>
+            <div class="security-layer">
+              <div class="security-num security-num-2">2</div>
+              <div class="security-info">
+                <h4>Content Guard</h4>
+                <p>Analyzes for social engineering, harmful content, jailbreak attempts.</p>
+              </div>
+            </div>
+            <div class="security-layer">
+              <div class="security-num security-num-3">3</div>
+              <div class="security-info">
+                <h4>Skill &amp; Agent Guard</h4>
+                <p>Validates code for malicious payloads and excessive permission requests.</p>
+              </div>
+            </div>
+            <div class="security-layer">
+              <div class="security-num security-num-4">4</div>
+              <div class="security-info">
+                <h4>Vault</h4>
+                <p>Secrets stored in Redis, injected as env vars at runtime. Never echoed in messages or memory.</p>
+              </div>
+            </div>
+            <div class="security-layer">
+              <div class="security-num security-num-5">5</div>
+              <div class="security-info">
+                <h4>Container Sandboxing</h4>
+                <p>Run workers in Docker containers. Code execution is fully isolated from the host.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ TECH STACK ═══════════════════ -->
+  <section class="section-sm" style="border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); background: rgba(16,185,129,0.01);">
+    <div class="container">
+      <div style="text-align: center; margin-bottom: 40px;" class="animate-on-scroll">
+        <p style="font-size: 0.8125rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600;">Built With <span style="color:var(--rose);">&hearts;</span></p>
+      </div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; gap: 32px; align-items: center;" class="animate-on-scroll">
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2z" opacity="0.2"/><text x="12" y="16" text-anchor="middle" font-size="10" font-weight="bold" fill="currentColor">B</text></svg>Bun</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#3178c6"><path d="M1.125 0C.502 0 0 .502 0 1.125v21.75C0 23.498.502 24 1.125 24h21.75c.623 0 1.125-.502 1.125-1.125V1.125C24 .502 23.498 0 22.875 0zm17.363 9.75c.612 0 1.154.037 1.627.111a6.38 6.38 0 011.306.34v2.458a3.95 3.95 0 00-.643-.361 5.093 5.093 0 00-.717-.26 5.453 5.453 0 00-1.426-.2c-.3 0-.573.028-.819.086a2.1 2.1 0 00-.623.242c-.17.104-.3.229-.393.374a.888.888 0 00-.14.49c0 .196.053.373.156.529.104.156.252.304.443.444s.423.276.696.41c.273.135.582.274.926.416.47.197.892.407 1.266.628.374.222.695.473.963.753.268.279.472.598.614.957.142.359.214.776.214 1.253 0 .657-.125 1.21-.373 1.656a3.033 3.033 0 01-1.012 1.085 4.38 4.38 0 01-1.487.596c-.566.12-1.163.18-1.79.18a9.916 9.916 0 01-1.84-.164 5.544 5.544 0 01-1.512-.493v-2.63a5.033 5.033 0 003.237 1.2c.333 0 .624-.03.872-.09.249-.06.456-.144.623-.25.166-.108.29-.234.373-.38a1.023 1.023 0 00-.074-1.089 2.12 2.12 0 00-.537-.5 5.597 5.597 0 00-.807-.444 27.72 27.72 0 00-1.007-.436c-.918-.383-1.602-.852-2.053-1.405-.45-.553-.676-1.222-.676-2.005 0-.614.123-1.141.369-1.582.246-.441.58-.804 1.004-1.089a4.494 4.494 0 011.47-.629 7.536 7.536 0 011.77-.201zm-15.113.188h9.563v2.166H9.506v9.646H6.789v-9.646H3.375z"/></svg>TypeScript</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#DC382D"><circle cx="12" cy="12" r="10"/></svg>Redis</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#003B57"><path d="M12 2L2 7v10l10 5 10-5V7L12 2z"/></svg>SQLite</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#61DAFB"><circle cx="12" cy="12" r="2.5"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="#61DAFB" stroke-width="1"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="#61DAFB" stroke-width="1" transform="rotate(60 12 12)"/><ellipse cx="12" cy="12" rx="10" ry="4" fill="none" stroke="#61DAFB" stroke-width="1" transform="rotate(120 12 12)"/></svg>React</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="none"><path d="M12 2L2 19.5h20L12 2z" fill="#000" stroke="#fff" stroke-width="1"/></svg>Fastify</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#E8363E"><rect x="2" y="2" width="20" height="20" rx="3"/></svg>BullMQ</div>
+        <div class="skill-tag"><svg viewBox="0 0 24 24" width="16" height="16" fill="#06B6D4"><path d="M12 6l-4 6h8l-4 6" stroke="#06B6D4" stroke-width="2" fill="none"/></svg>Tailwind</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════════════ FOOTER ═══════════════════ -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-logo">
+          <img src="assets/logo.svg" alt="ScalyClaw" />
+          ScalyClaw
+        </div>
+        <ul class="footer-links">
+          <li><a href="#architecture">Architecture</a></li>
+          <li><a href="#dashboard">Dashboard</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#security">Security</a></li>
+          <li><a href="docs/" target="_blank">Docs</a></li>
+          <li><a href="https://github.com/scalyclaw/scalyclaw" target="_blank">GitHub</a></li>
+        </ul>
+        <span class="footer-copy">&copy; 2026 ScalyClaw</span>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ═══════════════════ SCRIPT ═══════════════════ -->
+  <script>
+    if ('scrollRestoration' in history) history.scrollRestoration = 'manual';
+    window.scrollTo(0, 0);
+  </script>
+  <script>
+    // Install tab switching & copy
+    const installCmds = {
+      install: 'curl -fsSL https://scalyclaw.netlify.app/install.sh | sh',
+    };
+
+    function switchInstall(platform) {
+      document.querySelectorAll('.install-tab').forEach(t => t.classList.remove('active'));
+      document.querySelector(`.install-tab[data-platform="${platform}"]`).classList.add('active');
+      const cmdEl = document.getElementById('installCmd');
+      const aboutEl = document.getElementById('installAbout');
+      const copyBtn = document.getElementById('installCopy');
+      if (platform === 'about') {
+        aboutEl.style.display = 'flex';
+        cmdEl.style.display = 'none';
+        copyBtn.style.display = 'none';
+      } else {
+        aboutEl.style.display = 'none';
+        cmdEl.style.display = '';
+        copyBtn.style.display = '';
+        cmdEl.innerHTML = '<span class="prompt">$</span> ' + installCmds[platform];
+      }
+    }
+
+    function copyInstall() {
+      const active = document.querySelector('.install-tab.active').dataset.platform;
+      navigator.clipboard.writeText(installCmds[active]).then(() => {
+        const btn = document.getElementById('installCopy');
+        btn.classList.add('copied');
+        btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>';
+        }, 2000);
+      });
+    }
+
+    // Navbar scroll effect
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 50);
+    });
+
+    // Scroll reveal animations
+    const observerOptions = {
+      threshold: 0.1,
+      rootMargin: '0px 0px -40px 0px'
+    };
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+        }
+      });
+    }, observerOptions);
+
+    document.querySelectorAll('.animate-on-scroll').forEach(el => observer.observe(el));
+
+    // Smooth scroll for anchor links
+    document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+      anchor.addEventListener('click', function (e) {
+        e.preventDefault();
+        const target = document.querySelector(this.getAttribute('href'));
+        if (target) {
+          target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    });
+
+    // Dashboard slideshow
+    const dbPages = document.querySelectorAll('.db-pg');
+    const dbItems = document.querySelectorAll('.db-si');
+    const dbNames = ['Overview','Mind','Usage','Channels','Models','Agents','Skills','Memory','Vault','MCP','Scheduler','Engagement','Security','Logs','Workers','Jobs'];
+    const dbDescs = [
+      'Real-time system health at a glance \u2014 node status, models, budget, channels, and workers, all auto-refreshing.',
+      'Shape your AI\u2019s personality in real time. Three markdown files define who it is, how it thinks, and what it knows about you.',
+      'Track every API call, token, and dollar. Daily cost charts, model breakdowns, and configurable budget limits.',
+      'Toggle and configure every messaging channel \u2014 Telegram, Discord, Slack, WhatsApp, Signal, and Teams.',
+      'Manage LLM providers and models. Set priorities, weights, test connectivity, and toggle capabilities on the fly.',
+      'Create autonomous sub-agents with custom prompts, model selections, and fine-grained tool permissions.',
+      'Upload, browse, and manage skill packages in JavaScript, Python, Rust, or Bash \u2014 hot-reloaded instantly.',
+      'Browse and search your AI\u2019s memory store. Facts, preferences, and analysis entries with confidence levels.',
+      'Securely store API keys and credentials. Secrets are masked by default and auto-injected into skills.',
+      'Connect Model Context Protocol servers \u2014 stdio, HTTP, or SSE. Tools are discovered and registered automatically.',
+      'Schedule one-shot and recurring reminders or full LLM tasks with cron patterns or interval timing.',
+      'Configure proactive engagement \u2014 set idle thresholds, cooldowns, quiet hours, and trigger conditions.',
+      'LLM-powered security guards. Echo detection, content analysis, skill validation \u2014 all fail-closed by default.',
+      'Real-time log viewer for node and workers. Filter by level, time range, and keyword with auto-scroll.',
+      'Monitor active worker processes \u2014 health status, uptime, concurrency, and version at a glance.',
+      'Inspect all six BullMQ queues. Filter by status, view payloads, retry failed jobs, or clean completed ones.',
+    ];
+    let dashCurrent = 0;
+    let dashAutoTimer = null;
+
+    function dashGo(idx) {
+      if (idx === dashCurrent || idx < 0 || idx >= dbPages.length) return;
+      dbPages[dashCurrent].classList.remove('active');
+      dbItems[dashCurrent].classList.remove('active');
+      dashCurrent = idx;
+      dbPages[dashCurrent].classList.add('active');
+      dbItems[dashCurrent].classList.add('active');
+      document.getElementById('dashTitle').textContent = 'ScalyClaw \u2014 ' + dbNames[dashCurrent];
+      document.getElementById('dashToolbarTitle').textContent = dbNames[dashCurrent];
+      document.getElementById('dashCounter').textContent = (dashCurrent + 1) + ' / ' + dbPages.length;
+      const descEl = document.getElementById('dashDesc');
+      descEl.style.opacity = '0';
+      setTimeout(() => { descEl.textContent = dbDescs[dashCurrent]; descEl.style.opacity = '1'; }, 200);
+      const side = document.getElementById('dashSide');
+      const item = dbItems[dashCurrent];
+      const top = item.offsetTop - side.offsetTop;
+      if (top < side.scrollTop || top + item.offsetHeight > side.scrollTop + side.clientHeight) {
+        side.scrollTo({ top: top - side.clientHeight / 2 + item.offsetHeight / 2, behavior: 'smooth' });
+      }
+      dashAutoPlay();
+    }
+
+    function dashNext() { dashGo((dashCurrent + 1) % dbPages.length); }
+    function dashPrev() { dashGo((dashCurrent - 1 + dbPages.length) % dbPages.length); }
+
+    function dashAutoPlay() {
+      clearInterval(dashAutoTimer);
+      dashAutoTimer = setInterval(dashNext, 6000);
+    }
+
+    dbItems.forEach((item, i) => item.addEventListener('click', () => dashGo(i)));
+    dashAutoPlay();
+
+    // Animate dashboard bars on scroll
+    const chartObserver = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !entry.target.dataset.animated) {
+          entry.target.dataset.animated = 'true';
+          const bars = entry.target.querySelectorAll('.db-bar');
+          bars.forEach((bar, i) => {
+            const h = bar.style.height;
+            bar.style.height = '0';
+            setTimeout(() => { bar.style.height = h; }, 100 + i * 60);
+          });
+        }
+      });
+    }, { threshold: 0.3 });
+
+    document.querySelectorAll('.db-bars').forEach(el => chartObserver.observe(el));
+
+
+    // Subtle parallax for hero orbs
+    document.addEventListener('mousemove', (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 20;
+      const y = (e.clientY / window.innerHeight - 0.5) * 20;
+      document.querySelectorAll('.hero-orb').forEach((orb, i) => {
+        const factor = (i + 1) * 0.5;
+        orb.style.transform = `translate(${x * factor}px, ${y * factor}px)`;
+      });
+    });
+
+    // ─── Funnel lines: draw SVG paths from each channel bubble to center bottom ───
+    function drawFunnel() {
+      const svg = document.getElementById('funnelSvg');
+      if (!svg) return;
+      const funnel = svg.closest('.topo-funnel');
+      const bubbles = funnel.querySelectorAll('.topo-ch');
+      if (!bubbles.length) return;
+
+      const funnelRect = funnel.getBoundingClientRect();
+      const svgRect = svg.getBoundingClientRect();
+      const svgW = svgRect.width;
+      const svgH = svgRect.height;
+
+      // Target: center bottom of SVG (where node box starts)
+      const tx = svgW / 2;
+      const ty = svgH;
+
+      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+      svg.innerHTML = '';
+
+      // Create defs for path references
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      svg.appendChild(defs);
+
+      bubbles.forEach((bubble, i) => {
+        const bRect = bubble.getBoundingClientRect();
+        // Start: center-bottom of each bubble, relative to SVG
+        const sx = bRect.left + bRect.width / 2 - svgRect.left;
+        const sy = 0; // top of SVG = bottom of bubbles row
+
+        // Bezier control point: straight down from bubble, then curve to center
+        const cy1 = svgH * 0.5;
+
+        // Path
+        const pathId = `funnel-path-${i}`;
+        const d = `M ${sx} ${sy} C ${sx} ${cy1}, ${tx} ${cy1}, ${tx} ${ty}`;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'topo-funnel-line');
+        path.setAttribute('id', pathId);
+        svg.appendChild(path);
+
+        // Animated dot traveling along the path
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('class', 'topo-funnel-dot');
+        circle.setAttribute('r', '3');
+        circle.style.offsetPath = `path("${d}")`;
+        circle.style.animation = `funnel-travel 2.5s ease-in-out ${i * 0.3}s infinite`;
+        svg.appendChild(circle);
+      });
+    }
+
+    // ─── Worker funnel: draw SVG paths from Redis center to each worker card ───
+    function drawWorkerFunnel() {
+      const svg = document.getElementById('workerFunnelSvg');
+      if (!svg) return;
+      const workers = document.querySelectorAll('.topo-worker');
+      if (!workers.length) return;
+
+      const svgRect = svg.getBoundingClientRect();
+      const svgW = svgRect.width;
+      const svgH = svgRect.height;
+
+      // Source: center top of SVG (right below Redis pill)
+      const sx = svgW / 2;
+      const sy = 0;
+
+      svg.setAttribute('viewBox', `0 0 ${svgW} ${svgH}`);
+      svg.innerHTML = '';
+
+      workers.forEach((worker, i) => {
+        const wRect = worker.getBoundingClientRect();
+        // Target: center-top of each worker card, relative to SVG
+        const tx = wRect.left + wRect.width / 2 - svgRect.left;
+        const ty = svgH;
+
+        const cy1 = svgH * 0.5;
+        const d = `M ${sx} ${sy} C ${sx} ${cy1}, ${tx} ${cy1}, ${tx} ${ty}`;
+
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', d);
+        path.setAttribute('class', 'topo-worker-funnel-line');
+        svg.appendChild(path);
+
+        // Animated dot
+        const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+        circle.setAttribute('class', 'topo-worker-funnel-dot');
+        circle.setAttribute('r', '3');
+        circle.style.offsetPath = `path("${d}")`;
+        circle.style.animation = `worker-funnel-travel 2.5s ease-in-out ${i * 0.4}s infinite`;
+        svg.appendChild(circle);
+      });
+    }
+
+    drawFunnel();
+    drawWorkerFunnel();
+    window.addEventListener('resize', () => { drawFunnel(); drawWorkerFunnel(); });
+  </script>
+</body>
+</html>

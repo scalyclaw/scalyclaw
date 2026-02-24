@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agents — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Agents</h1>
+        <p>Agents are autonomous sub-personalities that ScalyClaw can delegate complex tasks to. Each agent has its own system prompt, model selection, and tool permissions — letting you compose specialised expertise without burdening the main orchestrator with every capability at once.</p>
+
+        <h2 id="system">Agent System</h2>
+
+        <p>The main orchestrator handles your day-to-day messages, maintains conversation state, and decides when a task is better handled by a specialist. Agents fill that specialist role: they run independently, can use a different model, and operate under their own permission set.</p>
+
+        <h3>When to use agents</h3>
+
+        <ul>
+          <li><strong>Long-running research</strong> — tasks that require many tool calls or deep iteration that would clutter the main conversation thread</li>
+          <li><strong>Specialised domains</strong> — coding, writing, data analysis, or any area where a focused system prompt and a purpose-fit model outperform the general orchestrator</li>
+          <li><strong>Different model capabilities</strong> — run a cheap, fast model for classification sub-tasks while the main orchestrator uses a more capable model for reasoning</li>
+          <li><strong>Parallel workloads</strong> — the agents queue processes jobs concurrently, so multiple agents can work simultaneously on independent sub-problems</li>
+        </ul>
+
+        <p>Agents run via the BullMQ <strong>agents queue</strong>. They do not share the main orchestrator's conversation loop — each delegation is an isolated job that returns a single result.</p>
+
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Main Orchestrator</th><th>Agent</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Scope</td>
+              <td>Full conversation, session state, channel I/O</td>
+              <td>Single delegated task, no channel access</td>
+            </tr>
+            <tr>
+              <td>Tools</td>
+              <td>All tools enabled by default</td>
+              <td>Explicit <code>tools</code> list per agent config</td>
+            </tr>
+            <tr>
+              <td>Model</td>
+              <td>Configured globally in <code>scalyclaw:config</code></td>
+              <td>Overridable per agent</td>
+            </tr>
+            <tr>
+              <td>System prompt</td>
+              <td>Built from <code>mind/</code> files + code sections</td>
+              <td>Agent-specific prompt defined at creation</td>
+            </tr>
+            <tr>
+              <td>Max iterations</td>
+              <td>Governed by session timeout</td>
+              <td>Configurable <code>maxIterations</code> + <code>timeout</code></td>
+            </tr>
+            <tr>
+              <td>Memory access</td>
+              <td>Full read and write</td>
+              <td>Full read and write (shared memory system)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h2 id="creating">Creating Agents</h2>
+
+        <p>Each agent lives in its own directory under <code>~/.scalyclaw/agents/{agent-id}/</code>. The directory contains an <code>AGENT.md</code> file with YAML frontmatter for identity and a body for the system prompt. Configuration (model selection, tools, skills, etc.) is stored separately in Redis under <code>scalyclaw:config</code> inside the <code>orchestrator.agents</code> array. Agents are hot-reloaded via the <code>scalyclaw:agents:reload</code> pub/sub channel — no restart required.</p>
+
+        <h3>AGENT.md structure</h3>
+
+        <p>The <code>AGENT.md</code> file defines the agent's identity and system prompt:</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Location</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td>YAML frontmatter</td>
+              <td>Human-readable display name for the agent</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td>YAML frontmatter</td>
+              <td>Shown to the orchestrator so it knows when to delegate to this agent</td>
+            </tr>
+            <tr>
+              <td>(body)</td>
+              <td>Markdown body</td>
+              <td>The agent's complete system prompt — full persona and instructions</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Config properties</h3>
+
+        <p>Each entry in <code>config.orchestrator.agents[]</code> controls runtime behaviour:</p>
+
+        <table>
+          <thead>
+            <tr><th>Property</th><th>Type</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>id</code></td>
+              <td>string</td>
+              <td>Must match the agent's directory name; used when calling <code>delegate_agent</code></td>
+            </tr>
+            <tr>
+              <td><code>enabled</code></td>
+              <td>boolean</td>
+              <td>Whether the agent is available for delegation</td>
+            </tr>
+            <tr>
+              <td><code>maxIterations</code></td>
+              <td>number</td>
+              <td>Maximum tool-call loops before the agent is forced to return a result (default 25)</td>
+            </tr>
+            <tr>
+              <td><code>models</code></td>
+              <td><code>&#123; model, weight, priority &#125;[]</code></td>
+              <td>Ordered list of models with weights for load balancing</td>
+            </tr>
+            <tr>
+              <td><code>skills</code></td>
+              <td>string[]</td>
+              <td>Skill IDs the agent may invoke</td>
+            </tr>
+            <tr>
+              <td><code>tools</code></td>
+              <td>string[]</td>
+              <td>Tool names the agent may call (see Tool Access below)</td>
+            </tr>
+            <tr>
+              <td><code>mcpServers</code></td>
+              <td>string[]</td>
+              <td>MCP server IDs available to the agent</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Example files</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># ~/.scalyclaw/agents/researcher/AGENT.md</span>
+---
+name: Researcher
+description: Deep research agent. Use for tasks requiring web search, source synthesis, and long-form analysis.
+---
+
+You are a meticulous research assistant. Search thoroughly, cite sources,
+and produce structured summaries. Never guess — if you cannot find a
+reliable source, say so.</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Entry in config.orchestrator.agents[]</span>
+{
+  <span class="prop">"id"</span>: <span class="str">"researcher"</span>,
+  <span class="prop">"enabled"</span>: <span class="kw">true</span>,
+  <span class="prop">"maxIterations"</span>: <span class="num">20</span>,
+  <span class="prop">"models"</span>: [
+    { <span class="prop">"model"</span>: <span class="str">"claude-opus-4-6"</span>, <span class="prop">"weight"</span>: <span class="num">1</span>, <span class="prop">"priority"</span>: <span class="num">1</span> }
+  ],
+  <span class="prop">"skills"</span>: [],
+  <span class="prop">"tools"</span>: [<span class="str">"web_search"</span>, <span class="str">"fetch_url"</span>, <span class="str">"memory_store"</span>, <span class="str">"memory_search"</span>],
+  <span class="prop">"mcpServers"</span>: []
+}</pre>
+        </div>
+
+        <h3>Tool access</h3>
+
+        <p>Agents have a restricted tool surface compared to the main orchestrator. The tools an agent can use fall into two categories depending on how they are executed:</p>
+
+        <table>
+          <thead>
+            <tr><th>Category</th><th>Tools</th><th>Notes</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Direct (run locally)</td>
+              <td><code>send_message</code>, <code>send_file</code>, all 5 memory tools, <code>vault_check</code>, <code>vault_list</code>, all file I/O tools</td>
+              <td>Executed inline inside the agent worker</td>
+            </tr>
+            <tr>
+              <td>Job (queued)</td>
+              <td><code>execute_command</code>, <code>execute_skill</code>, <code>execute_code</code></td>
+              <td>Routed to the tools BullMQ queue</td>
+            </tr>
+            <tr>
+              <td>Not allowed</td>
+              <td><code>delegate_agent</code>, <code>schedule_*</code></td>
+              <td>Agents cannot self-delegate or schedule jobs</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Built-in agents</h3>
+
+        <p>ScalyClaw ships with one built-in agent out of the box:</p>
+
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Purpose</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>skill-creator-agent</code></td>
+              <td>Creates new skills automatically when the orchestrator determines a reusable skill is needed</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Hot-reload</h3>
+
+        <p>Every time you save an agent's config or <code>AGENT.md</code>, ScalyClaw publishes to the <code>scalyclaw:agents:reload</code> Redis pub/sub channel. All running workers subscribe to this channel and refresh their in-memory agent registry immediately — no process restart needed.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Manually trigger an agent reload from the CLI</span>
+redis-cli PUBLISH scalyclaw:agents:reload <span class="str">"{}"</span></pre>
+        </div>
+
+        <h2 id="execution">Execution</h2>
+
+        <p>Delegation follows a straightforward pipeline. The orchestrator decides a task is better handled by a specialist, calls the <code>delegate_agent</code> tool, and waits for the result. The agent runs in isolation and returns a single text result that the orchestrator incorporates into its response.</p>
+
+        <h3>Delegation flow</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">typescript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// 1. Orchestrator calls the delegate_agent tool</span>
+<span class="kw">const</span> result = <span class="kw">await</span> <span class="fn">delegate_agent</span>({
+  <span class="prop">agent</span>: <span class="str">"researcher"</span>,
+  <span class="prop">task</span>: <span class="str">"Summarise the latest developments in quantum error correction, citing primary sources published after 2023."</span>,
+});
+
+<span class="cmt">// 2. tool-impl.ts routes delegate_agent to the agents BullMQ queue</span>
+<span class="kw">await</span> agentsQueue.<span class="fn">add</span>(<span class="str">"delegate"</span>, {
+  <span class="prop">agentName</span>: <span class="str">"researcher"</span>,
+  <span class="prop">task</span>: result.task,
+  <span class="prop">channelId</span>: ctx.channelId,
+});
+
+<span class="cmt">// 3. Agent worker picks up the job, runs the agent's own prompt + model</span>
+<span class="cmt">//    The agent may call its configured tools in a loop up to maxIterations</span>
+
+<span class="cmt">// 4. Worker resolves the job with the agent's final text result</span>
+<span class="cmt">// 5. Orchestrator receives the result and incorporates it into the response</span></pre>
+        </div>
+
+        <h3>Step-by-step</h3>
+
+        <ol>
+          <li>The <strong>main orchestrator</strong> receives a user message and decides — based on the agent's <code>description</code> — that a specialist is the right tool for the job.</li>
+          <li>It calls <code>delegate_agent</code> with the agent name and a task description string.</li>
+          <li><code>tool-impl.ts</code> intercepts the call and adds a job to the BullMQ <strong>agents queue</strong> instead of running it locally.</li>
+          <li>An <strong>agent worker</strong> (concurrency 3) picks up the job. It loads the agent's runtime config from Redis and reads the agent's <code>AGENT.md</code> from disk to build the system prompt, selects the agent's model, and starts an isolated LLM loop.</li>
+          <li>The agent calls its permitted tools as many times as needed, up to <code>maxIterations</code>.</li>
+          <li>When the agent produces a final answer, the worker resolves the BullMQ job with the result text.</li>
+          <li>The <strong>orchestrator</strong> receives the result as the return value of the <code>delegate_agent</code> tool call and incorporates it into the final response sent to the user.</li>
+        </ol>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Shared memory
+          </div>
+          <p>Agents share the same memory system as the main orchestrator. They can call <code>memory_store</code> to store findings and <code>memory_search</code> to retrieve past context — the same SQLite + sqlite-vec store used everywhere. Facts an agent discovers are immediately available to the orchestrator and to future agents.</p>
+        </div>
+
+        <h3>Example: research delegation</h3>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// What the orchestrator sends to the agents queue</span>
+{
+  <span class="prop">"agentName"</span>: <span class="str">"researcher"</span>,
+  <span class="prop">"task"</span>: <span class="str">"Find the current price of Brent crude and summarise the three most recent analyst forecasts."</span>,
+  <span class="prop">"channelId"</span>: <span class="str">"telegram:123456789"</span>
+}
+
+<span class="cmt">// What the agent returns after running web_search + fetch_url in a loop</span>
+{
+  <span class="prop">"result"</span>: <span class="str">"Brent crude is trading at $82.40/bbl as of 2026-02-24. Goldman Sachs forecasts $85 by Q3 citing supply tightening; JPMorgan holds $78 on demand softness; BofA sees $80 as the 12-month base case."</span>,
+  <span class="prop">"iterations"</span>: <span class="num">4</span>,
+  <span class="prop">"durationMs"</span>: <span class="num">9420</span>
+}</pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Write tight task strings
+          </div>
+          <p>The <code>task</code> string you pass to <code>delegate_agent</code> is the only instruction the agent receives beyond its own system prompt. Make it specific: include scope, desired format, and any constraints. Vague tasks produce vague results, and the orchestrator cannot course-correct mid-run.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="skills.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Skills</span>
+          </a>
+          <a href="tools.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Tools</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

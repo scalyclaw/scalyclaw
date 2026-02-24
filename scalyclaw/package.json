@@ -1,0 +1,17 @@
+{
+  "name": "@scalyclaw/scalyclaw",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*",
+    "./core/*.js": "./src/core/*.ts",
+    "./queue/*.js": "./src/queue/*.ts",
+    "./skills/*.js": "./src/skills/*.ts",
+    "./tools/*.js": "./src/tools/*.ts"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.2.1"
+  }
+}

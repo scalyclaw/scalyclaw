@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Skills — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Skills</h1>
+        <p>Skills are self-contained code packages that extend ScalyClaw's capabilities. Think of them as plugins the AI can invoke — each skill encapsulates a discrete capability, receives parameters via stdin JSON, and runs in an isolated worker sandbox. The AI calls skills through the <code>execute_skill</code> tool, waits for the result, and incorporates it into its response. You can write skills in JavaScript, Python, Rust, or Bash; package them in a folder; and drop them into your installation without touching any ScalyClaw source code.</p>
+
+        <h2 id="basics">Skill Basics</h2>
+
+        <p>Every skill is a folder containing exactly two required components: a <strong>SKILL.md manifest</strong> that describes the skill to the AI, and an <strong>entry point file</strong> that contains the executable code. The manifest is the contract — it defines the skill's name, description, parameters, and language. The AI reads the manifest to understand what the skill does and how to call it; the worker reads it to know how to execute the entry point.</p>
+
+        <h3>SKILL.md Manifest Format</h3>
+
+        <p>The manifest is a markdown file with a structured YAML front-matter block followed by a freeform description section. The front-matter is machine-readable; the description section gives the AI richer context about when and how to use the skill.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">---</span>
+<span class="prop">name:</span> weather-lookup
+<span class="prop">description:</span> Fetches current weather conditions and forecast for a location.
+<span class="prop">script:</span> index.js
+<span class="prop">language:</span> javascript
+<span class="prop">install:</span> bun install
+<span class="cmt">---</span>
+
+<span class="cmt">## When to use</span>
+Use this skill whenever the user asks about current weather, temperature,
+rain, wind, or a forecast for a specific location. Do not use it for
+historical weather data — it only covers the current 7-day window.
+
+<span class="cmt">## Input</span>
+Receives a JSON object via stdin with fields: `location` (string, required —
+city name or "lat,lon" coordinates) and `units` (string, optional — "metric"
+or "imperial", defaults to "metric").
+
+<span class="cmt">## Output</span>
+Returns a JSON object with `current` (temperature, condition, wind) and
+`forecast` (array of daily summaries for the next 7 days).</pre>
+        </div>
+
+        <h3>Manifest Fields</h3>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>name</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Yes</td>
+              <td>Unique identifier for the skill. Use kebab-case. The AI references this name when calling <code>execute_skill</code>. Must be unique across all installed skills.</td>
+            </tr>
+            <tr>
+              <td><code>description</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Yes</td>
+              <td>One-sentence description of what the skill does. This is injected into the system prompt so the AI knows the skill exists and what it is for. Keep it tight — one clear sentence is better than a paragraph.</td>
+            </tr>
+            <tr>
+              <td><code>script</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Yes</td>
+              <td>Path to the entry point file, relative to the skill folder. Conventionally <code>index.js</code>, <code>main.py</code>, <code>main.rs</code>, or <code>run.sh</code>.</td>
+            </tr>
+            <tr>
+              <td><code>language</code></td>
+              <td><span class="badge badge-blue">string</span></td>
+              <td>Yes</td>
+              <td>Runtime to use. One of <code>javascript</code>, <code>python</code>, <code>rust</code>, or <code>bash</code>.</td>
+            </tr>
+            <tr>
+              <td><code>install</code></td>
+              <td><span class="badge badge-amber">string</span></td>
+              <td>No</td>
+              <td>Install command to run before the first execution. Auto-detected from <code>package.json</code> (<code>bun install</code>), <code>pyproject.toml</code> (<code>uv sync</code>), <code>requirements.txt</code> (<code>uv pip install -r requirements.txt</code>), or <code>Cargo.toml</code> (<code>cargo build --release</code>). Use <code>install: none</code> to skip.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Supported Languages</h3>
+
+        <table>
+          <thead>
+            <tr><th>Language</th><th><code>language</code> value</th><th>Runtime</th><th>Dependency file</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>JavaScript</td>
+              <td><code>javascript</code></td>
+              <td><span class="badge badge-green">bun run</span></td>
+              <td><code>package.json</code> → <code>bun install</code></td>
+            </tr>
+            <tr>
+              <td>Python</td>
+              <td><code>python</code></td>
+              <td><span class="badge badge-blue">uv run</span></td>
+              <td><code>pyproject.toml</code> → <code>uv sync</code> / <code>requirements.txt</code> → <code>uv pip install -r requirements.txt</code></td>
+            </tr>
+            <tr>
+              <td>Rust</td>
+              <td><code>rust</code></td>
+              <td><span class="badge badge-purple">Cargo</span> (compiled before first run)</td>
+              <td><code>Cargo.toml</code> → <code>cargo build --release</code></td>
+            </tr>
+            <tr>
+              <td>Bash</td>
+              <td><code>bash</code></td>
+              <td><span class="badge badge-amber">bash</span></td>
+              <td>— (none)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Parameters are passed via stdin JSON
+          </div>
+          <p>When ScalyClaw invokes your skill, it writes the full parameter object as a single JSON object to the process's stdin. Read and parse stdin at the start of your script to access all parameters. Secrets are injected separately as environment variables with the prefix <code>SKILL_SECRET_</code> (e.g. a secret named <code>api_key</code> becomes <code>SKILL_SECRET_API_KEY</code>). The workspace path is available as <code>WORKSPACE_DIR</code>.</p>
+        </div>
+
+        <h2 id="creating">Creating a Skill</h2>
+
+        <p>Creating a skill is straightforward: make a folder, write a <code>SKILL.md</code>, write your entry point, and drop the folder into <code>~/.scalyclaw/skills/</code>. ScalyClaw detects the new folder via the hot-reload mechanism and makes the skill available immediately.</p>
+
+        <h3>JavaScript Skill — Weather Lookup</h3>
+
+        <p>This skill fetches current weather data from a public API and returns a structured JSON result. It demonstrates reading parameters from stdin JSON, secret injection via environment variables, and structured stdout output.</p>
+
+        <p>Folder structure:</p>
+
+        <div class="dir-tree"><span class="dir">skills/</span>
+└── <span class="dir">weather-lookup/</span>
+    ├── <span class="file">SKILL.md</span>     <span class="cmt"># manifest</span>
+    ├── <span class="file">index.js</span>     <span class="cmt"># entry point</span>
+    └── <span class="file">package.json</span> <span class="cmt"># optional — auto-installed on first run</span></div>
+
+        <p><strong>SKILL.md</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">---</span>
+<span class="prop">name:</span> weather-lookup
+<span class="prop">description:</span> Fetches current weather conditions and a 7-day forecast for any location.
+<span class="prop">script:</span> index.js
+<span class="prop">language:</span> javascript
+<span class="prop">install:</span> bun install
+<span class="cmt">---</span>
+
+<span class="cmt">## When to use</span>
+Use for any question about current or upcoming weather at a specific place.
+Not suitable for historical weather data.
+
+<span class="cmt">## Input</span>
+Receives a JSON object via stdin:
+- `location` (string, required): City name (e.g. "London") or "lat,lon" coordinates.
+- `units` (string, optional): "metric" (Celsius/km·h) or "imperial" (Fahrenheit/mph). Defaults to "metric".
+- Requires vault secret `openweather_api_key` (injected as <span class="prop">SKILL_SECRET_OPENWEATHER_API_KEY</span>).</pre>
+        </div>
+
+        <p><strong>index.js</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">javascript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Parameters delivered as JSON via stdin</span>
+<span class="kw">const</span> params   = <span class="typ">JSON</span>.<span class="fn">parse</span>(<span class="kw">await</span> <span class="kw">new</span> <span class="typ">Response</span>(process.stdin).<span class="fn">text</span>());
+<span class="kw">const</span> location = params.<span class="prop">location</span>;
+<span class="kw">const</span> units    = params.<span class="prop">units</span> ?? <span class="str">"metric"</span>;
+
+<span class="cmt">// Secrets injected from vault as SKILL_SECRET_{NAME_UPPER}</span>
+<span class="kw">const</span> apiKey = process.env.<span class="prop">SKILL_SECRET_OPENWEATHER_API_KEY</span>;
+
+<span class="kw">if</span> (!location) {
+  console.<span class="fn">error</span>(<span class="str">"Missing required parameter: location"</span>);
+  process.<span class="fn">exit</span>(<span class="num">1</span>);
+}
+
+<span class="kw">async function</span> <span class="fn">run</span>() {
+  <span class="cmt">// Geocode if location is not already coordinates</span>
+  <span class="kw">const</span> coords = <span class="kw">await</span> <span class="fn">resolveCoords</span>(location, apiKey);
+
+  <span class="kw">const</span> url = <span class="str">`https://api.openweathermap.org/data/3.0/onecall?`</span>
+    + <span class="str">`lat=<span class="op">${</span>coords.lat<span class="op">}</span>&lon=<span class="op">${</span>coords.lon<span class="op">}</span>`</span>
+    + <span class="str">`&units=<span class="op">${</span>units<span class="op">}</span>&exclude=minutely,hourly,alerts`</span>
+    + <span class="str">`&appid=<span class="op">${</span>apiKey<span class="op">}</span>`</span>;
+
+  <span class="kw">const</span> res  = <span class="kw">await</span> <span class="fn">fetch</span>(url);
+  <span class="kw">if</span> (!res.<span class="prop">ok</span>) <span class="kw">throw new</span> <span class="typ">Error</span>(<span class="str">`API error: <span class="op">${</span>res.status<span class="op">}</span>`</span>);
+  <span class="kw">const</span> data = <span class="kw">await</span> res.<span class="fn">json</span>();
+
+  <span class="kw">const</span> result = {
+    <span class="prop">location</span>: coords.<span class="prop">name</span>,
+    <span class="prop">current</span>: {
+      <span class="prop">temp</span>:      data.<span class="prop">current</span>.<span class="prop">temp</span>,
+      <span class="prop">feels_like</span>: data.<span class="prop">current</span>.<span class="prop">feels_like</span>,
+      <span class="prop">humidity</span>:  data.<span class="prop">current</span>.<span class="prop">humidity</span>,
+      <span class="prop">wind_speed</span>: data.<span class="prop">current</span>.<span class="prop">wind_speed</span>,
+      <span class="prop">condition</span>: data.<span class="prop">current</span>.<span class="prop">weather</span>[<span class="num">0</span>].<span class="prop">description</span>,
+    },
+    <span class="prop">forecast</span>: data.<span class="prop">daily</span>.<span class="fn">slice</span>(<span class="num">0</span>, <span class="num">7</span>).<span class="fn">map</span>(d => ({
+      <span class="prop">date</span>:      <span class="kw">new</span> <span class="typ">Date</span>(d.<span class="prop">dt</span> * <span class="num">1000</span>).<span class="fn">toISOString</span>().<span class="fn">slice</span>(<span class="num">0</span>, <span class="num">10</span>),
+      <span class="prop">high</span>:      d.<span class="prop">temp</span>.<span class="prop">max</span>,
+      <span class="prop">low</span>:       d.<span class="prop">temp</span>.<span class="prop">min</span>,
+      <span class="prop">condition</span>: d.<span class="prop">weather</span>[<span class="num">0</span>].<span class="prop">description</span>,
+      <span class="prop">rain_mm</span>:   d.<span class="prop">rain</span> ?? <span class="num">0</span>,
+    })),
+  };
+
+  <span class="cmt">// Write JSON to stdout — ScalyClaw captures this as the skill result</span>
+  console.<span class="fn">log</span>(<span class="typ">JSON</span>.<span class="fn">stringify</span>(result, <span class="kw">null</span>, <span class="num">2</span>));
+}
+
+<span class="kw">async function</span> <span class="fn">resolveCoords</span>(loc, key) {
+  <span class="kw">if</span> (<span class="op">/</span>^-?\d+\.?\d*,-?\d+\.?\d*$<span class="op">/</span>.<span class="fn">test</span>(loc)) {
+    <span class="kw">const</span> [lat, lon] = loc.<span class="fn">split</span>(<span class="str">","</span>).<span class="fn">map</span>(Number);
+    <span class="kw">return</span> { lat, lon, <span class="prop">name</span>: loc };
+  }
+  <span class="kw">const</span> geoUrl = <span class="str">`https://api.openweathermap.org/geo/1.0/direct?q=<span class="op">${</span><span class="fn">encodeURIComponent</span>(loc)<span class="op">}</span>&limit=1&appid=<span class="op">${</span>key<span class="op">}</span>`</span>;
+  <span class="kw">const</span> geo = <span class="kw">await</span> (<span class="kw">await</span> <span class="fn">fetch</span>(geoUrl)).<span class="fn">json</span>();
+  <span class="kw">if</span> (!geo.<span class="prop">length</span>) <span class="kw">throw new</span> <span class="typ">Error</span>(<span class="str">`Location not found: <span class="op">${</span>loc<span class="op">}</span>`</span>);
+  <span class="kw">return</span> { <span class="prop">lat</span>: geo[<span class="num">0</span>].<span class="prop">lat</span>, <span class="prop">lon</span>: geo[<span class="num">0</span>].<span class="prop">lon</span>, <span class="prop">name</span>: geo[<span class="num">0</span>].<span class="prop">name</span> };
+}
+
+<span class="fn">run</span>().<span class="fn">catch</span>(err => {
+  console.<span class="fn">error</span>(err.<span class="prop">message</span>);
+  process.<span class="fn">exit</span>(<span class="num">1</span>);
+});</pre>
+        </div>
+
+        <p><strong>package.json</strong> (optional — auto-installed if present)</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>{
+  <span class="prop">"name"</span>: <span class="str">"weather-lookup"</span>,
+  <span class="prop">"type"</span>: <span class="str">"module"</span>
+}</pre>
+        </div>
+
+        <p>This skill uses only Bun's built-in <code>fetch</code>, so no third-party packages are needed. If your skill does need npm packages, list them in <code>package.json</code> and ScalyClaw will run <code>bun install</code> automatically before the first execution.</p>
+
+        <h3>Python Skill — Text Analysis</h3>
+
+        <p>This skill analyses a block of text and returns readability metrics, word frequency, and a sentiment estimate. It demonstrates reading parameters from stdin JSON and using a <code>requirements.txt</code> for dependencies.</p>
+
+        <p>Folder structure:</p>
+
+        <div class="dir-tree"><span class="dir">skills/</span>
+└── <span class="dir">text-analysis/</span>
+    ├── <span class="file">SKILL.md</span>          <span class="cmt"># manifest</span>
+    ├── <span class="file">main.py</span>           <span class="cmt"># entry point</span>
+    └── <span class="file">requirements.txt</span>  <span class="cmt"># auto-installed via uv</span></div>
+
+        <p><strong>SKILL.md</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">---</span>
+<span class="prop">name:</span> text-analysis
+<span class="prop">description:</span> Analyses text and returns readability scores, word frequency, and sentiment.
+<span class="prop">script:</span> main.py
+<span class="prop">language:</span> python
+<span class="prop">install:</span> uv pip install -r requirements.txt
+<span class="cmt">---</span>
+
+<span class="cmt">## When to use</span>
+Use when the user wants to understand the structure, reading level, or
+sentiment of a document, email, article, or any chunk of text.
+
+<span class="cmt">## Input</span>
+Receives a JSON object via stdin:
+- `text` (string, required): The text to analyse. UTF-8, up to ~50,000 characters.
+- `top_words` (number, optional): How many top words to include. Defaults to 10.
+
+<span class="cmt">## Output</span>
+JSON with `readability` (Flesch–Kincaid grade and ease scores),
+`sentiment` (positive/negative/neutral + score), and `top_words` (list
+of word + count pairs).</pre>
+        </div>
+
+        <p><strong>main.py</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">python</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="kw">import</span> sys
+<span class="kw">import</span> json
+<span class="kw">import</span> os
+<span class="kw">from</span> collections <span class="kw">import</span> Counter
+<span class="kw">import</span> re
+
+<span class="kw">import</span> textstat
+<span class="kw">from</span> vaderSentiment.vaderSentiment <span class="kw">import</span> SentimentIntensityAnalyzer
+
+<span class="cmt"># ScalyClaw writes the full parameter object to stdin as JSON</span>
+params = json.<span class="fn">load</span>(sys.stdin)
+text      = params.<span class="fn">get</span>(<span class="str">"text"</span>)
+top_words = <span class="fn">int</span>(params.<span class="fn">get</span>(<span class="str">"top_words"</span>, <span class="num">10</span>))
+
+<span class="kw">if not</span> text:
+    <span class="fn">print</span>(json.<span class="fn">dumps</span>({<span class="str">"error"</span>: <span class="str">"Missing required parameter: text"</span>}))
+    sys.<span class="fn">exit</span>(<span class="num">1</span>)
+
+<span class="cmt"># Readability</span>
+fk_grade = textstat.<span class="fn">flesch_kincaid_grade</span>(text)
+fk_ease  = textstat.<span class="fn">flesch_reading_ease</span>(text)
+
+<span class="cmt"># Sentiment (VADER works well on short to medium texts)</span>
+analyzer = <span class="fn">SentimentIntensityAnalyzer</span>()
+scores   = analyzer.<span class="fn">polarity_scores</span>(text)
+compound = scores[<span class="str">"compound"</span>]
+sentiment = (
+    <span class="str">"positive"</span> <span class="kw">if</span> compound >= <span class="num">0.05</span> <span class="kw">else</span>
+    <span class="str">"negative"</span> <span class="kw">if</span> compound <= -<span class="num">0.05</span> <span class="kw">else</span>
+    <span class="str">"neutral"</span>
+)
+
+<span class="cmt"># Word frequency (lowercased, stripped of punctuation)</span>
+words    = re.<span class="fn">findall</span>(<span class="str">r"\b[a-zA-Z]{3,}\b"</span>, text.<span class="fn">lower</span>())
+stopwords = {<span class="str">"the"</span>, <span class="str">"and"</span>, <span class="str">"for"</span>, <span class="str">"that"</span>, <span class="str">"this"</span>, <span class="str">"with"</span>, <span class="str">"are"</span>, <span class="str">"was"</span>}
+words    = [w <span class="kw">for</span> w <span class="kw">in</span> words <span class="kw">if</span> w <span class="kw">not in</span> stopwords]
+counter  = Counter(words)
+
+result = {
+    <span class="str">"readability"</span>: {
+        <span class="str">"flesch_kincaid_grade"</span>: fk_grade,
+        <span class="str">"flesch_reading_ease"</span>:  fk_ease,
+        <span class="str">"grade_label"</span>: <span class="str">f"Grade {round(fk_grade)}"</span>,
+    },
+    <span class="str">"sentiment"</span>: {
+        <span class="str">"label"</span>:   sentiment,
+        <span class="str">"score"</span>:   compound,
+        <span class="str">"detail"</span>:  scores,
+    },
+    <span class="str">"top_words"</span>: [
+        {<span class="str">"word"</span>: w, <span class="str">"count"</span>: c}
+        <span class="kw">for</span> w, c <span class="kw">in</span> counter.<span class="fn">most_common</span>(top_words)
+    ],
+    <span class="str">"word_count"</span>: <span class="fn">len</span>(words),
+}
+
+<span class="cmt"># Write JSON to stdout — ScalyClaw captures this as the skill result</span>
+<span class="fn">print</span>(json.<span class="fn">dumps</span>(result, indent=<span class="num">2</span>))</pre>
+        </div>
+
+        <p><strong>requirements.txt</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre>textstat==0.7.3
+vaderSentiment==3.3.2</pre>
+        </div>
+
+        <h3>Bash Skill — System Info</h3>
+
+        <p>Bash skills are ideal for lightweight shell operations that need no dependencies. Parameters arrive as a JSON object on stdin; parse them with a tool like <code>jq</code>. Stdout is the result.</p>
+
+        <p><strong>SKILL.md</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">---</span>
+<span class="prop">name:</span> system-info
+<span class="prop">description:</span> Reports CPU load, memory usage, and disk space on the host machine.
+<span class="prop">script:</span> run.sh
+<span class="prop">language:</span> bash
+<span class="cmt">---</span>
+
+<span class="cmt">## Input</span>
+Receives a JSON object via stdin:
+- `disk_path` (string, optional): Filesystem path to check disk usage for. Defaults to "/".</pre>
+        </div>
+
+        <p><strong>run.sh</strong></p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">#!/usr/bin/env bash</span>
+<span class="kw">set</span> -euo pipefail
+
+<span class="cmt"># Parameters arrive as JSON on stdin — parse with jq</span>
+INPUT=$(cat)
+DISK_PATH=$(echo "$INPUT" | jq -r '.disk_path // "/"')
+
+<span class="cmt"># CPU load averages (1m, 5m, 15m)</span>
+LOAD=$(uptime | awk -F'load average:' '{print $2}' | xargs)
+
+<span class="cmt"># Memory (Linux-compatible)</span>
+MEM_TOTAL=$(awk '/MemTotal/ {print $2}' /proc/meminfo 2>/dev/null || sysctl -n hw.memsize)
+MEM_FREE=$(awk '/MemAvailable/ {print $2}' /proc/meminfo 2>/dev/null || vm_stat | awk '/Pages free/ {print $3}')
+
+<span class="cmt"># Disk usage for requested path</span>
+DISK=$(df -h "$DISK_PATH" | awk 'NR==2 {printf "%s used of %s (%s)", $3, $2, $5}')
+
+<span class="cmt"># Emit JSON to stdout</span>
+printf <span class="str">'{"load_average": "%s", "disk": "%s"}\n'</span> "$LOAD" "$DISK"</pre>
+        </div>
+
+        <h2 id="deployment">Deployment</h2>
+
+        <p>There are three ways to deploy a skill. All three result in the skill being immediately available after reload — you do not need to restart any process.</p>
+
+        <h3>Method 1: Drop a Folder</h3>
+
+        <p>The simplest method. Place the skill folder directly inside <code>~/.scalyclaw/skills/</code>. ScalyClaw watches this directory and picks up new folders automatically via the hot-reload mechanism.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Copy a skill folder into the skills directory</span>
+cp -r ~/my-skills/weather-lookup ~/.scalyclaw/skills/
+
+<span class="cmt"># ScalyClaw detects the new folder and publishes the reload signal automatically.</span>
+<span class="cmt"># You can also trigger reload manually:</span>
+redis-cli PUBLISH scalyclaw:skills:reload <span class="str">""</span></pre>
+        </div>
+
+        <h3>Method 2: Upload a Zip via Dashboard</h3>
+
+        <p>In the dashboard, navigate to <strong>Skills</strong> and click <strong>Upload Skill</strong>. Select a <code>.zip</code> file containing your skill folder. ScalyClaw extracts it into <code>~/.scalyclaw/skills/</code>, validates the manifest, installs dependencies, and triggers a hot-reload — all in one step. This is the recommended method for remote deployments where you do not have shell access to the host.</p>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Zip structure
+          </div>
+          <p>The zip file must contain the skill folder as its top-level directory — not a flat listing of files. Correct: <code>weather-lookup/SKILL.md</code>. Incorrect: <code>SKILL.md</code> at the zip root. Most operating systems produce the correct structure when you right-click a folder and choose "Compress".</p>
+        </div>
+
+        <h3>Method 3: AI Self-Creation via execute_code</h3>
+
+        <p>ScalyClaw can write and deploy skills entirely on its own. When asked to do something it cannot currently do, it uses the <code>execute_code</code> tool to write the skill files, saves them into <code>~/.scalyclaw/skills/</code>, and triggers the reload signal — making the skill available without any human involvement. See the <a href="#advanced">Advanced</a> section for details on how this works.</p>
+
+        <h3>Hot Reload</h3>
+
+        <p>When a skill is added, modified, or removed, ScalyClaw does not need to restart. The process subscribes to the <code>scalyclaw:skills:reload</code> Redis pub/sub channel at startup. Any process that writes a new or updated skill publishes a message to this channel, and all running instances reload their in-memory skill manifests immediately.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">typescript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// How ScalyClaw reloads skills on pub/sub signal (simplified)</span>
+subscriber.<span class="fn">on</span>(<span class="str">"message"</span>, <span class="kw">async</span> (channel) <span class="op">=&gt;</span> {
+  <span class="kw">if</span> (channel === <span class="str">"scalyclaw:skills:reload"</span>) {
+    <span class="cmt">// Re-read all SKILL.md files from disk</span>
+    <span class="kw">const</span> skills = <span class="kw">await</span> <span class="fn">loadAllSkillManifests</span>(<span class="str">"~/.scalyclaw/skills"</span>);
+
+    <span class="cmt">// Update the in-memory registry used by the skill section of the system prompt</span>
+    skillRegistry.<span class="fn">set</span>(skills);
+
+    <span class="cmt">// Next LLM call will include the updated skill list in the system prompt</span>
+    console.<span class="fn">log</span>(<span class="str">`[skills] Reloaded <span class="op">${</span>skills.length<span class="op">}</span> skills`</span>);
+  }
+});</pre>
+        </div>
+
+        <h3>Automatic Dependency Installation</h3>
+
+        <p>If a dependency file is found alongside the skill's entry point, ScalyClaw installs dependencies automatically before executing the skill for the first time. This happens in the worker sandbox and does not require any manual steps.</p>
+
+        <table>
+          <thead>
+            <tr><th>Language</th><th>Dependency file</th><th>Install command</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>JavaScript</td>
+              <td><code>package.json</code></td>
+              <td><code>bun install</code></td>
+            </tr>
+            <tr>
+              <td>Python</td>
+              <td><code>pyproject.toml</code></td>
+              <td><code>uv sync</code></td>
+            </tr>
+            <tr>
+              <td>Python</td>
+              <td><code>requirements.txt</code></td>
+              <td><code>uv pip install -r requirements.txt</code></td>
+            </tr>
+            <tr>
+              <td>Rust</td>
+              <td><code>Cargo.toml</code></td>
+              <td><code>cargo build --release</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Dependencies are installed into the skill folder itself, not globally, so skills are fully isolated from each other and from the host system. Subsequent runs skip the install step unless the dependency file changes.</p>
+
+        <h2 id="advanced">Advanced</h2>
+
+        <h3>Input / Output Convention</h3>
+
+        <p>All skills share the same I/O contract regardless of language. The AI assembles the parameters it wants to pass and ScalyClaw serialises them to JSON, which is written to the skill process's stdin. The skill reads and parses stdin at startup, does its work, and writes a single JSON object to stdout as its result. Anything written to stderr is captured as diagnostic output and is not returned to the AI as a result.</p>
+
+        <table>
+          <thead>
+            <tr><th>Channel</th><th>Direction</th><th>Content</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>stdin</strong></td>
+              <td>ScalyClaw → skill</td>
+              <td>JSON object containing all parameters passed by the AI</td>
+            </tr>
+            <tr>
+              <td><strong>stdout</strong></td>
+              <td>skill → ScalyClaw</td>
+              <td>JSON object (the skill result returned to the AI)</td>
+            </tr>
+            <tr>
+              <td><strong>stderr</strong></td>
+              <td>skill → ScalyClaw</td>
+              <td>Diagnostic / error text; logged but not returned to the AI</td>
+            </tr>
+            <tr>
+              <td><strong>env vars</strong></td>
+              <td>ScalyClaw → skill</td>
+              <td><code>SKILL_SECRET_*</code> (vault secrets) and <code>WORKSPACE_DIR</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>Example: reading stdin in each supported language.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">javascript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// JavaScript — read stdin, parse JSON, write result to stdout</span>
+<span class="kw">const</span> params = <span class="typ">JSON</span>.<span class="fn">parse</span>(<span class="kw">await</span> <span class="kw">new</span> <span class="typ">Response</span>(process.stdin).<span class="fn">text</span>());
+<span class="kw">const</span> { query, max_results = <span class="num">5</span> } = params;
+<span class="cmt">// ... do work ...</span>
+console.<span class="fn">log</span>(<span class="typ">JSON</span>.<span class="fn">stringify</span>({ results }));</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">python</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="kw">import</span> sys, json
+params = json.<span class="fn">load</span>(sys.stdin)
+query = params[<span class="str">"query"</span>]
+max_results = params.<span class="fn">get</span>(<span class="str">"max_results"</span>, <span class="num">5</span>)
+<span class="cmt"># ... do work ...</span>
+<span class="fn">print</span>(json.<span class="fn">dumps</span>({<span class="str">"results"</span>: results}))</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Bash — read stdin, parse with jq</span>
+INPUT=$(cat)
+QUERY=$(echo "$INPUT" | jq -r '.query')
+MAX_RESULTS=$(echo "$INPUT" | jq -r '.max_results // 5')
+<span class="cmt"># ... do work ...</span>
+printf <span class="str">'{"results": []}\n'</span></pre>
+        </div>
+
+        <h3>Long-Running Skills with Progress Output</h3>
+
+        <p>Skills that take more than a few seconds can emit incremental progress updates by writing lines prefixed with <code>PROGRESS:</code> to stdout before the final JSON result. ScalyClaw forwards these lines to the AI as intermediate tool output, which can relay progress status to the user while the skill continues running.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">javascript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="kw">async function</span> <span class="fn">run</span>() {
+  <span class="cmt">// Emit progress lines — ScalyClaw forwards these to the AI in real time</span>
+  console.<span class="fn">log</span>(<span class="str">"PROGRESS: Fetching data from source..."</span>);
+  <span class="kw">const</span> rawData = <span class="kw">await</span> <span class="fn">fetchData</span>();
+
+  console.<span class="fn">log</span>(<span class="str">"PROGRESS: Processing 1,200 records..."</span>);
+  <span class="kw">const</span> processed = <span class="kw">await</span> <span class="fn">processRecords</span>(rawData);
+
+  console.<span class="fn">log</span>(<span class="str">"PROGRESS: Generating report..."</span>);
+  <span class="kw">const</span> report = <span class="fn">buildReport</span>(processed);
+
+  <span class="cmt">// Final result — the last JSON object on stdout is the skill's return value</span>
+  console.<span class="fn">log</span>(<span class="typ">JSON</span>.<span class="fn">stringify</span>(report));
+}</pre>
+        </div>
+
+        <h3>Self-Created Skills</h3>
+
+        <p>One of ScalyClaw's most powerful features is that the AI can write and deploy skills on its own. When asked to perform a task that requires a persistent, reusable capability, the AI uses the <code>execute_code</code> tool to write the skill files directly into <code>~/.scalyclaw/skills/</code> and then publishes the reload signal to make them available immediately.</p>
+
+        <p>For example, if you ask ScalyClaw to "always check my stock portfolio when I ask about markets", it might:</p>
+
+        <ol>
+          <li>Write a <code>SKILL.md</code> manifest describing a <code>portfolio-check</code> skill.</li>
+          <li>Write an <code>index.js</code> that calls your brokerage API using a secret it asks you to store in the vault.</li>
+          <li>Save both files to <code>~/.scalyclaw/skills/portfolio-check/</code>.</li>
+          <li>Publish to <code>scalyclaw:skills:reload</code> so the skill is immediately available.</li>
+          <li>Invoke the new skill via <code>execute_skill</code> to answer your current question in the same conversation turn.</li>
+        </ol>
+
+        <p>This means skills can grow organically from conversations without you ever opening a code editor. The AI writes the code, tests it by invoking it, and fixes any errors — all within the same message thread.</p>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            AI-written skills are validated before execution
+          </div>
+          <p>All skill code — whether written by you or by the AI — passes through the Skill Guard before it is executed. The guard is a separate LLM call that inspects the code for dangerous operations: unrestricted filesystem access, network calls to unexpected hosts, attempts to read secrets outside the declared <code>secrets</code> list, or shell injection patterns. If the guard rejects the code, the skill is not executed and you are informed of the reason.</p>
+        </div>
+
+        <h3>Security Model</h3>
+
+        <p>Skills run in an isolated sandbox inside the Worker process. The sandbox applies the following constraints by default:</p>
+
+        <ul>
+          <li><strong>Filesystem</strong> — read/write access is limited to the skill's own folder and a temporary scratch directory (<code>/tmp/scalyclaw-skill-{id}</code>). Attempts to access files outside these paths are blocked at the OS level.</li>
+          <li><strong>Network</strong> — outbound HTTP/HTTPS is allowed. Raw TCP and UDP outside of standard ports require explicit declaration in the manifest (<code>allowedPorts</code>). There is no inbound network access.</li>
+          <li><strong>Secrets</strong> — vault secrets are injected as <code>SKILL_SECRET_*</code> environment variables and are the only way for a skill to receive sensitive credentials. The skill cannot access other vault secrets, the Redis instance, or any ScalyClaw internal state.</li>
+          <li><strong>Timeout</strong> — enforced at the process level. A skill that hangs is killed after the configured timeout. The AI receives a timeout error and can retry or report the failure to the user.</li>
+          <li><strong>Resource limits</strong> — CPU and memory limits are applied per-skill via system controls to prevent a runaway skill from starving the worker of resources.</li>
+        </ul>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Using vault secrets in skills
+          </div>
+          <p>Store API keys and tokens in the vault — never hardcode them in skill files. ScalyClaw reads secrets from <code>scalyclaw:secret:{name}</code> in Redis and injects them as environment variables before execution. The secret named <code>my_api_key</code> becomes <code>SKILL_SECRET_MY_API_KEY</code> in the skill's environment. This way secrets are resolved at runtime, never written to disk, and the SKILL.md itself contains no sensitive values.</p>
+        </div>
+
+        <p>Here is an example of a manifest that correctly declares its secret dependencies:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">yaml</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">---</span>
+<span class="prop">name:</span> github-pr-summary
+<span class="prop">description:</span> Fetches and summarises open pull requests from a GitHub repository.
+<span class="prop">script:</span> index.js
+<span class="prop">language:</span> javascript
+<span class="prop">install:</span> bun install
+<span class="cmt">---</span>
+
+<span class="cmt">## Input</span>
+Receives a JSON object via stdin:
+- `repo` (string, required): GitHub repository in "owner/repo" format.
+- `state` (string, optional): Filter PRs by state — "open", "closed", or "all". Defaults to "open".
+- Requires vault secret `github_token` (injected as <span class="prop">SKILL_SECRET_GITHUB_TOKEN</span>).</pre>
+        </div>
+
+        <p>And the corresponding entry point reading the injected secret:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">javascript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// Parameters delivered as JSON via stdin</span>
+<span class="kw">const</span> params = <span class="typ">JSON</span>.<span class="fn">parse</span>(<span class="kw">await</span> <span class="kw">new</span> <span class="typ">Response</span>(process.stdin).<span class="fn">text</span>());
+<span class="kw">const</span> repo  = params.<span class="prop">repo</span>;
+<span class="kw">const</span> state = params.<span class="prop">state</span> ?? <span class="str">"open"</span>;
+
+<span class="cmt">// Secret injected from vault — never hardcoded</span>
+<span class="kw">const</span> token = process.env.<span class="prop">SKILL_SECRET_GITHUB_TOKEN</span>;
+
+<span class="kw">const</span> res = <span class="kw">await</span> <span class="fn">fetch</span>(
+  <span class="str">`https://api.github.com/repos/<span class="op">${</span>repo<span class="op">}</span>/pulls?state=<span class="op">${</span>state<span class="op">}</span>&per_page=20`</span>,
+  { <span class="prop">headers</span>: { <span class="prop">Authorization</span>: <span class="str">`Bearer <span class="op">${</span>token<span class="op">}</span>`</span>, <span class="prop">Accept</span>: <span class="str">"application/vnd.github+json"</span> } }
+);
+
+<span class="kw">if</span> (!res.<span class="prop">ok</span>) {
+  console.<span class="fn">error</span>(<span class="str">`GitHub API error: <span class="op">${</span>res.status<span class="op">}</span> <span class="op">${</span>res.statusText<span class="op">}</span>`</span>);
+  process.<span class="fn">exit</span>(<span class="num">1</span>);
+}
+
+<span class="kw">const</span> prs = <span class="kw">await</span> res.<span class="fn">json</span>();
+<span class="kw">const</span> summary = prs.<span class="fn">map</span>(pr => ({
+  <span class="prop">number</span>: pr.<span class="prop">number</span>,
+  <span class="prop">title</span>:  pr.<span class="prop">title</span>,
+  <span class="prop">author</span>: pr.<span class="prop">user</span>.<span class="prop">login</span>,
+  <span class="prop">created</span>: pr.<span class="prop">created_at</span>.<span class="fn">slice</span>(<span class="num">0</span>, <span class="num">10</span>),
+  <span class="prop">url</span>:    pr.<span class="prop">html_url</span>,
+}));
+
+console.<span class="fn">log</span>(<span class="typ">JSON</span>.<span class="fn">stringify</span>({ <span class="prop">count</span>: summary.<span class="prop">length</span>, <span class="prop">pull_requests</span>: summary }, <span class="kw">null</span>, <span class="num">2</span>));</pre>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="memory.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Memory</span>
+          </a>
+          <a href="agents.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Agents</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

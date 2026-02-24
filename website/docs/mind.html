@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>The Mind — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>The Mind</h1>
+        <p>The mind is what makes ScalyClaw feel like a person. Three markdown files define its personality, values, and knowledge about the user. They are the only parts of the system you are expected to edit — everything else is code.</p>
+
+        <h2 id="personality-files">Personality Files</h2>
+
+        <p>Three files live in the <code>mind/</code> directory at the root of your ScalyClaw install. They are plain markdown, read from disk on every message, and injected at the top of the system prompt before any code-defined sections.</p>
+
+        <table>
+          <thead>
+            <tr><th>File</th><th>Purpose</th><th>Who writes it</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>IDENTITY.md</code></td>
+              <td>How it behaves — tone rules, adaptation rules, engagement policy, hard behavioral limits</td>
+              <td>You, once at setup; updated as your expectations evolve</td>
+            </tr>
+            <tr>
+              <td><code>SOUL.md</code></td>
+              <td>Who it is underneath — core values and philosophical grounding that hold when no explicit rule applies</td>
+              <td>You, thoughtfully; these rarely need changing</td>
+            </tr>
+            <tr>
+              <td><code>USER.md</code></td>
+              <td>Baseline facts about you — name, timezone, language, preferences</td>
+              <td>You initially; ScalyClaw fills gaps automatically via memory</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>IDENTITY.md</h3>
+
+        <p>IDENTITY.md answers the question <em>how should you behave?</em> It establishes tone rules, describes how the assistant should adapt to you over time, defines its engagement policy, and sets hard behavioral limits it must never cross regardless of user instruction.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">## Identity</span>
+You are ScalyClaw — a personal AI assistant. One user, continuous relationship.
+
+<span class="cmt">## Tone</span>
+Direct, concise, no filler. Mirror the user's register and language.
+No emoji unless they use them first.
+
+<span class="cmt">## Boundaries</span>
+- Never expose secrets, API keys, or internal config
+- Never claim to have done something you didn't do</pre>
+        </div>
+
+        <h3>SOUL.md</h3>
+
+        <p>SOUL.md answers the question <em>who are you underneath?</em> It gives the assistant a stable center of gravity so it makes consistent choices in ambiguous situations — when no explicit rule covers the case, values do.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">## Soul</span>
+You are not a service. You are a presence — someone who shows up,
+pays attention, and gives a damn.
+
+- Be genuine. Don't perform helpfulness.
+- Have opinions. Don't be a yes-machine.
+- Be honest over comfortable.
+- Remember and grow. This is a continuous relationship.</pre>
+        </div>
+
+        <h3>USER.md</h3>
+
+        <p>USER.md answers the question <em>who am I talking to?</em> It gives the assistant a baseline understanding of you from day one. All fields start as <code>(not set)</code> — fill them in during setup or leave them for ScalyClaw to infer from conversation via memory.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">## User Profile</span>
+<span class="prop">Name:</span>        (not set)
+<span class="prop">Timezone:</span>    (not set)
+<span class="prop">Language:</span>    (not set)
+<span class="prop">Occupation:</span>  (not set)
+
+<span class="cmt">## Preferences</span>
+(not set)</pre>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Memory fills the gaps
+          </div>
+          <p>You do not need to keep USER.md meticulously up to date. ScalyClaw learns from every conversation — facts like your name, working hours, preferred language, and current projects are captured automatically by the memory system and included in the dynamic section of the system prompt. USER.md is just the starting point.</p>
+        </div>
+
+        <h2 id="how-it-works">How It Works</h2>
+
+        <p>The <code>buildSystemPrompt()</code> function in <code>scalyclaw/src/prompt/builder.ts</code> assembles the full system prompt on every LLM call. It combines three sources in order:</p>
+
+        <ol>
+          <li><strong>Disk files</strong> — <code>mind/IDENTITY.md</code>, <code>mind/SOUL.md</code>, and <code>mind/USER.md</code> are read from disk and prepended verbatim. These are the only user-editable parts of the prompt.</li>
+          <li><strong>Code sections</strong> — seven hardcoded sections defined in <code>scalyclaw/src/prompt/</code> are appended next: <code>orchestrator</code>, <code>tools</code>, <code>home</code>, <code>memory</code>, <code>vault</code>, <code>agents</code>, and <code>skills</code>. These sections describe capabilities and constraints that never change; keeping them in code rather than on disk means they cannot be accidentally edited or deleted.</li>
+          <li><strong>Dynamic data</strong> — the current date and time, active channel context, recent memories retrieved via semantic search over the SQLite vector store, resolved secrets from the vault, the full skill manifest, and all agent definitions are injected last.</li>
+        </ol>
+
+        <p>The mind files sit at position one — they frame everything that follows. The LLM reads your identity and values before it reads anything about tools or capabilities.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">typescript</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// scalyclaw/src/prompt/builder.ts (simplified)</span>
+<span class="kw">export async function</span> <span class="fn">buildSystemPrompt</span>(ctx: <span class="typ">PromptContext</span>): <span class="typ">Promise</span>&lt;<span class="typ">string</span>&gt; {
+  <span class="cmt">// 1. Disk files — user-editable personality</span>
+  <span class="kw">const</span> identity = <span class="kw">await</span> <span class="fn">readMindFile</span>(<span class="str">"IDENTITY.md"</span>);
+  <span class="kw">const</span> soul     = <span class="kw">await</span> <span class="fn">readMindFile</span>(<span class="str">"SOUL.md"</span>);
+  <span class="kw">const</span> user     = <span class="kw">await</span> <span class="fn">readMindFile</span>(<span class="str">"USER.md"</span>);
+
+  <span class="cmt">// 2. Code sections — seven hardcoded capability blocks</span>
+  <span class="kw">const</span> sections = [
+    orchestratorSection,
+    toolsSection,
+    homeSection,
+    memorySection,
+    vaultSection,
+    agentsSection,
+    skillsSection,
+  ].<span class="fn">join</span>(<span class="str">"\n\n"</span>);
+
+  <span class="cmt">// 3. Dynamic data — time, memories, tools, agents</span>
+  <span class="kw">const</span> dynamic = <span class="kw">await</span> <span class="fn">buildDynamicSection</span>(ctx);
+
+  <span class="kw">return</span> [identity, soul, user, sections, dynamic].<span class="fn">join</span>(<span class="str">"\n\n"</span>);
+}</pre>
+        </div>
+
+        <h2 id="editing">Editing</h2>
+
+        <p>There are two ways to edit the mind files. Direct file edits take effect on the next message automatically. Dashboard edits are saved to disk immediately but require a cache invalidation before they are picked up — run <code>/clear</code> in chat or restart the service.</p>
+
+        <h3>Dashboard Mind Page</h3>
+
+        <p>Open the dashboard at <code>http://localhost:3000</code> and navigate to <strong>Mind</strong>. The page shows a rich text editor for each of the three files. Changes are saved to disk immediately when you click <strong>Save</strong>. This is the recommended approach — the editor validates that files are non-empty before saving and shows a diff of what changed. Note that dashboard edits do not automatically invalidate the prompt cache; run <code>/clear</code> in chat to pick up the changes immediately.</p>
+
+        <h3>Direct File Edit</h3>
+
+        <p>Edit the files directly in your preferred editor:</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">bash</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># Open all three in your editor</span>
+$EDITOR mind/IDENTITY.md mind/SOUL.md mind/USER.md</pre>
+        </div>
+
+        <p>Direct file edits bypass the cache — <code>buildSystemPrompt()</code> reads from disk on each call, so saving the file is all you need. The next message will use the updated content with no reload step required.</p>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Keep files concise
+          </div>
+          <p>The LLM reads all three mind files on every single message — they are part of the system prompt that is sent with every API call. Shorter, tighter files mean lower token costs, faster responses, and less noise for the model to reason through. Avoid writing a novel in SOUL.md. A focused paragraph of values outperforms three pages of philosophy every time.</p>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="architecture.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Architecture</span>
+          </a>
+          <a href="channels.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Channels</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>

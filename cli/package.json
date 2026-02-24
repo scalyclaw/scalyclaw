@@ -1,0 +1,13 @@
+{
+  "name": "@scalyclaw/cli",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "scalyclaw": "src/cli.ts"
+  },
+  "dependencies": {
+    "@scalyclaw/scalyclaw": "workspace:*",
+    "@scalyclaw/worker": "workspace:*"
+  }
+}

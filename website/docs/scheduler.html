@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scheduler — ScalyClaw Docs</title>
+  <link rel="icon" type="image/svg+xml" href="../assets/logo.svg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="docs-layout">
+    <main class="docs-main">
+      <div class="docs-content">
+
+        <h1>Scheduler</h1>
+        <p>Schedule reminders, recurring tasks, and timed operations. The user just asks and ScalyClaw handles the rest — parsing the intent, creating the schedule, and delivering the message back to the same channel at exactly the right time.</p>
+
+        <h2 id="reminders">Reminders &amp; Tasks</h2>
+
+        <p>ScalyClaw supports three schedule types, covering everything from a single one-off reminder to a complex recurring cron expression. There are four scheduling tools (<code>schedule_reminder</code>, <code>schedule_recurrent_reminder</code>, <code>schedule_task</code>, <code>schedule_recurrent_task</code>), two cancel tools (<code>cancel_reminder</code>, <code>cancel_task</code>), and two list tools (<code>list_reminders</code>, <code>list_tasks</code>). All scheduling jobs go to the <code>scalyclaw-scheduler</code> BullMQ queue.</p>
+
+        <table>
+          <thead>
+            <tr><th>Type</th><th>Description</th><th>Example schedule value</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>One-shot</strong></td>
+              <td>Fires exactly once at a specific point in time. The job is removed from the queue after it fires. Use for reminders tied to a particular date or time.</td>
+              <td><code>"2026-03-01T17:00:00"</code> (ISO 8601 timestamp)</td>
+            </tr>
+            <tr>
+              <td><strong>Recurring interval</strong></td>
+              <td>Repeats at a fixed elapsed interval — every N minutes, hours, or days. Useful for regular health-check pings or short-cycle tasks where clock alignment does not matter.</td>
+              <td><code>"PT30M"</code> (ISO 8601 duration — every 30 minutes)</td>
+            </tr>
+            <tr>
+              <td><strong>Cron</strong></td>
+              <td>Fires on a standard five-field cron schedule. Gives full control over minute, hour, day-of-month, month, and day-of-week. The most expressive option for business-hour or calendar-aligned tasks.</td>
+              <td><code>"0 9 * * 1"</code> (every Monday at 9 am)</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>All schedules are <strong>timezone-aware</strong>. When creating a reminder, the <code>timezone</code> parameter accepts any IANA timezone string (e.g. <code>"America/New_York"</code>, <code>"Europe/Paris"</code>). If omitted, the instance timezone configured in the dashboard is used as the default. Cron expressions and ISO timestamps are always interpreted in the specified timezone — no UTC conversion surprises.</p>
+
+        <h3>Example Conversations</h3>
+
+        <p>You never need to provide a raw cron expression or an ISO timestamp. Just describe what you want in natural language and ScalyClaw picks the right schedule type and calls the appropriate scheduling tool on your behalf.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">One-shot — fires once at a specific time</span>
+
+<span class="fn">You:</span>     <span class="str">Remind me to call Mom at 5pm today.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Done! I'll remind you to call Mom at 5:00 pm.</span>
+
+<span class="cmt">→ schedule_reminder called with schedule: "2026-02-24T17:00:00", timezone: "America/New_York"</span></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">Cron — fires on a calendar-aligned schedule</span>
+
+<span class="fn">You:</span>     <span class="str">Every Monday at 9am, give me a news summary.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Got it — I'll send you a news summary every Monday morning at 9:00 am.</span>
+
+<span class="cmt">→ schedule_recurrent_reminder called with schedule: "0 9 * * 1"</span></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">Recurring interval — fires every N minutes</span>
+
+<span class="fn">You:</span>     <span class="str">Check my server health every 30 minutes.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">I'll check your server health every 30 minutes starting now.</span>
+
+<span class="cmt">→ schedule_recurrent_reminder called with schedule: "PT30M"</span></pre>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Reminders are delivered to the same channel
+          </div>
+          <p>When a scheduled reminder fires, the message is delivered back to whichever channel it was created in — Telegram, Discord, or any other connected channel. There is no separate notification mechanism. The reminder appears as a normal message from ScalyClaw in the same conversation.</p>
+        </div>
+
+        <h2 id="cron">Cron Patterns</h2>
+
+        <p>ScalyClaw uses standard five-field cron syntax: <code>minute hour day-of-month month day-of-week</code>. All five fields are required. Use <code>*</code> as a wildcard for "every value", <code>*/N</code> for "every N units", and comma-separated values for lists.</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Range</th><th>Special characters</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Minute</td>
+              <td>0–59</td>
+              <td><code>*</code> <code>*/N</code> <code>,</code> <code>-</code></td>
+            </tr>
+            <tr>
+              <td>Hour</td>
+              <td>0–23</td>
+              <td><code>*</code> <code>*/N</code> <code>,</code> <code>-</code></td>
+            </tr>
+            <tr>
+              <td>Day of month</td>
+              <td>1–31</td>
+              <td><code>*</code> <code>*/N</code> <code>,</code> <code>-</code></td>
+            </tr>
+            <tr>
+              <td>Month</td>
+              <td>1–12</td>
+              <td><code>*</code> <code>*/N</code> <code>,</code> <code>-</code></td>
+            </tr>
+            <tr>
+              <td>Day of week</td>
+              <td>0–7 (0 and 7 = Sunday)</td>
+              <td><code>*</code> <code>*/N</code> <code>,</code> <code>-</code></td>
+            </tr>
+          </tbody>
+        </table>
+
+        <h3>Common Patterns</h3>
+
+        <table>
+          <thead>
+            <tr><th>Pattern</th><th>Fires</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>0 9 * * 1</code></td>
+              <td>Every Monday at 9:00 am</td>
+            </tr>
+            <tr>
+              <td><code>*/30 * * * *</code></td>
+              <td>Every 30 minutes</td>
+            </tr>
+            <tr>
+              <td><code>0 0 1 * *</code></td>
+              <td>First day of every month at midnight</td>
+            </tr>
+            <tr>
+              <td><code>0 8,17 * * *</code></td>
+              <td>Every day at 8:00 am and 5:00 pm</td>
+            </tr>
+            <tr>
+              <td><code>0 9 * * 1-5</code></td>
+              <td>Weekdays (Mon–Fri) at 9:00 am</td>
+            </tr>
+            <tr>
+              <td><code>0 12 * * 0</code></td>
+              <td>Every Sunday at noon</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="callout callout-info">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+            Cron vs. interval
+          </div>
+          <p>Use cron expressions when the schedule needs to align with the clock — "every weekday at 9am" or "on the first of the month". Use an ISO 8601 interval (e.g. <code>PT30M</code>) when you want a fixed elapsed gap between firings regardless of what time it is. For a recurring check every 30 minutes, interval is the right choice; for a daily standup reminder, cron is.</p>
+        </div>
+
+        <h2 id="management">Managing Schedules</h2>
+
+        <p>The <strong>Scheduler</strong> page in the dashboard gives you a full view of every active schedule across all channels. Each entry shows the job ID, the message content, the schedule type and expression, the channel it was created in, and the next scheduled fire time.</p>
+
+        <p>From the dashboard you can:</p>
+
+        <ul>
+          <li><strong>Enable or disable</strong> a schedule without deleting it — useful for temporarily pausing a recurring task.</li>
+          <li><strong>Edit</strong> the message content or schedule expression in place.</li>
+          <li><strong>Delete</strong> a schedule permanently, removing its BullMQ job from the queue immediately.</li>
+        </ul>
+
+        <h3>Cancelling via Conversation</h3>
+
+        <p>You can also ask ScalyClaw to cancel a schedule directly in any conversation. It will search for the matching job and call the <code>cancel_reminder</code> or <code>cancel_task</code> tool — no dashboard visit required.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">text</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>     <span class="str">Cancel my Monday morning reminder.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Done — your Monday 9am news summary reminder has been cancelled.</span>
+
+<span class="cmt">→ cancel_reminder called with the job ID of the matching schedule</span></pre>
+        </div>
+
+        <h3>Tool Call Reference</h3>
+
+        <p>All scheduling tools are available to the LLM at all times. Here is what the underlying tool calls look like when ScalyClaw creates and cancels schedules on your behalf.</p>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// schedule_reminder — one-shot at a specific timestamp</span>
+{
+  <span class="prop">"type"</span>: <span class="str">"tool_use"</span>,
+  <span class="prop">"id"</span>: <span class="str">"toolu_08Lm5Q"</span>,
+  <span class="prop">"name"</span>: <span class="str">"schedule_reminder"</span>,
+  <span class="prop">"input"</span>: {
+    <span class="prop">"message"</span>: <span class="str">"Call Mom!"</span>,
+    <span class="prop">"schedule"</span>: <span class="str">"2026-02-24T17:00:00"</span>,
+    <span class="prop">"timezone"</span>: <span class="str">"America/New_York"</span>
+  }
+}</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// schedule_recurrent_reminder — cron schedule, timezone-aware</span>
+{
+  <span class="prop">"type"</span>: <span class="str">"tool_use"</span>,
+  <span class="prop">"id"</span>: <span class="str">"toolu_07Hk3P"</span>,
+  <span class="prop">"name"</span>: <span class="str">"schedule_recurrent_reminder"</span>,
+  <span class="prop">"input"</span>: {
+    <span class="prop">"message"</span>: <span class="str">"Time for your weekly news summary!"</span>,
+    <span class="prop">"schedule"</span>: <span class="str">"0 9 * * 1"</span>,
+    <span class="prop">"timezone"</span>: <span class="str">"America/New_York"</span>
+  }
+}</pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">json</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">// cancel_reminder — cancel by job ID</span>
+{
+  <span class="prop">"type"</span>: <span class="str">"tool_use"</span>,
+  <span class="prop">"id"</span>: <span class="str">"toolu_09Nv2R"</span>,
+  <span class="prop">"name"</span>: <span class="str">"cancel_reminder"</span>,
+  <span class="prop">"input"</span>: {
+    <span class="prop">"id"</span>: <span class="str">"sched_01j9xk4p8m2f"</span>
+  }
+}</pre>
+        </div>
+
+        <nav class="docs-page-nav">
+          <a href="workers.html" class="docs-page-nav-link">
+            <span class="docs-page-nav-dir">Previous</span>
+            <span class="docs-page-nav-title">Workers</span>
+          </a>
+          <a href="engagement.html" class="docs-page-nav-link next">
+            <span class="docs-page-nav-dir">Next</span>
+            <span class="docs-page-nav-title">Engagement</span>
+          </a>
+        </nav>
+      </div>
+    </main>
+  </div>
+  <footer class="docs-footer"><p>&copy; 2026 ScalyClaw</p></footer>
+  <script src="docs.js"></script>
+</body>
+</html>
