@@ -150,6 +150,10 @@
       border-bottom: 1px solid var(--border);
       padding: 12px 0;
     }
+    .nav.menu-open {
+      background: rgba(5, 5, 5, 0.95);
+      backdrop-filter: blur(20px);
+    }
     .nav-inner {
       display: flex;
       align-items: center;
@@ -213,9 +217,50 @@
     }
 
     @media (max-width: 768px) {
-      .nav-links { display: none; }
-      .nav-cta-wrapper { display: none; }
+      .nav-inner { flex-wrap: wrap; }
+      .nav-links {
+        display: none;
+        flex-direction: column;
+        width: 100%;
+        gap: 0;
+        padding: 16px 0 8px;
+        order: 3;
+      }
+      .nav-links li { width: 100%; }
+      .nav-links a {
+        display: block;
+        padding: 12px 0;
+        font-size: 1rem;
+        color: var(--text);
+        border-bottom: 1px solid var(--border);
+      }
+      .nav-links li:last-child a { border-bottom: none; }
+      .nav-cta-wrapper {
+        display: none !important;
+        width: 100%;
+        order: 4;
+        padding: 8px 0 4px;
+      }
+      .nav-cta-wrapper .nav-cta {
+        width: 100%;
+        justify-content: center;
+      }
       .nav-mobile-toggle { display: flex; }
+
+      /* Open state */
+      .nav.menu-open .nav-links { display: flex; }
+      .nav.menu-open .nav-cta-wrapper { display: flex !important; }
+
+      /* Hamburger → X animation */
+      .nav.menu-open .nav-mobile-toggle span:nth-child(1) {
+        transform: translateY(7px) rotate(45deg);
+      }
+      .nav.menu-open .nav-mobile-toggle span:nth-child(2) {
+        opacity: 0;
+      }
+      .nav.menu-open .nav-mobile-toggle span:nth-child(3) {
+        transform: translateY(-7px) rotate(-45deg);
+      }
     }
 
     /* ─── Hero ──────────────────────────────────────── */
@@ -1283,9 +1328,9 @@
               <div class="install-about-sub">One Mind. All Channels. Continuous Relationship.</div>
             </div>
             <div class="install-about-right">
-              <div class="install-about-tag"><span class="install-about-dot"></span> Open Source</div>
-              <div class="install-about-tag"><span class="install-about-dot"></span> Self-Hosted</div>
-              <div class="install-about-tag"><span class="install-about-dot"></span> Security First</div>
+              <div class="install-about-tag"><span class="install-about-dot"></span> open-source</div>
+              <div class="install-about-tag"><span class="install-about-dot"></span> self-Hosted</div>
+              <div class="install-about-tag"><span class="install-about-dot"></span> security-first</div>
             </div>
           </div>
           <div class="install-cmd" id="installCmd" style="display:none">
@@ -1922,6 +1967,18 @@ You remember everything about your user.
     const nav = document.getElementById('nav');
     window.addEventListener('scroll', () => {
       nav.classList.toggle('scrolled', window.scrollY > 50);
+    });
+
+    // Mobile menu toggle
+    const mobileToggle = document.getElementById('mobileToggle');
+    mobileToggle.addEventListener('click', () => {
+      nav.classList.toggle('menu-open');
+    });
+    // Close mobile menu when a nav link is tapped
+    document.querySelectorAll('.nav-links a').forEach(link => {
+      link.addEventListener('click', () => {
+        nav.classList.remove('menu-open');
+      });
     });
 
     // Scroll reveal animations
