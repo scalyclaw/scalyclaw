@@ -5,7 +5,7 @@ set -euo pipefail
 # ScalyClaw — One-command installer / manager
 #
 # Usage:
-#   curl -fsSL https://scalyclaw.netlify.app/install.sh | sh
+#   curl -fsSL https://scalyclaw.netlify.app/install.sh | bash
 #   ~/.scalyclaw/scalyclaw.sh --stop                               # stop all
 #   ~/.scalyclaw/scalyclaw.sh --start                              # start all
 #   ~/.scalyclaw/scalyclaw.sh --status                             # show status
@@ -166,14 +166,24 @@ install_redis() {
   build_dir=$(mktemp -d)
   trap "rm -rf '$build_dir'" RETURN
 
-  # Check for make and cc
+  # Check for make and cc — auto-install on Debian/Ubuntu if missing
   if ! command_exists make; then
-    error "make is required to build Redis."
-    echo "  Install build tools:"
-    printf "    ${BOLD}macOS:${NC}  xcode-select --install\n"
-    printf "    ${BOLD}Ubuntu:${NC} sudo apt install build-essential\n"
-    printf "    ${BOLD}Arch:${NC}   sudo pacman -S base-devel\n"
-    exit 1
+    if [ -f /etc/debian_version ]; then
+      info "make not found — installing build-essential (requires sudo)..."
+      sudo apt-get update -qq && sudo apt-get install -y -qq build-essential curl
+      if ! command_exists make; then
+        error "Failed to install build-essential."
+        exit 1
+      fi
+      success "build-essential installed"
+    else
+      error "make is required to build Redis."
+      echo "  Install build tools:"
+      printf "    ${BOLD}macOS:${NC}  xcode-select --install\n"
+      printf "    ${BOLD}Ubuntu:${NC} sudo apt install build-essential\n"
+      printf "    ${BOLD}Arch:${NC}   sudo pacman -S base-devel\n"
+      exit 1
+    fi
   fi
 
   cd "$build_dir"
@@ -367,10 +377,31 @@ do_start() {
 
 # ─── Uninstall ───────────────────────────────────────────────────────────────
 
+# Cross-platform helper: get PIDs listening on a port
+# Tries lsof (macOS/some Linux), then ss (most Linux), then fuser (fallback)
+pids_on_port() {
+  local port="$1"
+  if command_exists lsof; then
+    lsof -ti :"$port" 2>/dev/null || true
+  elif command_exists ss; then
+    ss -tlnp "sport = :$port" 2>/dev/null | sed -n 's/.*pid=\([0-9]*\).*/\1/p' || true
+  elif command_exists fuser; then
+    fuser "$port/tcp" 2>/dev/null | tr -s ' ' '\n' || true
+  fi
+}
+
+# Cross-platform helper: check if a port is in use
+port_in_use() {
+  local port="$1"
+  local pids
+  pids=$(pids_on_port "$port")
+  [ -n "$pids" ]
+}
+
 force_kill_port() {
   local port="$1"
   local pids
-  pids=$(lsof -ti :"$port" 2>/dev/null || true)
+  pids=$(pids_on_port "$port")
   if [ -n "$pids" ]; then
     for pid in $pids; do
       info "Killing process $pid on port $port..."
@@ -462,7 +493,7 @@ do_uninstall() {
   # ── Verify all ports are free ────────────────────────────────────
   local all_clear=true
   for port in "$DASHBOARD_PORT" "$GATEWAY_PORT" "$REDIS_PORT"; do
-    if lsof -ti :"$port" &>/dev/null; then
+    if port_in_use "$port"; then
       warn "Port $port is still in use"
       all_clear=false
     fi
@@ -536,6 +567,12 @@ do_install() {
 LOGO
   printf "${NC}\n"
   printf "  ${DIM}The AI That Scales With You.${NC}\n\n"
+
+  # ── WSL detection ──────────────────────────────────────────────────
+  if [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
+    info "WSL detected — make sure build-essential is installed:"
+    printf "    ${BOLD}sudo apt-get update && sudo apt-get install -y build-essential curl${NC}\n\n"
+  fi
 
   # ── Detect existing installation ─────────────────────────────────
   if [ -f "$SCALYCLAW_CONFIG" ] || [ -d "$SCALYCLAW_REPO/.git" ]; then
@@ -616,7 +653,7 @@ LOGO
     success "uv is installed ($(uv --version 2>/dev/null | head -1 || echo '?'))"
   else
     info "Installing uv (Python package manager)..."
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+    curl -LsSf https://astral.sh/uv/install.sh | bash
     export PATH="$HOME/.local/bin:$PATH"
     if command_exists uv; then
       success "uv installed ($(uv --version | head -1))"

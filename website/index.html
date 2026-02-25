@@ -440,7 +440,7 @@
       margin-bottom: 0;
     }
     .install-tab {
-      padding: 10px 24px;
+      padding: 10px 18px;
       font-size: 0.8125rem;
       font-weight: 600;
       color: var(--text-dim);
@@ -507,10 +507,14 @@
     @media (max-width: 900px) {
       .install-cmd { font-size: 0.8125rem; }
     }
-    @media (max-width: 500px) {
-      .install-tab { padding: 8px 14px; font-size: 0.75rem; }
+    @media (max-width: 600px) {
+      .install-tab { padding: 8px 12px; font-size: 0.75rem; }
       .install-cmd-box { padding: 14px 16px; }
       .install-cmd { font-size: 0.75rem; }
+    }
+    @media (max-width: 420px) {
+      .install-tab { padding: 6px 8px; font-size: 0.6875rem; }
+      .install-tab svg { display: none; }
     }
 
     /* ─── Section Header ────────────────────────────── */
@@ -1268,7 +1272,9 @@
       <div class="install-block animate-on-scroll">
         <div class="install-tabs">
           <button class="install-tab active" data-platform="about" onclick="switchInstall('about')"><span class="install-tab-brand"><img src="assets/logo.svg" alt="" /> ScalyClaw</span></button>
-          <button class="install-tab" data-platform="install" onclick="switchInstall('install')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install</button>
+          <button class="install-tab" data-platform="macos" onclick="switchInstall('macos')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> macOS</button>
+          <button class="install-tab" data-platform="linux" onclick="switchInstall('linux')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Linux</button>
+          <button class="install-tab" data-platform="windows" onclick="switchInstall('windows')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Windows (WSL)</button>
         </div>
         <div class="install-cmd-box">
           <div class="install-about" id="installAbout">
@@ -1283,7 +1289,7 @@
             </div>
           </div>
           <div class="install-cmd" id="installCmd" style="display:none">
-            <span class="prompt">$</span> curl -fsSL https://scalyclaw.netlify.app/install.sh | sh
+            <span class="prompt">$</span> curl -fsSL https://scalyclaw.netlify.app/install.sh | bash
           </div>
           <button class="install-copy-btn" id="installCopy" onclick="copyInstall()" title="Copy to clipboard" style="display:none">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -1876,7 +1882,9 @@ You remember everything about your user.
   <script>
     // Install tab switching & copy
     const installCmds = {
-      install: 'curl -fsSL https://scalyclaw.netlify.app/install.sh | sh',
+      macos:   'curl -fsSL https://scalyclaw.netlify.app/install.sh | bash',
+      linux:   'curl -fsSL https://scalyclaw.netlify.app/install.sh | bash',
+      windows: 'wsl -e bash -c "curl -fsSL https://scalyclaw.netlify.app/install.sh | bash"',
     };
 
     function switchInstall(platform) {
