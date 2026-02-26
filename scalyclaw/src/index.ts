@@ -420,9 +420,9 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
   // ─── /update — check for updates and apply ───
   if (trimmed === '/update') {
     const repoDir = join(PATHS.base, 'repo');
-    const scriptPath = join(PATHS.base, 'scalyclaw.sh');
+    const scriptPath = join(repoDir, 'website', 'install.sh');
 
-    if (!existsSync(scriptPath) || !existsSync(join(repoDir, '.git'))) {
+    if (!existsSync(join(repoDir, '.git')) || !existsSync(scriptPath)) {
       await sendToChannel(channelId, 'Update not available — ScalyClaw was not installed via the standard installer.');
       return;
     }

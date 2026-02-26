@@ -1097,22 +1097,8 @@ WEOF
 copy_self() {
   local dest="$SCALYCLAW_HOME/scalyclaw.sh"
   mkdir -p "$SCALYCLAW_HOME"
-
-  # If running from a file (./install.sh), copy it
-  if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
-    local self="${BASH_SOURCE[0]}"
-    if [ "$(realpath "$self" 2>/dev/null || echo "$self")" != "$(realpath "$dest" 2>/dev/null || echo "$dest")" ]; then
-      cp "$self" "$dest"
-      chmod +x "$dest"
-      return 0
-    fi
-  fi
-
-  # If running from pipe (curl | sh), copy from the cloned repo
-  if [ -f "$SCALYCLAW_REPO/install.sh" ]; then
-    cp "$SCALYCLAW_REPO/install.sh" "$dest"
-    chmod +x "$dest"
-  fi
+  cp "$SCALYCLAW_REPO/website/install.sh" "$dest"
+  chmod +x "$dest"
 }
 
 case "${1:-}" in
