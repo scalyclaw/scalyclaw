@@ -26,30 +26,59 @@ const DEP_FILES: Record<string, string[]> = {
 /** In-flight install dedup: keyed by skillDir */
 const inFlight = new Map<string, Promise<void>>();
 
+/** Auto-detect install commands keyed by language. */
+const AUTO_DETECT: Record<string, { file: string; cmd: string }[]> = {
+  python: [
+    { file: 'pyproject.toml', cmd: 'uv sync' },
+    { file: 'requirements.txt', cmd: 'uv venv && uv pip install -r requirements.txt' },
+  ],
+  javascript: [
+    { file: 'package.json', cmd: 'bun install' },
+  ],
+  rust: [
+    { file: 'Cargo.toml', cmd: 'cargo build --release' },
+  ],
+};
+
 /**
  * Determine the install command for a skill.
  * Returns null if no install is needed.
  */
 async function resolveInstallCommand(skill: SkillDefinition, skillDir: string): Promise<string | null> {
-  // Explicit `install: none` → skip
-  if (skill.install?.toLowerCase() === 'none') return null;
-
-  // Explicit install command → use it
-  if (skill.install) return skill.install;
-
-  // Auto-detect by language
-  const lang = skill.scriptLanguage;
-  if (!lang) return null;
-
-  if (lang === 'javascript') {
-    if (await fileExists(join(skillDir, 'package.json'))) return 'bun install';
-  } else if (lang === 'python') {
-    if (await fileExists(join(skillDir, 'pyproject.toml'))) return 'uv sync';
-    if (await fileExists(join(skillDir, 'requirements.txt'))) return 'uv venv && uv pip install -r requirements.txt';
-  } else if (lang === 'rust') {
-    if (await fileExists(join(skillDir, 'Cargo.toml'))) return 'cargo build --release';
+  // Explicit `install: none` → skip (case-insensitive, trimmed)
+  if (skill.install?.trim().toLowerCase() === 'none') {
+    log('debug', 'skill-setup: install=none, skipping', { skillId: skill.id });
+    return null;
   }
 
+  // Explicit install command → use it directly
+  if (skill.install) {
+    log('debug', 'skill-setup: using explicit install command', { skillId: skill.id, command: skill.install });
+    return skill.install;
+  }
+
+  // No explicit install — auto-detect ONLY for the skill's declared language
+  const lang = skill.scriptLanguage;
+  if (!lang) {
+    log('debug', 'skill-setup: no language set, skipping install', { skillId: skill.id });
+    return null;
+  }
+
+  const detectors = AUTO_DETECT[lang];
+  if (!detectors) {
+    // Language has no auto-detect rules (e.g. bash) → no install needed
+    log('debug', 'skill-setup: no auto-detect for language, skipping install', { skillId: skill.id, language: lang });
+    return null;
+  }
+
+  for (const { file, cmd } of detectors) {
+    if (await fileExists(join(skillDir, file))) {
+      log('debug', 'skill-setup: auto-detected install', { skillId: skill.id, file, command: cmd });
+      return cmd;
+    }
+  }
+
+  log('debug', 'skill-setup: no dependency files found, skipping install', { skillId: skill.id, language: lang });
   return null;
 }
 

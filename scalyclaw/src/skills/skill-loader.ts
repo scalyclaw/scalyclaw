@@ -41,27 +41,33 @@ async function loadSkillFromDir(dirPath: string, skillId: string): Promise<void>
     const readmePath = join(dirPath, 'SKILL.md');
     const markdown = await readFile(readmePath, 'utf-8');
 
-    // Parse YAML frontmatter
+    // Parse YAML frontmatter (handles \r\n and \n)
     let name = skillId;
     let description = '';
     let script: string | null = null;
     let language: string | null = null;
     let install: string | null = null;
 
-    const frontmatterMatch = markdown.match(/^---\n([\s\S]*?)\n---/);
+    // Normalize line endings before parsing
+    const normalized = markdown.replace(/\r\n/g, '\n');
+    const frontmatterMatch = normalized.match(/^---\n([\s\S]*?)\n---/);
     if (frontmatterMatch) {
       const fm = frontmatterMatch[1];
-      const nameMatch = fm.match(/name:\s*(.+)/);
-      const descMatch = fm.match(/description:\s*(.+)/);
-      const scriptMatch = fm.match(/script:\s*(.+)/);
-      const langMatch = fm.match(/language:\s*(.+)/);
-      const installMatch = fm.match(/install:\s*(.+)/);
-      if (nameMatch) name = nameMatch[1].trim();
-      if (descMatch) description = descMatch[1].trim();
-      if (scriptMatch) script = scriptMatch[1].trim();
-      if (langMatch) language = langMatch[1].trim();
-      if (installMatch) install = installMatch[1].trim();
+      // Extract value: strip inline YAML comments (# ...) and trim
+      const extractValue = (line: string): string => line.replace(/#.*$/, '').trim();
+      const nameMatch = fm.match(/^name:\s*(.+)/m);
+      const descMatch = fm.match(/^description:\s*(.+)/m);
+      const scriptMatch = fm.match(/^script:\s*(.+)/m);
+      const langMatch = fm.match(/^language:\s*(.+)/m);
+      const installMatch = fm.match(/^install:\s*(.+)/m);
+      if (nameMatch) name = extractValue(nameMatch[1]);
+      if (descMatch) description = extractValue(descMatch[1]);
+      if (scriptMatch) script = extractValue(scriptMatch[1]);
+      if (langMatch) language = extractValue(langMatch[1]);
+      if (installMatch) install = extractValue(installMatch[1]);
     }
+
+    log('debug', `Parsed skill frontmatter: ${skillId}`, { name, script, language, install });
 
     loadedSkills.set(skillId, {
       id: skillId,

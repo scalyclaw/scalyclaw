@@ -44,10 +44,17 @@ async function fetchSkillInternal(
   nodeUrl: string,
   nodeToken: string,
 ): Promise<SkillDefinition | null> {
-  // Check local disk (loaded by skill-loader)
+  // Always try fetching fresh from node first — the node has the authoritative copy.
+  // This ensures edits to SKILL.md on the node (via write_file, dashboard, etc.)
+  // propagate to workers immediately.
+  if (nodeUrl) {
+    const fetched = await fetchSkillFromNode(skillId, nodeUrl, nodeToken);
+    if (fetched) return fetched;
+  }
+
+  // Fallback: check local disk (may have been extracted from a previous fetch)
   let local = getSkill(skillId);
   if (!local) {
-    // Reload from disk in case it was extracted in a previous run
     await loadSkills();
     local = getSkill(skillId);
   }
@@ -56,7 +63,14 @@ async function fetchSkillInternal(
     return local;
   }
 
-  // Fetch zip from node API
+  return null;
+}
+
+async function fetchSkillFromNode(
+  skillId: string,
+  nodeUrl: string,
+  nodeToken: string,
+): Promise<SkillDefinition | null> {
   log('info', `Fetching skill "${skillId}" from node API`, { nodeUrl });
   try {
     const res = await fetch(`${nodeUrl}/api/skills/${skillId}/zip`, {
