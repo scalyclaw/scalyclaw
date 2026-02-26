@@ -118,13 +118,23 @@ Manage your installation:
 ```bash
 ~/.scalyclaw/scalyclaw.sh --stop       # stop all
 ~/.scalyclaw/scalyclaw.sh --start      # start all
+~/.scalyclaw/scalyclaw.sh --update     # pull latest & rebuild
 ~/.scalyclaw/scalyclaw.sh --status     # show status
 ~/.scalyclaw/scalyclaw.sh --uninstall  # remove everything
 ```
 
+Remote access via SSH tunnel (replace `user@<server_ip>`):
+
+```bash
+# Dashboard (port 4173)
+ssh -N -L 4173:127.0.0.1:4173 user@<server_ip>
+```
+
+Then open `http://localhost:4173?token=<token>` for the dashboard.
+
 ### From Source
 
-> **Prerequisites:** [Bun](https://bun.sh) ≥ 1.1 + Redis ≥ 7.0
+> **Prerequisites:** [Bun](https://bun.sh) + Redis ≥ 6.2
 
 ```bash
 # 📦 Clone & build
