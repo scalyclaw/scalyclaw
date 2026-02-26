@@ -561,6 +561,28 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
       required: ['src', 'dest'],
     },
   },
+  {
+    name: 'delete_file',
+    description: 'Delete a file',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'File path to delete' },
+      },
+      required: ['path'],
+    },
+  },
+  {
+    name: 'delete_folder',
+    description: 'Delete a folder recursively',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Folder path to delete' },
+      },
+      required: ['path'],
+    },
+  },
 
   // ─── Context ───
   {
@@ -595,7 +617,7 @@ const AGENT_DIRECT_NAMES = new Set([
   'memory_store', 'memory_search', 'memory_recall', 'memory_update', 'memory_delete',
   'vault_check', 'vault_list',
   'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
-  'diff_files', 'file_info', 'copy_file', 'copy_folder',
+  'diff_files', 'file_info', 'copy_file', 'copy_folder', 'delete_file', 'delete_folder',
 ]);
 
 /** Job tools available to agents (no delegate_agent, no schedule_*) */

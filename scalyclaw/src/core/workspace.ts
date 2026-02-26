@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, stat, cp, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat, cp, readdir, rm, unlink } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { PATHS } from './paths.js';
 import { log } from './logger.js';
@@ -216,4 +216,20 @@ export async function copyWorkspaceFolder(src: string, dest: string): Promise<{ 
 
   log('debug', 'Folder copied', { src, dest, count });
   return { count };
+}
+
+export async function deleteWorkspaceFile(path: string): Promise<void> {
+  const fullPath = resolveFilePath(path);
+  await unlink(fullPath);
+  log('debug', 'File deleted', { path, fullPath });
+}
+
+export async function deleteWorkspaceFolder(path: string): Promise<void> {
+  const fullPath = resolveFilePath(path);
+  const st = await stat(fullPath);
+  if (!st.isDirectory()) {
+    throw new Error(`Not a directory: ${path}`);
+  }
+  await rm(fullPath, { recursive: true, force: true });
+  log('debug', 'Folder deleted', { path, fullPath });
 }

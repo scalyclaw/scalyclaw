@@ -7,7 +7,7 @@ import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } f
 import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask } from '../scheduler/scheduler.js';
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
-import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
+import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, loadSkills } from '../skills/skill-loader.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
@@ -1397,6 +1397,50 @@ async function handleCopyFolder(input: Record<string, unknown>): Promise<string>
   return JSON.stringify({ copied: true, count: result.count });
 }
 
+async function handleDeleteFile(input: Record<string, unknown>): Promise<string> {
+  let path = input.path as string;
+  if (!path) {
+    return JSON.stringify({ error: 'Missing required field: path' });
+  }
+  path = enforcePathSuffix(path);
+  log('debug', 'delete_file', { path });
+  await deleteWorkspaceFile(path);
+
+  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
+    log('info', 'Skills directory changed — reloading skills');
+    await loadSkills();
+    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
+    log('info', 'Agents directory changed — reloading agents');
+    await loadAllAgents();
+    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
+  }
+
+  return JSON.stringify({ deleted: true });
+}
+
+async function handleDeleteFolder(input: Record<string, unknown>): Promise<string> {
+  let path = input.path as string;
+  if (!path) {
+    return JSON.stringify({ error: 'Missing required field: path' });
+  }
+  path = enforcePathSuffix(path);
+  log('debug', 'delete_folder', { path });
+  await deleteWorkspaceFolder(path);
+
+  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
+    log('info', 'Skills directory changed — reloading skills');
+    await loadSkills();
+    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
+    log('info', 'Agents directory changed — reloading agents');
+    await loadAllAgents();
+    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
+  }
+
+  return JSON.stringify({ deleted: true });
+}
+
 // ─── Context ───
 
 async function handleCompactContext(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
@@ -1612,5 +1656,7 @@ registerTool('diff_files', handleDiffFiles);
 registerTool('file_info', handleFileInfo);
 registerTool('copy_file', handleCopyFile);
 registerTool('copy_folder', handleCopyFolder);
+registerTool('delete_file', handleDeleteFile);
+registerTool('delete_folder', handleDeleteFolder);
 // Context
 registerTool('compact_context', handleCompactContext);
