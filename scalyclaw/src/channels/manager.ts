@@ -103,6 +103,33 @@ export async function sendTypingToChannel(channelId: string): Promise<void> {
   }
 }
 
+/** Interval-based typing refresh — re-sends every 4s to keep indicators alive on platforms like Telegram/Discord */
+const TYPING_INTERVAL_MS = 4_000;
+const activeTypingLoops = new Map<string, ReturnType<typeof setInterval>>();
+
+/**
+ * Start a persistent typing indicator loop for a channel.
+ * Sends typing immediately, then every 4s. Idempotent — calling twice on
+ * the same channel just resets the timer.
+ */
+export function startTypingLoop(channelId: string): void {
+  stopTypingLoop(channelId); // clear any existing loop
+  sendTypingToChannel(channelId).catch(() => {});
+  const interval = setInterval(() => {
+    sendTypingToChannel(channelId).catch(() => {});
+  }, TYPING_INTERVAL_MS);
+  activeTypingLoops.set(channelId, interval);
+}
+
+/** Stop the typing indicator loop for a channel. */
+export function stopTypingLoop(channelId: string): void {
+  const interval = activeTypingLoops.get(channelId);
+  if (interval) {
+    clearInterval(interval);
+    activeTypingLoops.delete(channelId);
+  }
+}
+
 /** Send a file to a specific channel */
 export async function sendFileToChannel(channelId: string, filePath: string, caption?: string): Promise<void> {
   const adapter = adapters.get(channelId);

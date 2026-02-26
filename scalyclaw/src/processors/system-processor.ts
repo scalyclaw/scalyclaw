@@ -6,6 +6,7 @@ import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '../queue/queue.js';
 import { withSession, heartbeat } from '../session/session.js';
 import { extractMemories } from '../memory/extractor.js';
+import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
 import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData } from '../queue/jobs.js';
 
 // ─── System queue job dispatcher ───
@@ -56,6 +57,7 @@ async function processScheduledFire(job: Job<ScheduledFireData>): Promise<void> 
     await withSession(
       targetChannel,
       async (sessionId: string) => {
+        startTypingLoop(targetChannel);
         try {
           const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
 
@@ -99,6 +101,8 @@ async function processScheduledFire(job: Job<ScheduledFireData>): Promise<void> 
             type: 'error',
             error: errorMsg,
           });
+        } finally {
+          stopTypingLoop(targetChannel);
         }
       },
       async () => {

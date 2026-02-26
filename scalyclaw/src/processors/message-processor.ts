@@ -9,6 +9,7 @@ import { runMessageGuard } from '../guards/guard.js';
 import type { MessageProcessingData, CommandData, PendingMessage, AttachmentData } from '../queue/jobs.js';
 import { withSession, heartbeat, getSessionState } from '../session/session.js';
 import { recordChannelActivity } from '../scheduler/proactive.js';
+import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
 import { randomUUID } from 'node:crypto';
 
 export const PENDING_KEY_PREFIX = 'scalyclaw:pending:';
@@ -84,7 +85,12 @@ async function processMessageJob(job: Job<MessageProcessingData>): Promise<void>
     async (sessionId: string) => {
       // Record channel activity for proactive engagement
       await recordChannelActivity(channelId).catch(() => {});
-      await processMessageWithSession(channelId, fullText, sessionId, pendingKey, job.id!);
+      startTypingLoop(channelId);
+      try {
+        await processMessageWithSession(channelId, fullText, sessionId, pendingKey, job.id!);
+      } finally {
+        stopTypingLoop(channelId);
+      }
     },
     async () => {
       await redis.rpush(pendingKey, makePendingMessage(fullText, 'message', attachments));
@@ -293,6 +299,9 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
         });
       };
 
+      startTypingLoop(channelId);
+      try {
+
       // Run message guard before storing (same as message-processing)
       const guardResult = await runMessageGuard(text);
       if (!guardResult.passed) {
@@ -411,6 +420,10 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
 
         await heartbeat(channelId, sessionId, 'PROCESSING');
         currentText = allowedMessages.map(m => m.text).join('\n\n');
+      }
+
+      } finally {
+        stopTypingLoop(channelId);
       }
     },
     async () => {
