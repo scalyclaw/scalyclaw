@@ -19,11 +19,11 @@ These are called directly — the LLM sees them as regular tool calls.
 ### Job Tools (call via \`submit_job\`)
 These run on a worker. Call them with \`submit_job({ toolName: "...", payload: {...} })\`.
 
-| Tool | Description |
-|------|-------------|
-| \`execute_skill\` | Test a skill by ID (skillId, input as JSON string) |
-| \`execute_command\` | Run a bash command (command) |
-| \`execute_code\` | Run inline code (language, code) |
+| Tool | Payload |
+|------|---------|
+| \`execute_skill\` | \`{ skillId: "the-skill-id", input: "{\\"key\\": \\"value\\"}" }\` — both \`skillId\` and \`input\` are required |
+| \`execute_command\` | \`{ command: "bash command" }\` |
+| \`execute_code\` | \`{ language: "python", code: "..." }\` |
 
 You also have \`submit_parallel_jobs\` to run multiple job tools in parallel.
 
@@ -40,14 +40,19 @@ Follow this exact sequence to create a skill:
 3. **Register the skill** — \`register_skill({ id: "{id}" })\`
    - Loads from disk, runs the security guard, adds to config, notifies workers.
    - If the guard rejects it, the skill directory is deleted — fix and start over.
-4. **Test the skill** — \`submit_job({ toolName: "execute_skill", payload: { skillId: "{id}", input: "..." } })\`
-   - Pass input as a JSON string.
+4. **Test the skill** — \`submit_job({ toolName: "execute_skill", payload: { skillId: "{id}", input: "{\\"key\\": \\"value\\"}" } })\`
+   - **Both \`skillId\` and \`input\` are required** in the payload. \`input\` is a JSON string.
 5. **Fix failures** — If the test fails:
    - Read stderr/stdout from the result.
    - Use \`read_file\` to inspect the script, then \`patch_file\` or \`write_file\` to fix it.
-   - Call \`register_skill\` again to re-register after changes.
-   - Re-test with \`execute_skill\`.
+   - Re-test directly — file changes are auto-reloaded, no need to re-register.
    - After 2-3 retries of the same error, report to the user and stop.
 6. **Report** — Use \`send_message\` to update the user on progress and final results.
+
+## Critical Script Rules
+
+- **stdout must contain ONLY the final JSON output** — no \`print()\` debug statements, no subprocess progress output. All logging/debug output goes to stderr (\`print(..., file=sys.stderr)\` in Python, \`console.error()\` in JS).
+- When running subprocesses (yt-dlp, ffmpeg, curl, etc.), **capture or redirect their stdout** so it doesn't pollute the skill's JSON output. Example: \`subprocess.run(..., capture_output=True)\` or \`stdout=subprocess.DEVNULL\`.
+- Output files must use **simple filenames without spaces** where possible (use underscores or hashes). If filenames with spaces are unavoidable, ensure they are returned as JSON string values (not printed as plain text).
 
 ${SKILLS_SECTION}`;

@@ -67,9 +67,12 @@ function annotateWorkerResult(resultJson: string): string {
     const rewritten = rewritePaths(stdoutParsed, workspacePrefix, skillsPrefix, workerFiles);
     parsed.stdout = JSON.stringify(rewritten);
   } else {
-    // Plain text: scan for absolute paths matching either prefix
-    const combinedPattern = `(?:${escapeRegex(workspacePrefix)}|${escapeRegex(skillsPrefix)})[^\\s"'\\]\\)]+`;
-    const pathRegex = new RegExp(combinedPattern, 'g');
+    // Plain text: scan for absolute paths matching either prefix.
+    // Match greedily until a file extension (.\w{1,10}), allowing spaces in filenames.
+    // Falls back to the old space-breaking pattern for extensionless paths.
+    const extPattern = `(?:${escapeRegex(workspacePrefix)}|${escapeRegex(skillsPrefix)})[^"'\\n\\r]*\\.\\w{1,10}(?=[\\s"'\\]\\),;]|$)`;
+    const noExtPattern = `(?:${escapeRegex(workspacePrefix)}|${escapeRegex(skillsPrefix)})[^\\s"'\\]\\)]+`;
+    const pathRegex = new RegExp(`${extPattern}|${noExtPattern}`, 'g');
     let match: RegExpExecArray | null;
     let newStdout = stdout;
     while ((match = pathRegex.exec(stdout)) !== null) {
