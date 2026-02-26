@@ -11,6 +11,7 @@ export interface SkillDefinition {
   scriptPath: string | null;
   scriptLanguage: string | null;
   install: string | null;
+  timeout: number | null;
   markdown: string;
 }
 
@@ -47,6 +48,7 @@ async function loadSkillFromDir(dirPath: string, skillId: string): Promise<void>
     let script: string | null = null;
     let language: string | null = null;
     let install: string | null = null;
+    let timeout: number | null = null;
 
     // Normalize line endings before parsing
     const normalized = markdown.replace(/\r\n/g, '\n');
@@ -60,11 +62,16 @@ async function loadSkillFromDir(dirPath: string, skillId: string): Promise<void>
       const scriptMatch = fm.match(/^script:\s*(.+)/m);
       const langMatch = fm.match(/^language:\s*(.+)/m);
       const installMatch = fm.match(/^install:\s*(.+)/m);
+      const timeoutMatch = fm.match(/^timeout:\s*(.+)/m);
       if (nameMatch) name = extractValue(nameMatch[1]);
       if (descMatch) description = extractValue(descMatch[1]);
       if (scriptMatch) script = extractValue(scriptMatch[1]);
       if (langMatch) language = extractValue(langMatch[1]);
       if (installMatch) install = extractValue(installMatch[1]);
+      if (timeoutMatch) {
+        const parsed = parseInt(extractValue(timeoutMatch[1]), 10);
+        if (!isNaN(parsed) && parsed > 0) timeout = parsed * 1000; // frontmatter is in seconds, convert to ms
+      }
     }
 
     log('debug', `Parsed skill frontmatter: ${skillId}`, { name, script, language, install });
@@ -76,6 +83,7 @@ async function loadSkillFromDir(dirPath: string, skillId: string): Promise<void>
       scriptPath: script ? join(dirPath, script) : null,
       scriptLanguage: language ?? null,
       install,
+      timeout,
       markdown,
     });
 

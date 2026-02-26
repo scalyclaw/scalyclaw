@@ -3,7 +3,7 @@ import { recordUsage } from '../core/db.js';
 import { getConfigRef } from '../core/config.js';
 import { selectModel, parseModelId } from '../models/provider.js';
 import { getProvider } from '../models/registry.js';
-import { storeMemory } from './memory.js';
+import { storeMemory, searchMemory } from './memory.js';
 import { EXTRACTION_PROMPT } from '../prompt/extractor.js';
 
 export async function extractMemories(userMessages: string[], channelId?: string): Promise<void> {
@@ -70,10 +70,17 @@ export async function extractMemories(userMessages: string[], channelId?: string
 
     log('info', 'Memory extraction found facts', { count: facts.length });
 
-    // Store each fact — storeMemory has built-in dedup via embedding similarity
+    // Store each fact — with dedup check to avoid re-creating deleted memories
+    let stored = 0;
     for (const fact of facts) {
       if (!fact.type || !fact.subject || !fact.content) continue;
       try {
+        // Dedup: search for very similar existing memories before storing (same logic as handleMemoryStore)
+        try {
+          const existing = await searchMemory(fact.subject + ' ' + fact.content, { topK: 3, type: fact.type });
+          if (existing.find(r => r.score >= 0.92)) continue; // skip duplicate
+        } catch { /* proceed if search fails */ }
+
         await storeMemory({
           type: fact.type,
           subject: fact.subject,
@@ -82,12 +89,13 @@ export async function extractMemories(userMessages: string[], channelId?: string
           source: fact.source ?? 'auto-extraction',
           confidence: fact.confidence ?? 2,
         });
+        stored++;
       } catch (err) {
         log('warn', 'Failed to store extracted memory', { subject: fact.subject, error: String(err) });
       }
     }
 
-    log('info', 'Memory extraction complete', { stored: facts.length, channelId });
+    log('info', 'Memory extraction complete', { stored, total: facts.length, channelId });
   } catch (err) {
     log('warn', 'Memory extraction LLM call failed', { error: String(err) });
   }
