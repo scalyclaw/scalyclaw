@@ -87,10 +87,29 @@ export function getAllSkills(): SkillDefinition[] {
   return [...loadedSkills.values()];
 }
 
+/** Dirs to preserve across zip re-extractions (runtime artifacts + install marker). */
+const PRESERVE = new Set(['.venv', 'node_modules', 'target', '__pycache__', '.scalyclaw-installed']);
+
+/** Remove skill source files while keeping runtime artifacts intact. */
+async function cleanSkillDirForExtract(skillDir: string): Promise<void> {
+  let entries: import('node:fs').Dirent[];
+  try {
+    entries = await readdir(skillDir, { withFileTypes: true });
+  } catch {
+    // Dir doesn't exist yet — nothing to clean
+    await mkdir(skillDir, { recursive: true });
+    return;
+  }
+  for (const entry of entries) {
+    if (PRESERVE.has(entry.name)) continue;
+    await rm(join(skillDir, entry.name), { recursive: true, force: true });
+  }
+}
+
 export async function createSkillFromZip(skillId: string, zipBuffer: Uint8Array): Promise<SkillDefinition> {
   const files = unzipSync(zipBuffer);
   const skillDir = join(PATHS.skills, skillId);
-  await rm(skillDir, { recursive: true, force: true });
+  await cleanSkillDirForExtract(skillDir);
   await mkdir(skillDir, { recursive: true });
 
   const resolvedSkillDir = resolve(skillDir);

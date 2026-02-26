@@ -1,19 +1,6 @@
-import { spawnSync } from 'node:child_process';
-import { dirname } from 'node:path';
 import { log } from '@scalyclaw/scalyclaw/core/logger.js';
 import { spawnProcess, spawnWithSecrets } from '@scalyclaw/scalyclaw/core/subprocess.js';
-
-let bunBinDir: string | null = null;
-try {
-  bunBinDir = dirname(process.argv[0]);
-  if (!bunBinDir || !process.argv[0].includes('bun')) {
-    const which = spawnSync('which', ['bun'], { stdio: 'pipe', timeout: 5000 });
-    const resolved = which.stdout?.toString().trim();
-    bunBinDir = resolved ? dirname(resolved) : null;
-  }
-} catch {
-  bunBinDir = null;
-}
+import { getWorkerExtraEnv } from './worker-env.js';
 
 export interface SkillExecutionParams {
   skillId: string;
@@ -58,10 +45,7 @@ export async function executeSkill(params: SkillExecutionParams): Promise<SkillE
 
   log('debug', 'execute-skill: executing', { skillId, cmd, args, language: scriptLanguage });
 
-  const extraEnv: Record<string, string> = {};
-  if (bunBinDir && !process.env.PATH?.includes(bunBinDir)) {
-    extraEnv.PATH = `${bunBinDir}:${process.env.PATH ?? ''}`;
-  }
+  const extraEnv = getWorkerExtraEnv();
 
   const spawnOpts = {
     cmd,

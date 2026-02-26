@@ -4,9 +4,17 @@ import { createHash } from 'node:crypto';
 import { log } from '@scalyclaw/scalyclaw/core/logger.js';
 import { spawnProcess } from '@scalyclaw/scalyclaw/core/subprocess.js';
 import type { SkillDefinition } from '@scalyclaw/scalyclaw/skills/skill-loader.js';
+import { getWorkerExtraEnv } from './worker-env.js';
 
 const MARKER_FILE = '.scalyclaw-installed';
 const INSTALL_TIMEOUT_MS = 120_000;
+
+/** Required CLI tool per language. */
+const RUNTIME_CMDS: Record<string, string> = {
+  python: 'uv',
+  javascript: 'bun',
+  rust: 'cargo',
+};
 
 /** Dependency files to hash per language */
 const DEP_FILES: Record<string, string[]> = {
@@ -60,6 +68,25 @@ export async function ensureInstalled(skill: SkillDefinition, skillDir: string):
     return;
   }
 
+  // Validate required runtime is available
+  if (skill.scriptLanguage) {
+    const requiredCmd = RUNTIME_CMDS[skill.scriptLanguage];
+    if (requiredCmd) {
+      const check = await spawnProcess({
+        cmd: 'which',
+        args: [requiredCmd],
+        cwd: skillDir,
+        timeoutMs: 5_000,
+        workspacePath: skillDir,
+        extraEnv: getWorkerExtraEnv(),
+        label: `skill-setup:${skill.id}:check`,
+      });
+      if (check.exitCode !== 0) {
+        throw new Error(`Runtime "${requiredCmd}" not found. Install it on this worker to run ${skill.scriptLanguage} skills.`);
+      }
+    }
+  }
+
   const promise = doInstall(skill, skillDir, command);
   inFlight.set(skillDir, promise);
   try {
@@ -85,6 +112,26 @@ async function doInstall(skill: SkillDefinition, skillDir: string, command: stri
     // No marker file — need to install
   }
 
+  // Ensure Python skills have a venv before running install
+  if (skill.scriptLanguage === 'python') {
+    const venvPath = join(skillDir, '.venv');
+    if (!await fileExists(venvPath)) {
+      log('info', 'skill-setup: creating venv', { skillId: skill.id });
+      const venvResult = await spawnProcess({
+        cmd: 'uv',
+        args: ['venv'],
+        cwd: skillDir,
+        timeoutMs: 30_000,
+        workspacePath: skillDir,
+        extraEnv: getWorkerExtraEnv(),
+        label: `skill-setup:${skill.id}:venv`,
+      });
+      if (venvResult.exitCode !== 0) {
+        throw new Error(`Skill "${skill.id}" venv creation failed: ${venvResult.stderr}`);
+      }
+    }
+  }
+
   log('info', 'skill-setup: installing dependencies', { skillId: skill.id, command });
 
   const result = await spawnProcess({
@@ -93,6 +140,7 @@ async function doInstall(skill: SkillDefinition, skillDir: string, command: stri
     cwd: skillDir,
     timeoutMs: INSTALL_TIMEOUT_MS,
     workspacePath: skillDir,
+    extraEnv: getWorkerExtraEnv(),
     label: `skill-setup:${skill.id}`,
   });
 

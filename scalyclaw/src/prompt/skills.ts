@@ -52,4 +52,10 @@ Default to Python unless the task specifically calls for another language. Runti
 - Always include \`script\` and \`language\` in SKILL.md.
 - Always test after creating. If it fails, fix and retry.
 - One skill per concern.
-- Never install packages from within script code — declare deps in metadata files.`;
+- Never install packages from within script code — declare deps in metadata files.
+
+### Failure Handling
+
+- If \`execute_skill\` fails with a dependency or install error, **report the error to the user and stop**. Do not attempt to install packages manually via \`execute_code\` or \`execute_command\` — that is an infrastructure issue.
+- If a skill fails with a runtime error (script bug), read stderr, fix the script with \`write_file\` or \`patch_file\`, and retry once.
+- After 2-3 retries of the same skill, tell the user and stop.`;
