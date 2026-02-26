@@ -352,6 +352,17 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
       required: ['id'],
     },
   },
+  {
+    name: 'register_skill',
+    description: 'Register a skill after writing its files. Loads from disk, runs security guard, adds to config, notifies workers.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Skill ID (e.g. "weather-skill")' },
+      },
+      required: ['id'],
+    },
+  },
 
   // ─── Guards ───
   {
@@ -654,6 +665,7 @@ const AGENT_DIRECT_NAMES = new Set([
   'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
   'diff_files', 'file_info', 'copy_file', 'copy_folder',
   'delete_file', 'delete_folder', 'rename_file', 'rename_folder',
+  'register_skill',
 ]);
 
 /** Job tools available to agents (no delegate_agent, no schedule_*) */

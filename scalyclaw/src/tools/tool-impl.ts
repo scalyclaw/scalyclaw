@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile as fsWriteFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, writeFile as fsWriteFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { log } from '../core/logger.js';
 import { storeSecret, resolveSecret, deleteSecret, listSecrets } from '../core/vault.js';
@@ -8,7 +8,8 @@ import { createReminder, createRecurrentReminder, createTask, createRecurrentTas
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
-import { getAllSkills, loadSkills, deleteSkill } from '../skills/skill-loader.js';
+import { getAllSkills, getSkill, loadSkills, deleteSkill } from '../skills/skill-loader.js';
+import { runSkillGuard } from '../guards/guard.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
@@ -964,6 +965,92 @@ async function handleDeleteSkill(input: Record<string, unknown>): Promise<string
   }
 }
 
+async function handleRegisterSkill(input: Record<string, unknown>): Promise<string> {
+  let id = input.id as string;
+  if (!id) return JSON.stringify({ error: 'Missing required field: id' });
+
+  // Enforce -skill suffix
+  if (!id.endsWith('-skill')) id = `${id}-skill`;
+
+  log('info', 'register_skill', { id });
+
+  // Verify SKILL.md exists
+  const skillDir = join(PATHS.skills, id);
+  const skillMdPath = join(skillDir, 'SKILL.md');
+  try {
+    await access(skillMdPath);
+  } catch {
+    return JSON.stringify({ error: `SKILL.md not found at skills/${id}/SKILL.md — write the file first.` });
+  }
+
+  // Reload skills from disk
+  await loadSkills();
+
+  // Verify it loaded correctly
+  const skill = getSkill(id);
+  if (!skill) {
+    return JSON.stringify({ error: `Skill "${id}" failed to load after reload. Check SKILL.md frontmatter.` });
+  }
+  if (!skill.scriptPath || !skill.scriptLanguage) {
+    return JSON.stringify({ error: `Skill "${id}" is missing "script" or "language" in SKILL.md frontmatter.` });
+  }
+
+  // Read all non-SKILL.md files for guard input
+  let scriptContents: string | undefined;
+  try {
+    const entries = await readdir(skillDir, { recursive: true, withFileTypes: true });
+    const parts: string[] = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || entry.name === 'SKILL.md') continue;
+      const entryPath = join(entry.parentPath ?? entry.path, entry.name);
+      const content = await readFile(entryPath, 'utf-8');
+      const relPath = entryPath.slice(skillDir.length + 1);
+      parts.push(`### ${relPath}\n\`\`\`\n${content}\n\`\`\``);
+    }
+    if (parts.length > 0) scriptContents = parts.join('\n\n');
+  } catch (err) {
+    log('warn', 'register_skill: failed to read script files for guard', { error: String(err) });
+  }
+
+  // Run skill guard
+  try {
+    const guardResult = await runSkillGuard(id, skill.markdown, scriptContents);
+    if (!guardResult.passed) {
+      // Delete skill directory on guard failure
+      await deleteSkill(id);
+      return JSON.stringify({
+        error: `Skill guard rejected "${id}": ${guardResult.reason ?? 'security violation'}`,
+        guardResult,
+      });
+    }
+  } catch (err) {
+    log('error', 'register_skill: guard threw', { error: String(err) });
+    return JSON.stringify({ error: `Skill guard error: ${String(err)}` });
+  }
+
+  // Register in config if not already present
+  const config = getConfig();
+  const idx = config.skills.findIndex(s => s.id === id);
+  if (idx >= 0) {
+    config.skills[idx].enabled = true;
+  } else {
+    config.skills.push({ id, enabled: true });
+  }
+  await saveConfig(config);
+
+  // Notify workers
+  await publishSkillReload().catch(err => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+
+  log('info', 'register_skill complete', { id });
+  return JSON.stringify({
+    registered: true,
+    id,
+    name: skill.name,
+    description: skill.description,
+    language: skill.scriptLanguage,
+  });
+}
+
 // ─── Agent Management (extended) ───
 
 async function handleToggleAgent(input: Record<string, unknown>): Promise<string> {
@@ -1724,6 +1811,7 @@ registerTool('toggle_model', handleToggleModel);
 registerTool('list_skills', handleListSkills);
 registerTool('toggle_skill', handleToggleSkill);
 registerTool('delete_skill', handleDeleteSkill);
+registerTool('register_skill', handleRegisterSkill);
 // Agent management (extended)
 registerTool('toggle_agent', handleToggleAgent);
 registerTool('set_agent_models', handleSetAgentModels);

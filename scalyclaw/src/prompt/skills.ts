@@ -9,7 +9,8 @@ Create a skill for code execution: API integrations, data processing, web scrapi
 ### Workflow
 
 1. Write the script + \`SKILL.md\` with complete frontmatter.
-2. Test with \`execute_skill\`. If it fails, read stderr, fix, retry.
+2. Call \`register_skill\` to finalize (runs guard, registers in config, notifies workers).
+3. Test with \`execute_skill\`. If it fails, read stderr, fix, retry.
 
 You deliver working skills — never tell the user to install or configure anything.
 
