@@ -189,10 +189,10 @@ install_redis() {
   fi
 
   cd "$build_dir"
-  info "Downloading Redis 7.4.3..."
-  curl -fsSL "https://github.com/redis/redis/archive/7.4.3.tar.gz" -o redis.tar.gz
+  info "Downloading Redis 6.2.21..."
+  curl -fsSL "https://download.redis.io/releases/redis-6.2.21.tar.gz" -o redis.tar.gz
   tar xzf redis.tar.gz
-  cd redis-7.4.3
+  cd redis-6.2.21
 
   info "Compiling (this may take a minute)..."
   make -j"$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)" PREFIX="$REDIS_DIR" BUILD_TLS=no &>/dev/null
