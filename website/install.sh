@@ -9,6 +9,7 @@ set -euo pipefail
 #   ~/.scalyclaw/scalyclaw.sh --stop                               # stop all
 #   ~/.scalyclaw/scalyclaw.sh --start                              # start all
 #   ~/.scalyclaw/scalyclaw.sh --status                             # show status
+#   ~/.scalyclaw/scalyclaw.sh --update                             # update in-place
 #   ~/.scalyclaw/scalyclaw.sh --uninstall                          # remove all
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -118,6 +119,7 @@ print_access_info() {
     printf "  ${DIM}Manage ScalyClaw:${NC}\n"
     printf "    ${DIM}Stop:       %s/scalyclaw.sh --stop${NC}\n" "$SCALYCLAW_HOME"
     printf "    ${DIM}Start:      %s/scalyclaw.sh --start${NC}\n" "$SCALYCLAW_HOME"
+    printf "    ${DIM}Update:     %s/scalyclaw.sh --update${NC}\n" "$SCALYCLAW_HOME"
     printf "    ${DIM}Status:     %s/scalyclaw.sh --status${NC}\n" "$SCALYCLAW_HOME"
     printf "    ${DIM}Uninstall:  %s/scalyclaw.sh --uninstall${NC}\n" "$SCALYCLAW_HOME"
     echo ""
@@ -267,29 +269,24 @@ stop_redis() {
   fi
 }
 
-# ─── Stop ────────────────────────────────────────────────────────────────────
+# ─── Process Management ───────────────────────────────────────────────────────
 
-do_stop() {
-  header "Stopping ScalyClaw"
-
-  if [ ! -f "$SCALYCLAW_CONFIG" ]; then
-    error "ScalyClaw is not installed (no config at $SCALYCLAW_CONFIG)"
-    exit 1
-  fi
-
+# Shared helper: graceful stop + force kill all ScalyClaw processes (not Redis)
+stop_all_processes() {
   export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
   # Graceful stop
-  info "Stopping dashboard..."
-  scalyclaw_cli dashboard stop 2>/dev/null || true
-  for name in "${WORKER_NAMES[@]}"; do
-    info "Stopping worker $name..."
-    scalyclaw_cli worker stop --name "$name" 2>/dev/null || true
-  done
-  info "Stopping node..."
-  scalyclaw_cli node stop 2>/dev/null || true
-
-  sleep 2
+  if [ -d "$SCALYCLAW_REPO" ] && command_exists bun; then
+    info "Stopping dashboard..."
+    scalyclaw_cli dashboard stop 2>/dev/null || true
+    for name in "${WORKER_NAMES[@]}"; do
+      info "Stopping worker $name..."
+      scalyclaw_cli worker stop --name "$name" 2>/dev/null || true
+    done
+    info "Stopping node..."
+    scalyclaw_cli node stop 2>/dev/null || true
+    sleep 2
+  fi
 
   # Force kill anything still alive
   info "Force-killing any remaining processes..."
@@ -301,6 +298,61 @@ do_stop() {
     force_kill_port $((base_worker_port + i))
     i=$((i + 1))
   done
+}
+
+# Shared helper: start all ScalyClaw processes (assumes Redis is running)
+start_all_processes() {
+  export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+  # Start node
+  info "Starting node..."
+  scalyclaw_cli node background
+
+  # Wait for node to be ready
+  info "Waiting for node to be ready..."
+  local attempts=0
+  while [ $attempts -lt 20 ]; do
+    if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
+      break
+    fi
+    sleep 1
+    attempts=$((attempts + 1))
+  done
+
+  if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
+    success "Node is running on port $GATEWAY_PORT"
+  else
+    warn "Node may still be starting (check $SCALYCLAW_HOME/logs/scalyclaw-node.log)"
+  fi
+
+  # Start workers
+  for name in "${WORKER_NAMES[@]}"; do
+    local worker_config="$HOME/.scalyclaw-worker-${name}/worker.json"
+    if [ -f "$worker_config" ]; then
+      info "Starting worker $name..."
+      scalyclaw_cli worker background --name "$name"
+      sleep 1
+    else
+      warn "Worker $name config not found — skipping"
+    fi
+  done
+
+  # Start dashboard
+  info "Starting dashboard..."
+  scalyclaw_cli dashboard background --port "$DASHBOARD_PORT" --gateway "http://localhost:$GATEWAY_PORT"
+}
+
+# ─── Stop ────────────────────────────────────────────────────────────────────
+
+do_stop() {
+  header "Stopping ScalyClaw"
+
+  if [ ! -f "$SCALYCLAW_CONFIG" ]; then
+    error "ScalyClaw is not installed (no config at $SCALYCLAW_CONFIG)"
+    exit 1
+  fi
+
+  stop_all_processes
 
   # Stop our Redis (only if we manage it)
   if [ -f "$SCALYCLAW_HOME/redis.conf" ]; then
@@ -320,7 +372,6 @@ do_start() {
     exit 1
   fi
 
-  # Ensure PATH includes our tools
   export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
   # Start Redis if we manage it
@@ -331,42 +382,8 @@ do_start() {
     exit 1
   fi
 
-  # Start node in background
-  info "Starting node..."
-  scalyclaw_cli node background
+  start_all_processes
 
-  # Wait for node to be ready
-  local attempts=0
-  while [ $attempts -lt 15 ]; do
-    if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
-      break
-    fi
-    sleep 1
-    attempts=$((attempts + 1))
-  done
-
-  if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
-    success "Node is running on port $GATEWAY_PORT"
-  else
-    warn "Node may still be starting (check $SCALYCLAW_HOME/logs/scalyclaw-node.log)"
-  fi
-
-  # Start workers in background
-  for name in "${WORKER_NAMES[@]}"; do
-    local worker_config="$HOME/.scalyclaw-worker-${name}/worker.json"
-    if [ -f "$worker_config" ]; then
-      info "Starting worker $name..."
-      scalyclaw_cli worker background --name "$name"
-    else
-      warn "Worker $name config not found — skipping"
-    fi
-  done
-
-  # Start dashboard in background
-  info "Starting dashboard..."
-  scalyclaw_cli dashboard background --port "$DASHBOARD_PORT" --gateway "http://localhost:$GATEWAY_PORT"
-
-  # Get dashboard token URL
   local dashboard_url
   dashboard_url=$(get_dashboard_url)
 
@@ -552,6 +569,251 @@ do_status() {
   scalyclaw_cli dashboard status 2>/dev/null || printf "  ${RED}●${NC} Dashboard ${RED}stopped${NC}\n"
 }
 
+# ─── Update ─────────────────────────────────────────────────────────────────
+
+do_update() {
+  header "Updating ScalyClaw"
+
+  if [ ! -f "$SCALYCLAW_CONFIG" ] || [ ! -d "$SCALYCLAW_REPO/.git" ]; then
+    error "ScalyClaw is not installed. Run the installer first."
+    exit 1
+  fi
+
+  export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+  cd "$SCALYCLAW_REPO"
+
+  # Fetch latest from remote
+  info "Checking for updates..."
+  git fetch origin main --quiet 2>/dev/null || {
+    error "Failed to fetch from remote. Check your internet connection."
+    exit 1
+  }
+
+  local local_head remote_head
+  local_head=$(git rev-parse HEAD 2>/dev/null)
+  remote_head=$(git rev-parse origin/main 2>/dev/null)
+
+  if [ "$local_head" = "$remote_head" ]; then
+    echo ""
+    success "Already up to date!"
+    printf "  ${DIM}Current version: %s${NC}\n" "$(git log -1 --format='%h %s')"
+    echo ""
+    return 0
+  fi
+
+  # Show what's new
+  local commit_count
+  commit_count=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+
+  echo ""
+  printf "  ${BOLD}${GREEN}%s new commit(s) available:${NC}\n\n" "$commit_count"
+
+  # Show commits in a nice format
+  git log --oneline --no-decorate HEAD..origin/main | while IFS= read -r line; do
+    local hash="${line%% *}"
+    local msg="${line#* }"
+    printf "    ${YELLOW}%s${NC}  %s\n" "$hash" "$msg"
+  done
+
+  echo ""
+  printf "  ${DIM}Current: %s${NC}\n" "$(git log -1 --format='%h %s')"
+  printf "  ${DIM}Latest:  %s${NC}\n" "$(git log -1 --format='%h %s' origin/main)"
+  echo ""
+
+  read -rp "  Apply update? [Y/n] " confirm < /dev/tty
+  if [[ "$confirm" =~ ^[Nn]$ ]]; then
+    info "Update cancelled."
+    return 0
+  fi
+
+  echo ""
+
+  # ── Stop processes ───────────────────────────────────────────────
+  header "Stopping processes"
+  stop_all_processes
+  success "All processes stopped"
+
+  # ── Pull changes ─────────────────────────────────────────────────
+  header "Applying update"
+
+  info "Updating repository..."
+  git reset --hard origin/main --quiet 2>/dev/null
+  success "Repository updated to $(git log -1 --format='%h %s')"
+
+  # ── Rebuild ──────────────────────────────────────────────────────
+  info "Installing dependencies..."
+  bun install
+
+  info "Building packages..."
+  bun run build
+
+  success "Build complete"
+
+  # ── Copy updated mind files (don't overwrite user edits) ─────────
+  if [ -d "$SCALYCLAW_REPO/mind" ]; then
+    cp -n "$SCALYCLAW_REPO/mind/"*.md "$SCALYCLAW_HOME/mind/" 2>/dev/null || true
+  fi
+
+  # ── Restart everything ───────────────────────────────────────────
+  header "Restarting ScalyClaw"
+
+  # Start Redis if we manage it
+  if [ -f "$SCALYCLAW_HOME/redis.conf" ]; then
+    start_redis
+  elif ! redis_is_running; then
+    error "Redis is not running. Start Redis manually."
+    exit 1
+  fi
+
+  start_all_processes
+
+  local dashboard_url
+  dashboard_url=$(get_dashboard_url)
+
+  echo ""
+  printf "${BOLD}${GREEN}"
+  echo "  ╔═══════════════════════════════════════════╗"
+  echo "  ║      ScalyClaw updated successfully!      ║"
+  echo "  ╚═══════════════════════════════════════════╝"
+  printf "${NC}"
+
+  print_access_info "$dashboard_url"
+
+  # Update the management script itself
+  copy_self
+}
+
+# ─── Prerequisites ──────────────────────────────────────────────────────────
+
+# Install system tools (git, curl, unzip) if missing — user-local where possible
+install_system_deps() {
+  local missing=()
+  for tool in git curl unzip; do
+    if ! command_exists "$tool"; then
+      missing+=("$tool")
+    fi
+  done
+
+  if [ ${#missing[@]} -eq 0 ]; then
+    success "System tools available (git, curl, unzip)"
+    return 0
+  fi
+
+  info "Missing system tools: ${missing[*]}"
+
+  # Detect OS and install
+  if [ "$(uname -s)" = "Darwin" ]; then
+    # macOS: git comes with Xcode CLT, curl is built-in, unzip is built-in
+    # If git is missing, Xcode CLT prompt will appear automatically
+    if [[ " ${missing[*]} " == *" git "* ]]; then
+      info "Installing Xcode Command Line Tools (provides git)..."
+      xcode-select --install 2>/dev/null || true
+      echo ""
+      warn "Xcode CLT install dialog may have appeared."
+      read -rp "  Press Enter once installation is complete... " _ < /dev/tty
+      if ! command_exists git; then
+        error "git still not found. Please install Xcode Command Line Tools and retry."
+        exit 1
+      fi
+    fi
+    # curl and unzip are always available on macOS
+    if [[ " ${missing[*]} " == *" curl "* ]] || [[ " ${missing[*]} " == *" unzip "* ]]; then
+      if command_exists brew; then
+        info "Installing ${missing[*]} via Homebrew..."
+        brew install "${missing[@]}" 2>/dev/null || true
+      else
+        error "curl/unzip not found and Homebrew not available."
+        echo "  Install Homebrew: https://brew.sh"
+        exit 1
+      fi
+    fi
+  elif [ -f /etc/debian_version ]; then
+    info "Installing ${missing[*]} via apt..."
+    sudo apt-get update -qq && sudo apt-get install -y -qq "${missing[@]}"
+  elif [ -f /etc/redhat-release ] || [ -f /etc/fedora-release ]; then
+    info "Installing ${missing[*]} via dnf/yum..."
+    if command_exists dnf; then
+      sudo dnf install -y -q "${missing[@]}"
+    else
+      sudo yum install -y -q "${missing[@]}"
+    fi
+  elif [ -f /etc/arch-release ]; then
+    info "Installing ${missing[*]} via pacman..."
+    sudo pacman -Sy --noconfirm "${missing[@]}"
+  elif [ -f /etc/alpine-release ]; then
+    info "Installing ${missing[*]} via apk..."
+    sudo apk add --quiet "${missing[@]}"
+  else
+    error "Cannot auto-install: ${missing[*]}"
+    echo "  Please install them manually and re-run the installer."
+    exit 1
+  fi
+
+  # Verify
+  for tool in "${missing[@]}"; do
+    if command_exists "$tool"; then
+      success "$tool installed"
+    else
+      error "Failed to install $tool"
+      exit 1
+    fi
+  done
+}
+
+install_prerequisites() {
+  header "Installing Prerequisites"
+
+  # ── System tools (git, curl, unzip) ──────────────────────────────
+  install_system_deps
+
+  # ── Bun ──────────────────────────────────────────────────────────
+  if command_exists bun; then
+    success "Bun is installed (v$(bun --version 2>/dev/null || echo '?'))"
+  else
+    info "Installing Bun..."
+    curl -fsSL https://bun.sh/install | bash
+    export BUN_INSTALL="$HOME/.bun"
+    export PATH="$BUN_INSTALL/bin:$PATH"
+    if command_exists bun; then
+      success "Bun installed (v$(bun --version))"
+    else
+      error "Bun installation failed. Install manually: https://bun.sh"
+      exit 1
+    fi
+  fi
+
+  # ── uv ───────────────────────────────────────────────────────────
+  if command_exists uv; then
+    success "uv is installed ($(uv --version 2>/dev/null | head -1 || echo '?'))"
+  else
+    info "Installing uv (Python package manager)..."
+    curl -LsSf https://astral.sh/uv/install.sh | bash
+    export PATH="$HOME/.local/bin:$PATH"
+    if command_exists uv; then
+      success "uv installed ($(uv --version | head -1))"
+    else
+      error "uv installation failed. Install manually: https://docs.astral.sh/uv/"
+      exit 1
+    fi
+  fi
+
+  # ── Rust ─────────────────────────────────────────────────────────
+  if command_exists cargo; then
+    success "Rust is installed ($(rustc --version 2>/dev/null | head -1 || echo '?'))"
+  else
+    info "Installing Rust (needed for Rust skills)..."
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
+    export PATH="$HOME/.cargo/bin:$PATH"
+    if command_exists cargo; then
+      success "Rust installed ($(rustc --version | head -1))"
+    else
+      error "Rust installation failed. Install manually: https://rustup.rs"
+      exit 1
+    fi
+  fi
+}
+
 # ─── Install ─────────────────────────────────────────────────────────────────
 
 do_install() {
@@ -571,113 +833,103 @@ LOGO
   # ── WSL detection ──────────────────────────────────────────────────
   if [ -f /proc/version ] && grep -qi microsoft /proc/version 2>/dev/null; then
     info "WSL detected — make sure build-essential is installed:"
-    printf "    ${BOLD}sudo apt-get update && sudo apt-get install -y build-essential curl${NC}\n\n"
+    printf "    ${BOLD}sudo apt-get update && sudo apt-get install -y build-essential${NC}\n\n"
   fi
 
   # ── Detect existing installation ─────────────────────────────────
   if [ -f "$SCALYCLAW_CONFIG" ] || [ -d "$SCALYCLAW_REPO/.git" ]; then
-    warn "Existing ScalyClaw installation detected."
-    echo ""
-    # read from /dev/tty so it works even when piped (curl | sh)
-    read -rp "  Overwrite and start fresh? [y/N] " confirm < /dev/tty
-    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-      info "Installation cancelled."
-      exit 0
-    fi
-
-    echo ""
     export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
 
-    # Graceful stop
-    info "Stopping all running processes..."
-    if [ -d "$SCALYCLAW_REPO" ] && command_exists bun; then
-      scalyclaw_cli dashboard stop 2>/dev/null || true
-      for name in "${WORKER_NAMES[@]}"; do
-        scalyclaw_cli worker stop --name "$name" 2>/dev/null || true
-      done
-      scalyclaw_cli node stop 2>/dev/null || true
+    printf "  ${YELLOW}Existing ScalyClaw installation detected.${NC}\n"
+
+    # Check if remote has updates
+    local has_updates=false
+    local commit_count="0"
+    if [ -d "$SCALYCLAW_REPO/.git" ] && command_exists git; then
+      cd "$SCALYCLAW_REPO"
+      git fetch origin main --quiet 2>/dev/null || true
+      local local_head remote_head
+      local_head=$(git rev-parse HEAD 2>/dev/null || echo "")
+      remote_head=$(git rev-parse origin/main 2>/dev/null || echo "")
+      if [ -n "$local_head" ] && [ -n "$remote_head" ] && [ "$local_head" != "$remote_head" ]; then
+        has_updates=true
+        commit_count=$(git rev-list --count HEAD..origin/main 2>/dev/null || echo "?")
+      fi
+      cd "$HOME"
     fi
-    sleep 2
 
-    # Force kill by ports
-    force_kill_port "$DASHBOARD_PORT"
-    force_kill_port "$GATEWAY_PORT"
-    local base_port=3001
-    local idx=0
-    for name in "${WORKER_NAMES[@]}"; do
-      force_kill_port $((base_port + idx))
-      idx=$((idx + 1))
-    done
-
-    # Flush and stop Redis
-    if redis_is_running; then
-      redis_cli FLUSHALL &>/dev/null 2>&1 || true
-      redis_cli shutdown nosave &>/dev/null 2>&1 || true
-      sleep 1
-    fi
-    force_kill_port "$REDIS_PORT"
-
-    # Remove old files
-    info "Removing old installation..."
-    rm -rf "$SCALYCLAW_HOME"
-    rm -rf "$HOME"/.scalyclaw-worker-*
-
-    success "Old installation removed"
     echo ""
+    if [ "$has_updates" = true ]; then
+      printf "  ${GREEN}%s update(s) available:${NC}\n\n" "$commit_count"
+      cd "$SCALYCLAW_REPO"
+      git log --oneline --no-decorate HEAD..origin/main | while IFS= read -r line; do
+        local hash="${line%% *}"
+        local msg="${line#* }"
+        printf "    ${YELLOW}%s${NC}  %s\n" "$hash" "$msg"
+      done
+      cd "$HOME"
+      echo ""
+    fi
+
+    printf "  ${BOLD}What would you like to do?${NC}\n\n"
+    if [ "$has_updates" = true ]; then
+      printf "    ${CYAN}u${NC}) ${BOLD}Update${NC}    — pull latest changes, rebuild & restart ${DIM}(keeps all data & config)${NC}\n"
+    fi
+    printf "    ${CYAN}o${NC}) ${BOLD}Override${NC}  — wipe everything and install from scratch ${DIM}(loses Redis data & config)${NC}\n"
+    printf "    ${CYAN}c${NC}) ${BOLD}Cancel${NC}    — do nothing\n"
+    echo ""
+
+    local choice
+    if [ "$has_updates" = true ]; then
+      read -rp "  Choose [u/o/c] (default: u): " choice < /dev/tty
+      choice="${choice:-u}"
+    else
+      read -rp "  Choose [o/c] (default: c): " choice < /dev/tty
+      choice="${choice:-c}"
+    fi
+
+    case "$choice" in
+      u|U)
+        if [ "$has_updates" = false ]; then
+          info "Already up to date — nothing to update."
+          exit 0
+        fi
+        do_update
+        return 0
+        ;;
+      o|O)
+        echo ""
+        info "Stopping all running processes..."
+        stop_all_processes
+
+        # Flush and stop Redis
+        if redis_is_running; then
+          redis_cli FLUSHALL &>/dev/null 2>&1 || true
+          redis_cli shutdown nosave &>/dev/null 2>&1 || true
+          sleep 1
+        fi
+        force_kill_port "$REDIS_PORT"
+
+        # Remove old files
+        info "Removing old installation..."
+        rm -rf "$SCALYCLAW_HOME"
+        rm -rf "$HOME"/.scalyclaw-worker-*
+
+        success "Old installation removed"
+        echo ""
+        ;;
+      *)
+        info "Installation cancelled."
+        exit 0
+        ;;
+    esac
   fi
 
   mkdir -p "$SCALYCLAW_HOME"
 
-  # ── Install Bun ────────────────────────────────────────────────────
+  # ── Prerequisites ──────────────────────────────────────────────────
 
-  header "Installing Prerequisites"
-
-  if command_exists bun; then
-    success "Bun is installed (v$(bun --version 2>/dev/null || echo '?'))"
-  else
-    info "Installing Bun..."
-    curl -fsSL https://bun.sh/install | bash
-    export BUN_INSTALL="$HOME/.bun"
-    export PATH="$BUN_INSTALL/bin:$PATH"
-    if command_exists bun; then
-      success "Bun installed (v$(bun --version))"
-    else
-      error "Bun installation failed. Install manually: https://bun.sh"
-      exit 1
-    fi
-  fi
-
-  # ── Install uv ────────────────────────────────────────────────────
-
-  if command_exists uv; then
-    success "uv is installed ($(uv --version 2>/dev/null | head -1 || echo '?'))"
-  else
-    info "Installing uv (Python package manager)..."
-    curl -LsSf https://astral.sh/uv/install.sh | bash
-    export PATH="$HOME/.local/bin:$PATH"
-    if command_exists uv; then
-      success "uv installed ($(uv --version | head -1))"
-    else
-      error "uv installation failed. Install manually: https://docs.astral.sh/uv/"
-      exit 1
-    fi
-  fi
-
-  # ── Install Rust ─────────────────────────────────────────────────
-
-  if command_exists cargo; then
-    success "Rust is installed ($(rustc --version 2>/dev/null | head -1 || echo '?'))"
-  else
-    info "Installing Rust (needed for Rust skills)..."
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --quiet
-    export PATH="$HOME/.cargo/bin:$PATH"
-    if command_exists cargo; then
-      success "Rust installed ($(rustc --version | head -1))"
-    else
-      error "Rust installation failed. Install manually: https://rustup.rs"
-      exit 1
-    fi
-  fi
+  install_prerequisites
 
   # ── Install / Start Redis ─────────────────────────────────────────
 
@@ -815,37 +1067,7 @@ WEOF
 
   header "Starting ScalyClaw"
 
-  # Start node in background
-  info "Starting node..."
-  scalyclaw_cli node background
-
-  # Wait for node to be ready
-  info "Waiting for node to be ready..."
-  local attempts=0
-  while [ $attempts -lt 20 ]; do
-    if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
-      break
-    fi
-    sleep 1
-    attempts=$((attempts + 1))
-  done
-
-  if curl -sf "http://localhost:$GATEWAY_PORT/health" &>/dev/null; then
-    success "Node is running on port $GATEWAY_PORT"
-  else
-    warn "Node may still be starting (check $SCALYCLAW_HOME/logs/scalyclaw-node.log)"
-  fi
-
-  # Start workers in background
-  for name in "${WORKER_NAMES[@]}"; do
-    info "Starting worker $name..."
-    scalyclaw_cli worker background --name "$name"
-    sleep 1
-  done
-
-  # Start dashboard in background
-  info "Starting dashboard..."
-  scalyclaw_cli dashboard background --port "$DASHBOARD_PORT" --gateway "http://localhost:$GATEWAY_PORT"
+  start_all_processes
 
   # ── Done ──────────────────────────────────────────────────────────
 
@@ -896,6 +1118,9 @@ case "${1:-}" in
   --start)
     do_start
     ;;
+  --update)
+    do_update
+    ;;
   --uninstall)
     do_uninstall
     ;;
@@ -907,10 +1132,11 @@ case "${1:-}" in
     echo "ScalyClaw Installer & Manager"
     echo ""
     echo "Usage:"
-    echo "  install.sh              Install everything and start all processes"
-    echo "  scalyclaw.sh --start    Start all processes (Redis, node, workers, dashboard)"
-    echo "  scalyclaw.sh --stop     Stop all processes"
-    echo "  scalyclaw.sh --status   Show status of all processes"
+    echo "  install.sh                Install everything and start all processes"
+    echo "  scalyclaw.sh --start      Start all processes (Redis, node, workers, dashboard)"
+    echo "  scalyclaw.sh --stop       Stop all processes"
+    echo "  scalyclaw.sh --update     Pull latest changes, rebuild & restart (keeps data)"
+    echo "  scalyclaw.sh --status     Show status of all processes"
     echo "  scalyclaw.sh --uninstall  Remove ScalyClaw completely and clear Redis data"
     echo ""
     ;;
