@@ -22,14 +22,21 @@ export function setWorkerConfig(nodeUrl: string, nodeToken: string, processId: s
   workerProcessId = processId;
 }
 
-// ─── Annotate skill results with workspace file paths ───
+// ─── Annotate worker results with file paths for transfer ───
+
+interface WorkerFileEntry {
+  /** Path the worker API can serve (workspace-relative, or _skills/-prefixed for skill-dir files) */
+  src: string;
+  /** Path to save on the node's workspace (always workspace-relative) */
+  dest: string;
+}
 
 /**
- * Scans a skill execution result for absolute workspace paths,
+ * Scans a worker execution result for absolute workspace/skill-dir paths,
  * rewrites them to workspace-relative paths, and adds _workerFiles/_workerProcessId
  * so the node can download them.
  */
-function annotateSkillResult(resultJson: string): string {
+function annotateWorkerResult(resultJson: string): string {
   if (!workerProcessId) return resultJson;
 
   let parsed: Record<string, unknown>;
@@ -39,13 +46,14 @@ function annotateSkillResult(resultJson: string): string {
     return resultJson; // Not valid JSON — skip
   }
 
-  // Only annotate successful skill results that have stdout
+  // Only annotate results that have stdout
   const stdout = parsed.stdout;
   if (typeof stdout !== 'string' || !stdout.trim()) return resultJson;
 
   // Try to parse stdout as JSON; if not JSON, scan as plain text
   const workspacePrefix = PATHS.workspace.endsWith('/') ? PATHS.workspace : PATHS.workspace + '/';
-  const workerFiles: string[] = [];
+  const skillsPrefix = PATHS.skills.endsWith('/') ? PATHS.skills : PATHS.skills + '/';
+  const workerFiles: WorkerFileEntry[] = [];
 
   let stdoutParsed: unknown;
   try {
@@ -55,19 +63,22 @@ function annotateSkillResult(resultJson: string): string {
   }
 
   if (stdoutParsed !== null && typeof stdoutParsed === 'object') {
-    // Scan all string values in the JSON for workspace absolute paths
-    const rewritten = rewritePaths(stdoutParsed, workspacePrefix, workerFiles);
+    // Scan all string values in the JSON for workspace/skill-dir absolute paths
+    const rewritten = rewritePaths(stdoutParsed, workspacePrefix, skillsPrefix, workerFiles);
     parsed.stdout = JSON.stringify(rewritten);
   } else {
-    // Plain text: scan for absolute paths
-    const pathRegex = new RegExp(escapeRegex(workspacePrefix) + '[^\\s"\'\\]\\)]+', 'g');
+    // Plain text: scan for absolute paths matching either prefix
+    const combinedPattern = `(?:${escapeRegex(workspacePrefix)}|${escapeRegex(skillsPrefix)})[^\\s"'\\]\\)]+`;
+    const pathRegex = new RegExp(combinedPattern, 'g');
     let match: RegExpExecArray | null;
     let newStdout = stdout;
     while ((match = pathRegex.exec(stdout)) !== null) {
       const absPath = match[0];
-      const relPath = absPath.slice(workspacePrefix.length);
-      workerFiles.push(relPath);
-      newStdout = newStdout.split(absPath).join(relPath);
+      const entry = makeFileEntry(absPath, workspacePrefix, skillsPrefix);
+      if (entry) {
+        workerFiles.push(entry);
+        newStdout = newStdout.split(absPath).join(entry.dest);
+      }
     }
     if (newStdout !== stdout) {
       parsed.stdout = newStdout;
@@ -78,27 +89,43 @@ function annotateSkillResult(resultJson: string): string {
 
   parsed._workerFiles = workerFiles;
   parsed._workerProcessId = workerProcessId;
-  log('info', 'Annotated skill result with worker files', { files: workerFiles, processId: workerProcessId });
+  log('info', 'Annotated worker result with files', { files: workerFiles, processId: workerProcessId });
   return JSON.stringify(parsed);
 }
 
-/** Recursively scan/rewrite absolute workspace paths in a JSON value */
-function rewritePaths(value: unknown, prefix: string, collected: string[]): unknown {
+/** Build a { src, dest } entry from an absolute path matching workspace or skills prefix */
+function makeFileEntry(absPath: string, workspacePrefix: string, skillsPrefix: string): WorkerFileEntry | null {
+  if (absPath.startsWith(workspacePrefix)) {
+    const rel = absPath.slice(workspacePrefix.length);
+    return { src: rel, dest: rel };
+  }
+  if (absPath.startsWith(skillsPrefix)) {
+    const relFromSkills = absPath.slice(skillsPrefix.length); // e.g. "youtube-skill/output.mp4"
+    const slashIdx = relFromSkills.indexOf('/');
+    // Strip skillId prefix for dest, keep full path for src
+    const dest = slashIdx >= 0 ? relFromSkills.slice(slashIdx + 1) : relFromSkills;
+    return { src: '_skills/' + relFromSkills, dest };
+  }
+  return null;
+}
+
+/** Recursively scan/rewrite absolute workspace/skill-dir paths in a JSON value */
+function rewritePaths(value: unknown, workspacePrefix: string, skillsPrefix: string, collected: WorkerFileEntry[]): unknown {
   if (typeof value === 'string') {
-    if (value.startsWith(prefix)) {
-      const rel = value.slice(prefix.length);
-      collected.push(rel);
-      return rel;
+    const entry = makeFileEntry(value, workspacePrefix, skillsPrefix);
+    if (entry) {
+      collected.push(entry);
+      return entry.dest;
     }
     return value;
   }
   if (Array.isArray(value)) {
-    return value.map(v => rewritePaths(v, prefix, collected));
+    return value.map(v => rewritePaths(v, workspacePrefix, skillsPrefix, collected));
   }
   if (value !== null && typeof value === 'object') {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
-      out[k] = rewritePaths(v, prefix, collected);
+      out[k] = rewritePaths(v, workspacePrefix, skillsPrefix, collected);
     }
     return out;
   }
@@ -159,7 +186,7 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
         result = JSON.stringify({ error: `Unknown tool "${toolName}" — worker only handles execute_skill, execute_code, execute_command` });
     }
     log('info', `Tool execution complete: ${toolName}`, { jobId, toolCallId, durationMs: Date.now() - start });
-    return result;
+    return annotateWorkerResult(result);
   } catch (err) {
     log('error', `Tool execution failed: ${toolName}`, { jobId, toolCallId, error: String(err) });
     return JSON.stringify({ error: `Tool "${toolName}" failed: ${String(err)}` });
@@ -200,7 +227,7 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
     secrets,
     signal,
   });
-  return annotateSkillResult(JSON.stringify(result));
+  return JSON.stringify(result);
 }
 
 // ─── Skill execution (direct queue job) ───
@@ -232,5 +259,5 @@ async function processSkillExecution(job: Job<SkillExecutionData>): Promise<stri
   });
 
   log('info', 'Skill execution complete', { jobId: job.id, skillId, exitCode: result.exitCode });
-  return annotateSkillResult(JSON.stringify(result));
+  return annotateWorkerResult(JSON.stringify(result));
 }

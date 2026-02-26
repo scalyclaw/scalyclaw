@@ -148,8 +148,9 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
     inner = outer;
   }
 
-  const workerFiles = (inner === outer ? outer._workerFiles : inner._workerFiles) as string[] | undefined;
-  const workerProcId = (inner === outer ? outer._workerProcessId : inner._workerProcessId) as string | undefined;
+  // Check both inner (parsed stdout) and outer levels for worker annotations
+  const workerFiles = (inner._workerFiles ?? outer._workerFiles) as Array<{ src: string; dest: string }> | undefined;
+  const workerProcId = (inner._workerProcessId ?? outer._workerProcessId) as string | undefined;
   if (!Array.isArray(workerFiles) || !workerProcId || workerFiles.length === 0) {
     return rawResult;
   }
@@ -178,42 +179,43 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
   const protocol = 'http';
   const baseUrl = `${protocol}://${workerHost}:${workerPort}`;
 
-  // Download each file
-  for (const relPath of workerFiles) {
+  // Download each file (entries are { src, dest } objects)
+  for (const entry of workerFiles) {
+    const src = entry.src;
+    const dest = entry.dest;
     try {
-      const url = `${baseUrl}/api/files?path=${encodeURIComponent(relPath)}`;
+      const url = `${baseUrl}/api/files?path=${encodeURIComponent(src)}`;
       const headers: Record<string, string> = {};
       if (workerToken) headers['Authorization'] = `Bearer ${workerToken}`;
 
       const resp = await fetch(url, { headers });
       if (!resp.ok) {
-        log('warn', `Failed to download worker file: ${relPath}`, { status: resp.status });
+        log('warn', `Failed to download worker file: ${src}`, { status: resp.status });
         continue;
       }
 
-      const destPath = resolve(PATHS.workspace, relPath);
+      const destPath = resolve(PATHS.workspace, dest);
       // Path traversal protection: ensure destination stays within workspace
       if (!destPath.startsWith(resolve(PATHS.workspace) + '/')) {
-        log('warn', `Worker file path traversal blocked: ${relPath}`);
+        log('warn', `Worker file path traversal blocked: ${dest}`);
         continue;
       }
       await mkdir(dirname(destPath), { recursive: true });
       const buffer = Buffer.from(await resp.arrayBuffer());
       await fsWriteFile(destPath, buffer);
-      log('info', `Downloaded worker file: ${relPath}`, { destPath });
+      log('info', `Downloaded worker file: ${src} → ${dest}`, { destPath });
     } catch (err) {
-      log('warn', `Failed to download worker file: ${relPath}`, { error: String(err) });
+      log('warn', `Failed to download worker file: ${src}`, { error: String(err) });
     }
   }
 
-  // Strip _workerFiles and _workerProcessId from the result
+  // Strip _workerFiles and _workerProcessId from both levels
+  delete outer._workerFiles;
+  delete outer._workerProcessId;
   if (inner !== outer) {
     delete inner._workerFiles;
     delete inner._workerProcessId;
     outer.stdout = JSON.stringify(inner);
-  } else {
-    delete outer._workerFiles;
-    delete outer._workerProcessId;
   }
   return JSON.stringify(outer);
 }

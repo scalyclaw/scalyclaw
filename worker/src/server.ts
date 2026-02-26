@@ -61,7 +61,8 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
     }
   });
 
-  // GET /api/files — serve a workspace file by relative path
+  // GET /api/files — serve a workspace or skill-dir file by relative path
+  // Paths prefixed with _skills/ are resolved against PATHS.skills; others against PATHS.workspace
   server.get<{ Querystring: { path?: string } }>('/api/files', async (request, reply) => {
     const relPath = request.query.path;
     if (!relPath) {
@@ -69,11 +70,21 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
       return;
     }
 
-    // Path traversal protection: resolved path must stay within workspace
-    const resolved = resolve(PATHS.workspace, relPath);
-    if (!resolved.startsWith(resolve(PATHS.workspace) + '/') && resolved !== resolve(PATHS.workspace)) {
-      reply.status(403).send({ error: 'Path traversal blocked' });
-      return;
+    // Route _skills/ paths to PATHS.skills, everything else to PATHS.workspace
+    let resolved: string;
+    if (relPath.startsWith('_skills/')) {
+      const skillRelPath = relPath.slice('_skills/'.length);
+      resolved = resolve(PATHS.skills, skillRelPath);
+      if (!resolved.startsWith(resolve(PATHS.skills) + '/')) {
+        reply.status(403).send({ error: 'Path traversal blocked' });
+        return;
+      }
+    } else {
+      resolved = resolve(PATHS.workspace, relPath);
+      if (!resolved.startsWith(resolve(PATHS.workspace) + '/') && resolved !== resolve(PATHS.workspace)) {
+        reply.status(403).send({ error: 'Path traversal blocked' });
+        return;
+      }
     }
 
     try {
