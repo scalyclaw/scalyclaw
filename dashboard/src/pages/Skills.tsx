@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
-import { Plus, Trash2, FileText } from 'lucide-react';
+import { Plus, Trash2, FileText, Download } from 'lucide-react';
 import { toast } from 'sonner';
-import { getSkills, deleteSkill, toggleSkill, uploadSkillZip, getSkillReadme, updateSkillReadme } from '@/lib/api';
+import { getSkills, deleteSkill, toggleSkill, uploadSkillZip, downloadSkillZip, getSkillReadme, updateSkillReadme } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +47,7 @@ export default function Skills() {
   // Toggle / delete loading state
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   function resetUpload() {
     setUploadId('');
@@ -117,6 +118,18 @@ export default function Skills() {
       toast.error(`Failed to toggle skill: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setTogglingId(null);
+    }
+  }
+
+  async function handleDownload(id: string) {
+    setDownloadingId(id);
+    try {
+      await downloadSkillZip(id);
+      toast.success(`Skill "${id}" downloaded`);
+    } catch (err) {
+      toast.error(`Failed to download skill: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setDownloadingId(null);
     }
   }
 
@@ -221,6 +234,17 @@ export default function Skills() {
                             title="View / Edit SKILL.md"
                           >
                             <FileText className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                        {!builtin && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={downloadingId === id}
+                            onClick={() => handleDownload(id)}
+                            title="Download as zip"
+                          >
+                            <Download className="h-3.5 w-3.5" />
                           </Button>
                         )}
                         {!builtin && (

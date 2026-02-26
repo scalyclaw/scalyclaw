@@ -103,6 +103,25 @@ export async function uploadSkillZip(id: string, file: File): Promise<{ success:
   }
   return res.json();
 }
+export async function downloadSkillZip(id: string): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const res = await fetch(`${BASE}/api/skills/${encodeURIComponent(id)}/zip`, { headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    let message = `HTTP ${res.status}`;
+    try { const json = JSON.parse(body); message = json.error ?? message; } catch {}
+    throw new ApiError(res.status, message);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${id}.zip`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Memory
 export const listMemory = () =>
