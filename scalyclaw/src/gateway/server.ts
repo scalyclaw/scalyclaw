@@ -20,7 +20,7 @@ export async function initGateway(): Promise<FastifyInstance> {
 
   // Rate limiting — only on /api/* routes (not webhooks, /ws, /health)
   await server.register(rateLimit, {
-    max: 100,
+    max: 300,
     timeWindow: '1 minute',
     allowList: (_req: import('fastify').FastifyRequest, _key: string) => {
       const url = _req.url.split('?')[0];
