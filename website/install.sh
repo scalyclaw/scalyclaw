@@ -572,6 +572,8 @@ do_status() {
 # ─── Update ─────────────────────────────────────────────────────────────────
 
 do_update() {
+  local auto_mode="${SCALYCLAW_AUTO_UPDATE:-false}"
+
   header "Updating ScalyClaw"
 
   if [ ! -f "$SCALYCLAW_CONFIG" ] || [ ! -d "$SCALYCLAW_REPO/.git" ]; then
@@ -621,10 +623,12 @@ do_update() {
   printf "  ${DIM}Latest:  %s${NC}\n" "$(git log -1 --format='%h %s' origin/main)"
   echo ""
 
-  read -rp "  Apply update? [Y/n] " confirm < /dev/tty
-  if [[ "$confirm" =~ ^[Nn]$ ]]; then
-    info "Update cancelled."
-    return 0
+  if [ "$auto_mode" = "false" ]; then
+    read -rp "  Apply update? [Y/n] " confirm < /dev/tty
+    if [[ "$confirm" =~ ^[Nn]$ ]]; then
+      info "Update cancelled."
+      return 0
+    fi
   fi
 
   echo ""
@@ -1121,6 +1125,9 @@ case "${1:-}" in
   --update)
     do_update
     ;;
+  --update-auto)
+    SCALYCLAW_AUTO_UPDATE=true do_update
+    ;;
   --uninstall)
     do_uninstall
     ;;
@@ -1135,7 +1142,8 @@ case "${1:-}" in
     echo "  install.sh                Install everything and start all processes"
     echo "  scalyclaw.sh --start      Start all processes (Redis, node, workers, dashboard)"
     echo "  scalyclaw.sh --stop       Stop all processes"
-    echo "  scalyclaw.sh --update     Pull latest changes, rebuild & restart (keeps data)"
+    echo "  scalyclaw.sh --update      Pull latest changes, rebuild & restart (keeps data)"
+    echo "  scalyclaw.sh --update-auto Same as --update but skips confirmation prompt"
     echo "  scalyclaw.sh --status     Show status of all processes"
     echo "  scalyclaw.sh --uninstall  Remove ScalyClaw completely and clear Redis data"
     echo ""

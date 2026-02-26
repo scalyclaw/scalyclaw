@@ -26,8 +26,8 @@ import { registerProcess, deregisterProcess, processId } from './core/registry.j
 import { disconnectAll as disconnectMcpServers } from './mcp/mcp-manager.js';
 import type { ScalyClawConfig } from './core/config.js';
 import type { Redis } from 'ioredis';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, existsSync } from 'node:fs';
+import { resolve, join } from 'node:path';
 import { hostname } from 'node:os';
 
 async function main(): Promise<void> {
@@ -353,7 +353,7 @@ async function checkRateLimit(channelId: string): Promise<boolean> {
 // ─── Slash commands ───
 
 const KNOWN_COMMANDS = new Set([
-  '/start', '/status', '/help', '/stop', '/cancel', '/clear',
+  '/start', '/status', '/help', '/stop', '/cancel', '/clear', '/update',
   '/reminders', '/tasks', '/skills', '/agents', '/mcp',
   '/models', '/guards', '/config', '/vault', '/memory', '/usage',
 ]);
@@ -414,6 +414,52 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     invalidatePromptCache();
     await sendToChannel(channelId, 'Session cleared.');
     log('info', 'Session cleared', { channelId });
+    return;
+  }
+
+  // ─── /update — check for updates and apply ───
+  if (trimmed === '/update') {
+    const repoDir = join(PATHS.base, 'repo');
+    const scriptPath = join(PATHS.base, 'scalyclaw.sh');
+
+    if (!existsSync(scriptPath) || !existsSync(join(repoDir, '.git'))) {
+      await sendToChannel(channelId, 'Update not available — ScalyClaw was not installed via the standard installer.');
+      return;
+    }
+
+    try {
+      const { execSync } = await import('node:child_process');
+
+      try {
+        execSync('git fetch origin main --quiet', { cwd: repoDir, timeout: 15_000, stdio: 'pipe' });
+      } catch {
+        await sendToChannel(channelId, 'Failed to check for updates. Check your internet connection.');
+        return;
+      }
+
+      const localHead = execSync('git rev-parse HEAD', { cwd: repoDir, encoding: 'utf-8' }).trim();
+      const remoteHead = execSync('git rev-parse origin/main', { cwd: repoDir, encoding: 'utf-8' }).trim();
+
+      if (localHead === remoteHead) {
+        const current = execSync('git log -1 --format="%h %s"', { cwd: repoDir, encoding: 'utf-8' }).trim();
+        await sendToChannel(channelId, `Already up to date. Current: \`${current}\``);
+        return;
+      }
+
+      const count = execSync('git rev-list --count HEAD..origin/main', { cwd: repoDir, encoding: 'utf-8' }).trim();
+      await sendToChannel(channelId, `${count} update(s) available. Updating now — I'll be back in a moment.`);
+
+      const { spawn } = await import('node:child_process');
+      const child = spawn(scriptPath, ['--update-auto'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      child.unref();
+      log('info', 'Update process spawned', { pid: child.pid });
+    } catch (err) {
+      log('error', 'Update check failed', { error: String(err) });
+      await sendToChannel(channelId, 'Failed to check for updates. Check logs for details.');
+    }
     return;
   }
 
