@@ -583,6 +583,30 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
       required: ['path'],
     },
   },
+  {
+    name: 'rename_file',
+    description: 'Rename or move a file',
+    input_schema: {
+      type: 'object',
+      properties: {
+        src: { type: 'string', description: 'Current file path' },
+        dest: { type: 'string', description: 'New file path' },
+      },
+      required: ['src', 'dest'],
+    },
+  },
+  {
+    name: 'rename_folder',
+    description: 'Rename or move a folder',
+    input_schema: {
+      type: 'object',
+      properties: {
+        src: { type: 'string', description: 'Current folder path' },
+        dest: { type: 'string', description: 'New folder path' },
+      },
+      required: ['src', 'dest'],
+    },
+  },
 
   // ─── Context ───
   {
@@ -617,7 +641,8 @@ const AGENT_DIRECT_NAMES = new Set([
   'memory_store', 'memory_search', 'memory_recall', 'memory_update', 'memory_delete',
   'vault_check', 'vault_list',
   'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
-  'diff_files', 'file_info', 'copy_file', 'copy_folder', 'delete_file', 'delete_folder',
+  'diff_files', 'file_info', 'copy_file', 'copy_folder',
+  'delete_file', 'delete_folder', 'rename_file', 'rename_folder',
 ]);
 
 /** Job tools available to agents (no delegate_agent, no schedule_*) */

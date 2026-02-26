@@ -60,6 +60,8 @@ Most tools are called directly by name. Tools marked with ⚡ are **job tools** 
 | | \`copy_folder\` | Copy a folder recursively (src, dest) |
 | | \`delete_file\` | Delete a file |
 | | \`delete_folder\` | Delete a folder recursively |
+| | \`rename_file\` | Rename or move a file (src, dest) |
+| | \`rename_folder\` | Rename or move a folder (src, dest) |
 | **Commands** | \`execute_command\` ⚡ | Run bash — payload: \`{ command: "...", input?: "stdin" }\` |
 | | \`execute_code\` ⚡ | Run inline code — payload: \`{ language: "python"\\|"javascript"\\|"bash", code: "..." }\` |
 | **Context** | \`compact_context\` | Summarize older messages to free context space |`;

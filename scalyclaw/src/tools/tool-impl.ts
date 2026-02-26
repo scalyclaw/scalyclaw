@@ -7,7 +7,7 @@ import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } f
 import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask } from '../scheduler/scheduler.js';
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
-import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
+import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, loadSkills } from '../skills/skill-loader.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
@@ -1441,6 +1441,58 @@ async function handleDeleteFolder(input: Record<string, unknown>): Promise<strin
   return JSON.stringify({ deleted: true });
 }
 
+async function handleRenameFile(input: Record<string, unknown>): Promise<string> {
+  let src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) {
+    return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  }
+  src = enforcePathSuffix(src);
+  dest = enforcePathSuffix(dest);
+  log('debug', 'rename_file', { src, dest });
+  await renameWorkspaceFile(src, dest);
+
+  const affected = [src, dest];
+  if (affected.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
+    log('info', 'Skills directory changed — reloading skills');
+    await loadSkills();
+    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+  }
+  if (affected.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
+    log('info', 'Agents directory changed — reloading agents');
+    await loadAllAgents();
+    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
+  }
+
+  return JSON.stringify({ renamed: true });
+}
+
+async function handleRenameFolder(input: Record<string, unknown>): Promise<string> {
+  let src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) {
+    return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  }
+  src = enforcePathSuffix(src);
+  dest = enforcePathSuffix(dest);
+  log('debug', 'rename_folder', { src, dest });
+  await renameWorkspaceFolder(src, dest);
+
+  const affected = [src, dest];
+  if (affected.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
+    log('info', 'Skills directory changed — reloading skills');
+    await loadSkills();
+    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+  }
+  if (affected.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
+    log('info', 'Agents directory changed — reloading agents');
+    await loadAllAgents();
+    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
+  }
+
+  return JSON.stringify({ renamed: true });
+}
+
 // ─── Context ───
 
 async function handleCompactContext(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
@@ -1658,5 +1710,7 @@ registerTool('copy_file', handleCopyFile);
 registerTool('copy_folder', handleCopyFolder);
 registerTool('delete_file', handleDeleteFile);
 registerTool('delete_folder', handleDeleteFolder);
+registerTool('rename_file', handleRenameFile);
+registerTool('rename_folder', handleRenameFolder);
 // Context
 registerTool('compact_context', handleCompactContext);

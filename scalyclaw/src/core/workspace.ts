@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, stat, cp, readdir, rm, unlink } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat, cp, readdir, rm, unlink, rename } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { PATHS } from './paths.js';
 import { log } from './logger.js';
@@ -232,4 +232,24 @@ export async function deleteWorkspaceFolder(path: string): Promise<void> {
   }
   await rm(fullPath, { recursive: true, force: true });
   log('debug', 'Folder deleted', { path, fullPath });
+}
+
+export async function renameWorkspaceFile(src: string, dest: string): Promise<void> {
+  const srcPath = resolveFilePath(src);
+  const destPath = resolveFilePath(dest);
+  await mkdir(dirname(destPath), { recursive: true });
+  await rename(srcPath, destPath);
+  log('debug', 'File renamed', { src, dest });
+}
+
+export async function renameWorkspaceFolder(src: string, dest: string): Promise<void> {
+  const srcPath = resolveFilePath(src);
+  const destPath = resolveFilePath(dest);
+  const st = await stat(srcPath);
+  if (!st.isDirectory()) {
+    throw new Error(`Not a directory: ${src}`);
+  }
+  await mkdir(dirname(destPath), { recursive: true });
+  await rename(srcPath, destPath);
+  log('debug', 'Folder renamed', { src, dest });
 }
