@@ -162,7 +162,7 @@ install_redis() {
   fi
 
   # Build from source — no root required
-  info "Building Redis from source (no root needed)..."
+  info "Installing Redis from release (no root needed)..."
 
   local build_dir
   build_dir=$(mktemp -d)
