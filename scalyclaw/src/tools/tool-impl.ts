@@ -8,7 +8,7 @@ import { createReminder, createRecurrentReminder, createTask, createRecurrentTas
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
-import { getAllSkills, loadSkills } from '../skills/skill-loader.js';
+import { getAllSkills, loadSkills, deleteSkill } from '../skills/skill-loader.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
@@ -942,6 +942,28 @@ async function handleToggleSkill(input: Record<string, unknown>): Promise<string
   return JSON.stringify({ toggled: true, id, enabled });
 }
 
+async function handleDeleteSkill(input: Record<string, unknown>): Promise<string> {
+  const id = input.id as string;
+  if (!id) return JSON.stringify({ error: 'Missing required field: id' });
+
+  log('debug', 'delete_skill', { id });
+
+  try {
+    await deleteSkill(id);
+
+    // Remove from config
+    const config = getConfig();
+    config.skills = config.skills.filter(s => s.id !== id);
+    await saveConfig(config);
+
+    await publishSkillReload().catch(err => log('warn', 'Failed to publish skill reload', { error: String(err) }));
+    return JSON.stringify({ deleted: true, id });
+  } catch (err) {
+    log('error', 'delete_skill failed', { error: String(err) });
+    return JSON.stringify({ error: `Failed to delete skill: ${String(err)}` });
+  }
+}
+
 // ─── Agent Management (extended) ───
 
 async function handleToggleAgent(input: Record<string, unknown>): Promise<string> {
@@ -1701,6 +1723,7 @@ registerTool('toggle_model', handleToggleModel);
 // Skill management
 registerTool('list_skills', handleListSkills);
 registerTool('toggle_skill', handleToggleSkill);
+registerTool('delete_skill', handleDeleteSkill);
 // Agent management (extended)
 registerTool('toggle_agent', handleToggleAgent);
 registerTool('set_agent_models', handleSetAgentModels);

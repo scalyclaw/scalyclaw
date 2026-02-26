@@ -341,6 +341,17 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
       required: ['id', 'enabled'],
     },
   },
+  {
+    name: 'delete_skill',
+    description: 'Delete a skill by ID',
+    input_schema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', description: 'Skill ID to delete' },
+      },
+      required: ['id'],
+    },
+  },
 
   // ─── Guards ───
   {

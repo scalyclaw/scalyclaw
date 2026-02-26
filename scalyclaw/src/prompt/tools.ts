@@ -37,6 +37,7 @@ Most tools are called directly by name. Tools marked with ⚡ are **job tools** 
 | | \`toggle_model\` | Enable/disable a model |
 | **Skills** | \`list_skills\` | List installed skills |
 | | \`toggle_skill\` | Enable/disable a skill |
+| | \`delete_skill\` | Delete a skill by ID |
 | | \`execute_skill\` ⚡ | Run a skill — payload: \`{ skillId: "skill-id", input: "text or JSON string" }\` |
 | **Guards** | \`list_guards\` | List guard configuration |
 | | \`toggle_guard\` | Enable/disable a guard (message, skill, or agent) |
