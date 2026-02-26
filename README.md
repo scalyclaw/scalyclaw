@@ -40,6 +40,20 @@ ScalyClaw is a **self-hosted AI assistant platform** that connects to all your m
 
 ---
 
+## 🏗️ Architecture
+
+![Architecture](screenshots/architecture.png)
+
+| Process | Role | Scalable |
+|---|---|---|
+| 🧠 **Node** | Orchestrator — channels, LLM loop, guards, memory, agents, scheduling | Singleton |
+| ⚡ **Worker** | Execution — code, commands, skills via BullMQ | Horizontally |
+| 📊 **Dashboard** | Web UI — monitoring, config, chat | — |
+
+Workers are independently deployable. They share nothing with the node except Redis — no shared filesystem required.
+
+---
+
 ## 📊 Dashboard
 
 <div align="center">
@@ -128,20 +142,6 @@ bun run scalyclaw:worker start --name worker1
 # 📊 Dashboard (separate terminal)
 bun run scalyclaw:dashboard start
 ```
-
----
-
-## 🏗️ Architecture
-
-![Architecture](screenshots/architecture.png)
-
-| Process | Role | Scalable |
-|---|---|---|
-| 🧠 **Node** | Orchestrator — channels, LLM loop, guards, memory, agents, scheduling | Singleton |
-| ⚡ **Worker** | Execution — code, commands, skills via BullMQ | Horizontally |
-| 📊 **Dashboard** | Web UI — monitoring, config, chat | — |
-
-Workers are independently deployable. They share nothing with the node except Redis — no shared filesystem required.
 
 ---
 
