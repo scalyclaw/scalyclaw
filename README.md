@@ -110,7 +110,7 @@ Workers are independently deployable. They share nothing with the node except Re
 Everything — Bun, Redis, node, 3 workers, dashboard — installed and running in one command:
 
 ```bash
-curl -fsSL https://scalyclaw.netlify.app/install.sh | sh
+curl -fsSL https://scalyclaw.com/install.sh | sh
 ```
 
 Manage your installation:

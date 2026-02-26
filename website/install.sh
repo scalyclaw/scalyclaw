@@ -5,7 +5,7 @@ set -euo pipefail
 # ScalyClaw — One-command installer / manager
 #
 # Usage:
-#   curl -fsSL https://scalyclaw.netlify.app/install.sh | bash
+#   curl -fsSL https://scalyclaw.com/install.sh | bash
 #   ~/.scalyclaw/scalyclaw.sh --stop                               # stop all
 #   ~/.scalyclaw/scalyclaw.sh --start                              # start all
 #   ~/.scalyclaw/scalyclaw.sh --status                             # show status

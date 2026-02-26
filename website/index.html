@@ -1334,7 +1334,7 @@
             </div>
           </div>
           <div class="install-cmd" id="installCmd" style="display:none">
-            <span class="prompt">$</span> curl -fsSL https://scalyclaw.netlify.app/install.sh | bash
+            <span class="prompt">$</span> curl -fsSL https://scalyclaw.com/install.sh | bash
           </div>
           <button class="install-copy-btn" id="installCopy" onclick="copyInstall()" title="Copy to clipboard" style="display:none">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
@@ -1927,9 +1927,9 @@ You remember everything about your user.
   <script>
     // Install tab switching & copy
     const installCmds = {
-      macos:   'curl -fsSL https://scalyclaw.netlify.app/install.sh | bash',
-      linux:   'curl -fsSL https://scalyclaw.netlify.app/install.sh | bash',
-      windows: 'wsl -e bash -c "curl -fsSL https://scalyclaw.netlify.app/install.sh | bash"',
+      macos:   'curl -fsSL https://scalyclaw.com/install.sh | bash',
+      linux:   'curl -fsSL https://scalyclaw.com/install.sh | bash',
+      windows: 'wsl -e bash -c "curl -fsSL https://scalyclaw.com/install.sh | bash"',
     };
 
     function switchInstall(platform) {
