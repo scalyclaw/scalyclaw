@@ -48,6 +48,7 @@ Most tools are called directly by name. Tools marked with ⚡ are **job tools** 
 | | \`pause_queue\` | Pause a queue |
 | | \`resume_queue\` | Resume a paused queue |
 | | \`clean_queue\` | Clean completed/failed jobs |
+| | \`stop_job\` | Stop a running or pending job by ID |
 | **Processes** | \`list_processes\` | List registered processes |
 | **File I/O** | \`read_file\` | Read entire file content |
 | | \`read_file_lines\` | Read a line range (1-indexed) |

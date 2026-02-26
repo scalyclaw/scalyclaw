@@ -356,8 +356,29 @@ async function handleListActiveJobs(input: Record<string, unknown>): Promise<str
   return JSON.stringify({ jobs });
 }
 
+async function handleStopJob(input: Record<string, unknown>): Promise<string> {
+  const jobId = input.jobId as string;
+  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
+
+  log('debug', 'stop_job', { jobId });
+
+  const { getJobStatus } = await import('../queue/queue.js');
+  const info = await getJobStatus(jobId);
+  if (info.state === 'not_found') {
+    return JSON.stringify({ error: `Job "${jobId}" not found`, jobId });
+  }
+
+  if (info.state === 'completed' || info.state === 'failed') {
+    return JSON.stringify({ stopped: false, jobId, reason: `Job already in terminal state: ${info.state}` });
+  }
+
+  await requestJobCancel(jobId);
+  log('info', 'Job stop requested', { jobId, previousState: info.state });
+  return JSON.stringify({ stopped: true, jobId, previousState: info.state });
+}
+
 /** Meta tools that always pass through — infrastructure, not selectable */
-const META_TOOLS = new Set(['submit_job', 'submit_parallel_jobs', 'get_job', 'list_active_jobs']);
+const META_TOOLS = new Set(['submit_job', 'submit_parallel_jobs', 'get_job', 'list_active_jobs', 'stop_job']);
 
 /** Execute an LLM-facing tool (direct dispatch + meta tools) */
 export async function executeAssistantTool(
@@ -405,6 +426,7 @@ export async function executeAssistantTool(
     case 'submit_parallel_jobs':    return await handleSubmitParallelJobs(input, ctx);
     case 'get_job':                 return await handleGetJobInfo(input);
     case 'list_active_jobs':        return await handleListActiveJobs(input);
+    case 'stop_job':                return await handleStopJob(input);
     default:
       return JSON.stringify({ error: `Unknown tool: ${toolName}` });
   }

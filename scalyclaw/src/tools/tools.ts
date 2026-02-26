@@ -732,6 +732,17 @@ function buildToolDefs(): ToolDefinition[] {
         },
       },
     },
+    {
+      name: 'stop_job',
+      description: 'Stop a running or pending job by requesting cancellation. Use when a job is stuck, no longer needed, or needs to be retried differently.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          jobId: { type: 'string', description: 'The job ID to stop' },
+        },
+        required: ['jobId'],
+      },
+    },
   ];
 }
 
@@ -819,6 +830,17 @@ export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: stri
           status: { type: 'string', enum: ['waiting', 'active', 'completed', 'failed', 'delayed'], description: 'Optional status filter' },
           limit: { type: 'number', description: 'Max jobs to return (default 20)' },
         },
+      },
+    },
+    {
+      name: 'stop_job',
+      description: 'Stop a running or pending job by requesting cancellation. Use when a job is stuck, no longer needed, or needs to be retried differently.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          jobId: { type: 'string', description: 'The job ID to stop' },
+        },
+        required: ['jobId'],
       },
     },
   );
