@@ -110,7 +110,7 @@
 
         <h3>Worker</h3>
 
-        <p>Commands for worker processes — stateless BullMQ consumers that execute code, run skills, invoke agents, and forward MCP tool calls.</p>
+        <p>Commands for worker processes — stateless BullMQ consumers that execute code, run skills, and forward MCP tool calls.</p>
 
         <h4><code>scalyclaw worker start</code></h4>
         <p>Start a worker process. Multiple workers can run simultaneously against the same Redis instance; BullMQ distributes jobs across them automatically. Use <code>--concurrency</code> to control how many jobs a single worker processes in parallel.</p>
@@ -134,7 +134,7 @@
         </div>
 
         <h4><code>scalyclaw worker status</code></h4>
-        <p>Show worker health and queue statistics: active jobs, waiting jobs, failed jobs, and throughput for each BullMQ queue (<code>tools</code>, <code>agents</code>, <code>scheduler</code>).</p>
+        <p>Show worker health and queue statistics: active jobs, waiting jobs, failed jobs, and throughput for the <code>scalyclaw-tools</code> BullMQ queue.</p>
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">bash</span>
@@ -195,7 +195,7 @@
             <tr>
               <td><code>--port &lt;number&gt;</code></td>
               <td>Varies per command</td>
-              <td>Override the default port. Applies to <code>dashboard start</code> (default <code>3000</code>).</td>
+              <td>Override the default port. Applies to <code>dashboard start</code> (default <code>4173</code>).</td>
             </tr>
             <tr>
               <td><code>--concurrency &lt;number&gt;</code></td>

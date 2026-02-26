@@ -235,6 +235,16 @@
               <td>Enable or disable a specific skill.</td>
               <td><code>skill</code> — skill name<br /><code>enabled</code> — boolean</td>
             </tr>
+            <tr>
+              <td><code>delete_skill</code></td>
+              <td>Delete a skill by ID. Removes the skill directory from disk and unregisters it from config.</td>
+              <td><code>id</code> — skill ID to delete</td>
+            </tr>
+            <tr>
+              <td><code>register_skill</code></td>
+              <td>Register a skill after writing its files. Loads from disk, runs the security guard, adds to config, and notifies workers.</td>
+              <td><code>id</code> — skill ID (e.g. <code>"weather-skill"</code>)</td>
+            </tr>
           </tbody>
         </table>
 
@@ -420,7 +430,7 @@
             </tr>
             <tr>
               <td><code>execute_skill</code></td>
-              <td>Invoke a deployed skill by name. Skills are reusable TypeScript/JavaScript modules stored in Redis and executed on the worker.</td>
+              <td>Invoke a deployed skill by name. Skills are executable packages stored on disk in the <code>skills/</code> directory and executed on the worker.</td>
               <td><code>scalyclaw-tools</code></td>
               <td><code>skill</code> — name of the skill to invoke<br /><code>parameters</code> — arbitrary object passed as input to the skill</td>
             </tr>

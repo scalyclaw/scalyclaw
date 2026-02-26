@@ -114,7 +114,7 @@ pays attention, and gives a damn.
 
         <h2 id="how-it-works">How It Works</h2>
 
-        <p>The <code>buildSystemPrompt()</code> function in <code>scalyclaw/src/prompt/builder.ts</code> assembles the full system prompt on every LLM call. It combines three sources in order:</p>
+        <p>The <code>buildSystemPrompt()</code> function in <code>scalyclaw/src/orchestrator/prompt.ts</code> assembles the full system prompt on every LLM call. It combines three sources in order:</p>
 
         <ol>
           <li><strong>Disk files</strong> — <code>mind/IDENTITY.md</code>, <code>mind/SOUL.md</code>, and <code>mind/USER.md</code> are read from disk and prepended verbatim. These are the only user-editable parts of the prompt.</li>
@@ -129,7 +129,7 @@ pays attention, and gives a damn.
             <span class="code-block-lang">typescript</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre><span class="cmt">// scalyclaw/src/prompt/builder.ts (simplified)</span>
+          <pre><span class="cmt">// scalyclaw/src/orchestrator/prompt.ts (simplified)</span>
 <span class="kw">export async function</span> <span class="fn">buildSystemPrompt</span>(ctx: <span class="typ">PromptContext</span>): <span class="typ">Promise</span>&lt;<span class="typ">string</span>&gt; {
   <span class="cmt">// 1. Disk files — user-editable personality</span>
   <span class="kw">const</span> identity = <span class="kw">await</span> <span class="fn">readMindFile</span>(<span class="str">"IDENTITY.md"</span>);
@@ -160,7 +160,7 @@ pays attention, and gives a damn.
 
         <h3>Dashboard Mind Page</h3>
 
-        <p>Open the dashboard at <code>http://localhost:3000</code> and navigate to <strong>Mind</strong>. The page shows a rich text editor for each of the three files. Changes are saved to disk immediately when you click <strong>Save</strong>. This is the recommended approach — the editor validates that files are non-empty before saving and shows a diff of what changed. Note that dashboard edits do not automatically invalidate the prompt cache; run <code>/clear</code> in chat to pick up the changes immediately.</p>
+        <p>Open the dashboard at <code>http://localhost:4173</code> and navigate to <strong>Mind</strong>. The page shows a rich text editor for each of the three files. Changes are saved to disk immediately when you click <strong>Save</strong>. This is the recommended approach — the editor validates that files are non-empty before saving and shows a diff of what changed. Note that dashboard edits do not automatically invalidate the prompt cache; run <code>/clear</code> in chat to pick up the changes immediately.</p>
 
         <h3>Direct File Edit</h3>
 

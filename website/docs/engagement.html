@@ -20,7 +20,7 @@
 
         <h2 id="proactive">Proactive System</h2>
 
-        <p>The proactive system monitors for triggers and sends messages to your preferred channel without you having to ask first. Jobs are dispatched through the BullMQ <strong>proactive queue</strong>, processed by the same worker that handles all other queue work.</p>
+        <p>The proactive system monitors for triggers and sends messages to your preferred channel without you having to ask first. Jobs are dispatched through the BullMQ <strong>proactive queue</strong>, processed by the Node's in-process worker (not the external worker process).</p>
 
         <p>Before sending anything, the system checks two conditions:</p>
 

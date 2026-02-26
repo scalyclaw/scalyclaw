@@ -23,8 +23,8 @@
         <table>
           <thead><tr><th>Dependency</th><th>Version</th><th>Purpose</th></tr></thead>
           <tbody>
-            <tr><td><strong>Bun</strong></td><td>&ge; 1.1</td><td>JavaScript runtime for all ScalyClaw processes</td></tr>
-            <tr><td><strong>Redis</strong></td><td>&ge; 7.0</td><td>Message bus, session store, config, vault, pub/sub</td></tr>
+            <tr><td><strong>Bun</strong></td><td>latest</td><td>JavaScript runtime for all ScalyClaw processes</td></tr>
+            <tr><td><strong>Redis</strong></td><td>&ge; 6.2</td><td>Message bus, session store, config, vault, pub/sub</td></tr>
             <tr><td><strong>Git</strong></td><td>any</td><td>Cloning the repository</td></tr>
           </tbody>
         </table>
@@ -70,7 +70,7 @@ brew install redis && brew services start redis
 sudo apt install redis-server && sudo systemctl enable redis-server
 
 <span class="cmt"># Docker</span>
-docker run -d --name redis -p 6379:6379 redis:7-alpine</pre>
+docker run -d --name redis -p 6379:6379 redis:6-alpine</pre>
         </div>
 
         <h2 id="installation">Installation</h2>
@@ -81,10 +81,10 @@ docker run -d --name redis -p 6379:6379 redis:7-alpine</pre>
             <span class="code-block-lang">bash</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre>curl -fsSL https://scalyclaw.com/install.sh | bash</pre>
+          <pre>curl -fsSL https://scalyclaw.com/install.sh | sh</pre>
         </div>
 
-        <p>This downloads the latest release, installs it to <code>~/.scalyclaw</code>, and adds the <code>scalyclaw</code> binary to your PATH.</p>
+        <p>This installs Bun, Redis, clones the repo, builds everything, seeds the default config in Redis, and starts all processes (node, 3 workers, dashboard). Everything lives under <code>~/.scalyclaw</code>.</p>
 
         <h3>Manual Install (from source)</h3>
         <div class="code-block">
@@ -111,7 +111,8 @@ bun run build</pre>
             <span class="code-block-lang">bash</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre>scalyclaw setup</pre>
+          <pre><span class="cmt"># From source — run the CLI setup</span>
+bun run scalyclaw:node setup</pre>
         </div>
         <p>The wizard walks you through:</p>
         <ul>
@@ -128,25 +129,26 @@ bun run build</pre>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
           <pre><span class="cmt"># Start the node (brain)</span>
-scalyclaw node start
+bun run scalyclaw:node start
 
 <span class="cmt"># Start a worker (execution engine)</span>
-scalyclaw worker start
+bun run scalyclaw:worker setup --name worker1
+bun run scalyclaw:worker start --name worker1
 
 <span class="cmt"># Start the dashboard</span>
-scalyclaw dashboard start</pre>
+bun run scalyclaw:dashboard start</pre>
         </div>
 
         <div class="callout callout-tip">
           <div class="callout-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            Tip
+            Quick Install
           </div>
-          <p>You can run all three in one terminal using <code>scalyclaw start</code> which launches node + worker + dashboard together.</p>
+          <p>If you used the one-line installer, everything is already running. Manage it with <code>~/.scalyclaw/scalyclaw.sh --stop</code>, <code>--start</code>, <code>--update</code>, <code>--status</code>, or <code>--uninstall</code>.</p>
         </div>
 
         <h3>3. Open the Dashboard</h3>
-        <p>Navigate to <code>http://localhost:3000</code> in your browser. From here you can:</p>
+        <p>Navigate to <code>http://localhost:4173</code> in your browser. From here you can:</p>
         <ul>
           <li>Configure your first messaging channel (e.g., Telegram)</li>
           <li>Add LLM models and set priorities</li>
@@ -175,11 +177,10 @@ scalyclaw dashboard start</pre>
 │       ├── <span class="dir">channels/</span>   <span class="cmt"># Telegram, Discord, Slack, etc.</span>
 │       ├── <span class="dir">orchestrator/</span> <span class="cmt"># Prompt building, LLM routing</span>
 │       ├── <span class="dir">guards/</span>     <span class="cmt"># Echo, content, skill guards</span>
-│       └── <span class="dir">queues/</span>     <span class="cmt"># BullMQ queue producers</span>
-├── <span class="dir">worker/</span>           <span class="cmt"># Worker — stateless BullMQ consumers</span>
-│   └── <span class="dir">src/</span>
-│       ├── <span class="dir">processors/</span> <span class="cmt"># Message, tool, agent, system processors</span>
-│       └── <span class="dir">executors/</span>  <span class="cmt"># Code runners (JS, Python, Bash)</span>
+│       └── <span class="dir">queue/</span>      <span class="cmt"># BullMQ queue producers</span>
+├── <span class="dir">worker/</span>           <span class="cmt"># Worker — stateless BullMQ consumer (tools queue only)</span>
+│   └── <span class="dir">src/</span>          <span class="cmt"># tool-processor, execute-skill, execute-code, execute-command</span>
+├── <span class="dir">cli/</span>              <span class="cmt"># CLI — setup wizards, process management</span>
 ├── <span class="dir">dashboard/</span>        <span class="cmt"># Dashboard — React 19 SPA</span>
 │   └── <span class="dir">src/</span>
 │       ├── <span class="dir">pages/</span>     <span class="cmt"># admin pages</span>

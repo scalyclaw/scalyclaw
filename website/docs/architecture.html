@@ -71,7 +71,7 @@
           <span class="arrow">↓</span>                  <span class="arrow">↓</span>               <span class="arrow">↓</span>        <span class="arrow">↓</span>
                    <span class="node">NODE  (channel adapters → orchestrator → LLM)</span>
                              <span class="arrow">↕  Redis (BullMQ + pub/sub)</span>
-                   <span class="node">WORKER  (message · agents · tools · scheduler)</span>
+                   <span class="node">WORKER  (tools queue — code, skills, commands)</span>
                              <span class="arrow">↕  Redis (config + WebSocket events)</span>
                    <span class="node">DASHBOARD  (React 19 SPA · real-time WebSocket)</span>
         </div>

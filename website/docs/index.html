@@ -55,7 +55,7 @@
           </div>
           <div class="docs-feature">
             <h4>Defense in Depth</h4>
-            <p>Four security layers — echo guard, content guard, skill guard, and vault — all fail-closed by default.</p>
+            <p>Three guard types — message (echo + content), skill, and agent — all fail-closed by default.</p>
           </div>
         </div>
 
@@ -80,19 +80,11 @@
             <span class="code-block-lang">bash</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre><span class="cmt"># Install ScalyClaw</span>
-curl -fsSL https://scalyclaw.com/install.sh | bash
-
-<span class="cmt"># Run the setup wizard</span>
-scalyclaw setup
-
-<span class="cmt"># Start everything</span>
-scalyclaw node start
-scalyclaw worker start
-scalyclaw dashboard start</pre>
+          <pre><span class="cmt"># Install ScalyClaw (installs everything and starts automatically)</span>
+curl -fsSL https://scalyclaw.com/install.sh | sh</pre>
         </div>
 
-        <p>After setup, open the dashboard at <code>http://localhost:3000</code>, configure a channel, and send your first message.</p>
+        <p>After install, open the dashboard at <code>http://localhost:4173</code>, configure a channel, and send your first message.</p>
 
         <h2 id="explore">Explore the Docs</h2>
 
