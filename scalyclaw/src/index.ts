@@ -154,6 +154,22 @@ async function startSystem(): Promise<void> {
 
   await drainProgressBuffers(redis);
 
+  // ── Post-update notification ──
+  try {
+    const updateNotify = await redis.get('scalyclaw:update:notify');
+    if (updateNotify) {
+      await redis.del('scalyclaw:update:notify');
+      const { channelId: notifyChannel } = JSON.parse(updateNotify);
+      if (notifyChannel) {
+        setTimeout(() => {
+          sendToChannel(notifyChannel, 'Update complete! I\'m back.').catch(() => {});
+        }, 3000);
+      }
+    }
+  } catch (err) {
+    log('warn', 'Failed to send post-update notification', { error: String(err) });
+  }
+
   try {
     await registerProactiveCheck();
   } catch (err) {
@@ -336,6 +352,38 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     return;
   }
 
+  // ─── Update confirmation intercept ───
+  {
+    const redis = getRedis();
+    const awaitingKey = `scalyclaw:update:awaiting:${channelId}`;
+    const awaitingRaw = await redis.get(awaitingKey);
+    if (awaitingRaw) {
+      await redis.del(awaitingKey);
+      const lower = trimmed.toLowerCase();
+      if (lower === 'yes' || lower === 'y' || lower === 'confirm') {
+        try {
+          const { repoDir, scriptPath } = JSON.parse(awaitingRaw);
+          await redis.set('scalyclaw:update:notify', JSON.stringify({ channelId, timestamp: Date.now() }), 'EX', 300);
+          await sendToChannel(channelId, 'Updating now — I\'ll be back in a moment.');
+          const { spawn } = await import('node:child_process');
+          const child = spawn(scriptPath, ['--update-auto'], {
+            cwd: repoDir,
+            detached: true,
+            stdio: 'ignore',
+          });
+          child.unref();
+          log('info', 'Update process spawned (confirmed)', { pid: child.pid });
+        } catch (err) {
+          log('error', 'Failed to apply update', { error: String(err) });
+          await sendToChannel(channelId, 'Failed to apply update. Check logs for details.');
+        }
+      } else {
+        await sendToChannel(channelId, 'Update cancelled.');
+      }
+      return;
+    }
+  }
+
   // ─── Typing indicator ───
   sendTypingToChannel(channelId).catch(() => {});
 
@@ -359,7 +407,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     return;
   }
 
-  // ─── /update — check for updates and apply ───
+  // ─── /update — check for updates and ask for confirmation ───
   if (trimmed === '/update') {
     const repoDir = join(PATHS.base, 'repo');
     const scriptPath = join(repoDir, 'website', 'install.sh');
@@ -389,15 +437,17 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
       }
 
       const count = execSync('git rev-list --count HEAD..origin/main', { cwd: repoDir, encoding: 'utf-8' }).trim();
-      await sendToChannel(channelId, `${count} update(s) available. Updating now — I'll be back in a moment.`);
+      const commitLog = execSync('git log --oneline HEAD..origin/main', { cwd: repoDir, encoding: 'utf-8' }).trim();
 
-      const { spawn } = await import('node:child_process');
-      const child = spawn(scriptPath, ['--update-auto'], {
-        detached: true,
-        stdio: 'ignore',
-      });
-      child.unref();
-      log('info', 'Update process spawned', { pid: child.pid });
+      // Store confirmation state in Redis with 120s TTL
+      const redis = getRedis();
+      await redis.set(
+        `scalyclaw:update:awaiting:${channelId}`,
+        JSON.stringify({ repoDir, scriptPath }),
+        'EX', 120,
+      );
+
+      await sendToChannel(channelId, `${count} update(s) available:\n\n\`\`\`\n${commitLog}\n\`\`\`\n\nReply **yes** to update or **no** to cancel.`);
     } catch (err) {
       log('error', 'Update check failed', { error: String(err) });
       await sendToChannel(channelId, 'Failed to check for updates. Check logs for details.');
