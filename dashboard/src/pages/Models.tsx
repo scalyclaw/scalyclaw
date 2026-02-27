@@ -48,10 +48,21 @@ export default function Models() {
   const [showAddEmbedding, setShowAddEmbedding] = useState(false);
   const config = useConfigSection<ModelsConfig>('models');
 
+  /** Remove a provider entry if no remaining models or embedding models use it. */
+  function cleanOrphanedProvider(c: ModelsConfig, providerKey: string) {
+    const usedByModel = c.models.some((m) => m.provider === providerKey);
+    const usedByEmbed = c.embeddingModels.some((m) => m.provider === providerKey);
+    if (!usedByModel && !usedByEmbed) {
+      delete c.providers[providerKey];
+    }
+  }
+
   function removeModel(index: number) {
     const model = config.section?.models[index];
     config.update((c) => {
+      const provider = c.models[index]?.provider;
       c.models.splice(index, 1);
+      if (provider) cleanOrphanedProvider(c, provider);
     });
     config.save().then(() => {
       refetch();
@@ -62,7 +73,9 @@ export default function Models() {
   function removeEmbeddingModel(index: number) {
     const model = config.section?.embeddingModels[index];
     config.update((c) => {
+      const provider = c.embeddingModels[index]?.provider;
       c.embeddingModels.splice(index, 1);
+      if (provider) cleanOrphanedProvider(c, provider);
     });
     config.save().then(() => {
       refetch();

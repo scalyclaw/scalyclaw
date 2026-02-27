@@ -30,6 +30,44 @@ export function registerConfigRoutes(server: FastifyInstance): void {
 
     const current = getConfig();
     const merged = { ...current, ...body };
+
+    // Preserve real secrets when the dashboard sends back redacted '***' values
+    if (merged.models && typeof merged.models === 'object') {
+      const m = merged.models as Record<string, unknown>;
+      const incomingProviders = m.providers as Record<string, Record<string, string>> | undefined;
+      const currentProviders = current.models.providers;
+      if (incomingProviders && currentProviders) {
+        for (const [key, prov] of Object.entries(incomingProviders)) {
+          const orig = currentProviders[key];
+          if (!orig) continue;
+          if (prov.apiKey === '***') prov.apiKey = orig.apiKey ?? '';
+          if (prov.baseUrl === '***') prov.baseUrl = orig.baseUrl ?? '';
+        }
+      }
+    }
+
+    // Preserve real MCP server secrets when redacted
+    if (merged.mcpServers && typeof merged.mcpServers === 'object') {
+      const incoming = merged.mcpServers as Record<string, Record<string, unknown>>;
+      const currentMcp = current.mcpServers;
+      for (const [id, server] of Object.entries(incoming)) {
+        const orig = currentMcp[id];
+        if (!orig) continue;
+        const headers = server.headers as Record<string, string> | undefined;
+        if (headers && orig.headers) {
+          for (const [k, v] of Object.entries(headers)) {
+            if (v === '***') headers[k] = orig.headers[k] ?? '';
+          }
+        }
+        const env = server.env as Record<string, string> | undefined;
+        if (env && orig.env) {
+          for (const [k, v] of Object.entries(env)) {
+            if (v === '***') env[k] = orig.env[k] ?? '';
+          }
+        }
+      }
+    }
+
     await saveConfig(merged as typeof current);
     await publishConfigReload();
     return { updated: true };
