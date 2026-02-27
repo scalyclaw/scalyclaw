@@ -320,7 +320,6 @@ const TOOL_LABELS: Record<string, string> = {
   get_config:     'Checking config',
   update_config:  'Updating config',
   list_queues:    'Checking queues',
-  list_processes: 'Checking processes',
   compact_context:'Compacting context',
 };
 

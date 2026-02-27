@@ -301,7 +301,7 @@ async function checkRateLimit(channelId: string): Promise<boolean> {
 const KNOWN_COMMANDS = new Set([
   '/start', '/status', '/help', '/stop', '/cancel', '/clear', '/update',
   '/reminders', '/tasks', '/skills', '/agents', '/mcp',
-  '/models', '/guards', '/config', '/vault', '/memory', '/usage',
+  '/models', '/guards', '/vault', '/memory', '/usage',
 ]);
 
 // ─── Incoming message handler ───

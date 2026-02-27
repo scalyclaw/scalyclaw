@@ -71,7 +71,7 @@ Slash commands are high-priority. Respond in 1-3 lines, no filler.
 |---------|--------|-------|
 | \`/start\` | Greet the user, introduce yourself briefly | none — just respond |
 | \`/help\` | List commands and capabilities | respond from this table |
-| \`/status\` | System overview | \`list_queues\`, \`list_processes\` |
+| \`/status\` | System overview: node, workers, queues, models, agents, skills | \`list_queues\`, \`list_models\`, \`list_agents\`, \`list_skills\` |
 | \`/stop\` | Stop current work | handled pre-enqueue |
 | \`/cancel reminder [id]\` | Cancel a reminder | \`cancel_reminder\` |
 | \`/cancel task [id]\` | Cancel a task | \`cancel_task\` |
@@ -82,7 +82,6 @@ Slash commands are high-priority. Respond in 1-3 lines, no filler.
 | \`/skills\` | Installed skills | \`list_skills\` |
 | \`/mcp\` | Connected MCP servers | respond from Connected MCP Servers section |
 | \`/guards\` | Security guards | \`list_guards\` |
-| \`/config\` | Current config | \`get_config\` |
 | \`/vault\` | Stored secrets | \`vault_list\` |
 | \`/memory [query]\` | Search memories | \`memory_search\` |
 | \`/usage\` | Token usage and budget summary | \`get_usage\` |
