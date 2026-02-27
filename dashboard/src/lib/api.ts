@@ -165,9 +165,6 @@ export const failJob = (queue: string, id: string) =>
   request<{ failed: boolean }>(`/api/jobs/${encodeURIComponent(queue)}/${encodeURIComponent(id)}/fail`, { method: 'POST' });
 export const completeJob = (queue: string, id: string) =>
   request<{ completed: boolean }>(`/api/jobs/${encodeURIComponent(queue)}/${encodeURIComponent(id)}/complete`, { method: 'POST' });
-export const getPendingMessages = () =>
-  request<{ channels: Array<{ channelId: string; messages: Array<Record<string, unknown>> }> }>('/api/pending');
-
 // Workers
 export const getWorkers = () => request<{ workers: Array<Record<string, unknown>> }>('/api/workers');
 

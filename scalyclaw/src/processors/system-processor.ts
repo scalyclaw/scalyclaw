@@ -4,9 +4,8 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
-import { withSession, heartbeat } from '../session/session.js';
 import { extractMemories } from '../memory/extractor.js';
-import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
+import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
 import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── System queue job dispatcher ───
@@ -52,97 +51,59 @@ async function processScheduledFire(job: Job<ScheduledFireData>): Promise<void> 
 
   log('info', 'Processing scheduled-fire', { jobId: job.id, channelId: targetChannel, type, scheduledJobId });
 
-  // Tasks — full orchestrator LLM loop, no intermediate progress
+  // Tasks — full orchestrator LLM loop
   if (type === 'task' || type === 'recurrent-task') {
-    await withSession(
-      targetChannel,
-      async (sessionId: string) => {
-        startTypingLoop(targetChannel);
-        try {
-          const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
+    startAllTypingLoops();
+    try {
+      const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
 
-          const taskText = task ?? message;
-          storeMessage(targetChannel, 'user', taskText, { source: type, scheduledJobId });
+      const taskText = task ?? message;
+      storeMessage(targetChannel, 'user', taskText, { source: type, scheduledJobId });
 
-          // No-op sendToChannel suppresses intermediate progress
-          const noopSend = async () => {};
+      const noopSend = async () => {};
 
-          const result = await runOrchestrator({
-            channelId: targetChannel,
-            text: taskText,
-            sendToChannel: noopSend,
-            onRoundComplete: async () => {
-              await heartbeat(targetChannel, sessionId, 'PROCESSING');
-            },
-          });
+      const result = await runOrchestrator({
+        channelId: targetChannel,
+        text: taskText,
+        sendToChannel: noopSend,
+      });
 
-          storeMessage(targetChannel, 'assistant', result, { source: type, scheduledJobId });
-          await publishProgress(redis, targetChannel, {
-            jobId: job.id!,
-            type: 'complete',
-            result,
-          });
+      storeMessage(targetChannel, 'assistant', result, { source: type, scheduledJobId });
+      await publishProgress(redis, targetChannel, {
+        jobId: job.id!,
+        type: 'complete',
+        result,
+      });
 
-          // Trigger memory extraction for the task conversation
-          await enqueueJob({
-            name: 'memory-extraction',
-            data: {
-              channelId: targetChannel,
-              texts: [taskText, result],
-            },
-            opts: { attempts: 1 },
-          });
-        } catch (err) {
-          log('error', 'Scheduled-fire task execution failed', { scheduledJobId, error: String(err) });
-          const errorMsg = `Task failed: ${String(err)}`;
-          storeMessage(targetChannel, 'assistant', errorMsg, { source: type, error: true });
-          await publishProgress(redis, targetChannel, {
-            jobId: job.id!,
-            type: 'error',
-            error: errorMsg,
-          });
-        } finally {
-          stopTypingLoop(targetChannel);
-        }
-      },
-      async () => {
-        if (type === 'task') {
-          // One-shot task — throw so BullMQ retries
-          throw new Error('Channel busy — task will retry');
-        }
-        // Recurrent task — skip this occurrence
-        log('info', 'Channel busy — skipping recurrent task', { channelId: targetChannel, scheduledJobId });
-      },
-    );
+      await enqueueJob({
+        name: 'memory-extraction',
+        data: {
+          channelId: targetChannel,
+          texts: [taskText, result],
+        },
+        opts: { attempts: 1 },
+      });
+    } catch (err) {
+      log('error', 'Scheduled-fire task execution failed', { scheduledJobId, error: String(err) });
+      const errorMsg = `Task failed: ${String(err)}`;
+      storeMessage(targetChannel, 'assistant', errorMsg, { source: type, error: true });
+      await publishProgress(redis, targetChannel, {
+        jobId: job.id!,
+        type: 'error',
+        error: errorMsg,
+      });
+    } finally {
+      stopAllTypingLoops();
+    }
   } else {
     // Simple text delivery: reminder, recurrent-reminder
-    await withSession(
-      targetChannel,
-      async () => {
-        storeMessage(targetChannel, 'assistant', message, { source: type, scheduledJobId });
-        await publishProgress(redis, targetChannel, {
-          jobId: job.id!,
-          type: 'complete',
-          result: message,
-        });
-        log('info', 'Scheduled-fire delivered', { channelId: targetChannel, type, scheduledJobId });
-      },
-      async () => {
-        // Channel is busy — push as pending so it gets delivered after the current conversation
-        const pendingKey = `scalyclaw:pending:${targetChannel}`;
-        const pending = JSON.stringify({
-          id: job.id,
-          text: message,
-          type: 'message' as const,
-          priority: 2,
-          enqueuedAt: new Date().toISOString(),
-          source: type,
-          scheduledJobId,
-        });
-        await redis.rpush(pendingKey, pending);
-        log('info', 'Scheduled-fire queued to pending — channel busy', { channelId: targetChannel, scheduledJobId });
-      },
-    );
+    storeMessage(targetChannel, 'assistant', message, { source: type, scheduledJobId });
+    await publishProgress(redis, targetChannel, {
+      jobId: job.id!,
+      type: 'complete',
+      result: message,
+    });
+    log('info', 'Scheduled-fire delivered', { channelId: targetChannel, type, scheduledJobId });
   }
 }
 
@@ -154,22 +115,14 @@ async function processProactiveFire(job: Job<ProactiveFireData>): Promise<void> 
 
   log('info', 'Processing proactive-fire', { jobId: job.id, channelId, triggerType });
 
-  await withSession(
-    channelId,
-    async (_sessionId: string) => {
-      storeMessage(channelId, 'assistant', message, {
-        source: 'proactive',
-        triggerType,
-      });
-      await publishProgress(redis, channelId, {
-        jobId: job.id!,
-        type: 'complete',
-        result: message,
-      });
-      log('info', 'Proactive message sent', { channelId, triggerType });
-    },
-    async () => {
-      log('info', 'Proactive message skipped — channel busy', { channelId });
-    },
-  );
+  storeMessage(channelId, 'assistant', message, {
+    source: 'proactive',
+    triggerType,
+  });
+  await publishProgress(redis, channelId, {
+    jobId: job.id!,
+    type: 'complete',
+    result: message,
+  });
+  log('info', 'Proactive message sent', { channelId, triggerType });
 }

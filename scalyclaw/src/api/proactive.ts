@@ -5,7 +5,6 @@ import { getDb } from '../core/db.js';
 import { processProactiveEngagement } from '../scheduler/proactive.js';
 import { storeMessage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
-import { withSession } from '../session/session.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 
 export function registerProactiveRoutes(server: FastifyInstance): void {
@@ -51,36 +50,22 @@ export function registerProactiveRoutes(server: FastifyInstance): void {
     const results = await processProactiveEngagement();
 
     const delivered: typeof results = [];
-    const skipped: typeof results = [];
 
     for (const result of results) {
-      await withSession(
-        result.channelId,
-        async () => {
-          storeMessage(result.channelId, 'assistant', result.message, {
-            source: 'proactive',
-            triggerType: result.triggerType,
-          });
-          await sendToChannel(result.channelId, result.message);
-          delivered.push(result);
-          log('info', 'Proactive message sent (manual trigger)', {
-            channelId: result.channelId,
-            triggerType: result.triggerType,
-          });
-        },
-        async () => {
-          skipped.push(result);
-          log('info', 'Proactive message skipped — channel busy (manual trigger)', {
-            channelId: result.channelId,
-            triggerType: result.triggerType,
-          });
-        },
-      );
+      storeMessage(result.channelId, 'assistant', result.message, {
+        source: 'proactive',
+        triggerType: result.triggerType,
+      });
+      await sendToChannel(result.channelId, result.message);
+      delivered.push(result);
+      log('info', 'Proactive message sent (manual trigger)', {
+        channelId: result.channelId,
+        triggerType: result.triggerType,
+      });
     }
 
     return {
       triggered: delivered.length,
-      skipped: skipped.length,
       results: delivered.map(r => ({
         channelId: r.channelId,
         triggerType: r.triggerType,

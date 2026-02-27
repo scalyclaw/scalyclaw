@@ -83,11 +83,10 @@ export function registerChatRoutes(server: FastifyInstance): void {
     return { jobId, response: result.text, filePath: result.filePath, caption: result.caption };
   });
 
-  // GET /api/messages — recent message history
-  server.get<{ Querystring: { limit?: string; channelId?: string } }>('/api/messages', async (request) => {
+  // GET /api/messages — recent message history (unified across all channels)
+  server.get<{ Querystring: { limit?: string } }>('/api/messages', async (request) => {
     const limit = Math.min(Number(request.query.limit) || 50, 200);
-    const channelId = request.query.channelId || 'gateway';
-    const messages = getRecentMessages(channelId, limit);
+    const messages = getRecentMessages(limit);
     return { messages };
   });
 

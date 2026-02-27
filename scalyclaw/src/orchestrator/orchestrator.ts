@@ -62,8 +62,8 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     log('debug', 'Auto-recall injected memories', { count: memories.length, topScore: memories[0].score });
   }
 
-  // Load conversation history — channel-isolated (sync SQLite call)
-  const recentMessages = getRecentMessages(input.channelId, 50);
+  // Load unified conversation history (sync SQLite call)
+  const recentMessages = getRecentMessages(50);
   log('debug', 'Loaded conversation history', { channelId: input.channelId, messageCount: recentMessages.length });
 
   const messages: ChatMessage[] = recentMessages.map(m => ({

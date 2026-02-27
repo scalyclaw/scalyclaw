@@ -130,6 +130,20 @@ export function stopTypingLoop(channelId: string): void {
   }
 }
 
+/** Start typing indicator loops on ALL connected adapters. */
+export function startAllTypingLoops(): void {
+  for (const adapter of adapters.values()) {
+    startTypingLoop(adapter.id);
+  }
+}
+
+/** Stop typing indicator loops on ALL connected adapters. */
+export function stopAllTypingLoops(): void {
+  for (const id of activeTypingLoops.keys()) {
+    stopTypingLoop(id);
+  }
+}
+
 /** Send a file to a specific channel */
 export async function sendFileToChannel(channelId: string, filePath: string, caption?: string): Promise<void> {
   const adapter = adapters.get(channelId);

@@ -146,23 +146,22 @@ export function storeMessage(channelId: string, role: string, content: string, m
   return msgId;
 }
 
-export function getRecentMessages(channelId: string, limit: number = 50): Message[] {
+export function getRecentMessages(limit: number = 50): Message[] {
   const d = getDb();
   const messages = d.prepare(
     `SELECT * FROM messages
-     WHERE channel = ?
-       AND (metadata IS NULL OR json_extract(metadata, '$.blocked') IS NOT 1)
+     WHERE (metadata IS NULL OR json_extract(metadata, '$.blocked') IS NOT 1)
        AND (metadata IS NULL OR json_extract(metadata, '$.source') NOT IN ('reminder', 'recurring', 'proactive'))
      ORDER BY id DESC LIMIT ?`
-  ).all(channelId, limit).reverse() as Message[];
-  log('debug', 'Retrieved recent messages', { channelId, requested: limit, returned: messages.length });
+  ).all(limit).reverse() as Message[];
+  log('debug', 'Retrieved recent messages', { requested: limit, returned: messages.length });
   return messages;
 }
 
-export function clearChannelMessages(channelId: string): void {
+export function clearMessages(): void {
   const d = getDb();
-  d.prepare('DELETE FROM messages WHERE channel = ?').run(channelId);
-  log('info', 'Cleared channel messages', { channelId });
+  d.prepare('DELETE FROM messages').run();
+  log('info', 'Cleared all messages');
 }
 
 // ─── Usage helpers ───

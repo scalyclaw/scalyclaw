@@ -137,17 +137,6 @@ export const JOB_QUEUE_MAP: Record<JobName, QueueName> = {
   'proactive-fire':     'scalyclaw-system',
 };
 
-// ─── Pending Message (structured entry for Redis pending list) ───
-
-export interface PendingMessage {
-  id: string;
-  text: string;
-  attachments?: AttachmentData[];
-  type: 'message' | 'command' | 'cancel';
-  priority: number; // 0=cancel, 1=command, 2=message
-  enqueuedAt: string;
-}
-
 // ─── Job Spec ───
 
 export interface JobSpec {

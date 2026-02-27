@@ -4,14 +4,12 @@ import { getRedis, getSubscriber } from '@scalyclaw/shared/core/redis.js';
 import { log, initLogFile } from '@scalyclaw/shared/core/logger.js';
 import { bootstrap } from './core/bootstrap.js';
 import { enqueueJob, closeQueue, getQueueName } from '@scalyclaw/shared/queue/queue.js';
-import { processMessageQueueJob, PENDING_KEY_PREFIX } from './processors/message-processor.js';
+import { processMessageQueueJob } from './processors/message-processor.js';
 import { processSystemQueueJob } from './processors/system-processor.js';
 import { processAgentJob } from './processors/agent-processor.js';
 import { processScheduleJob } from './processors/schedule-processor.js';
 import { processProactiveJob } from './processors/proactive-processor.js';
-import { requestCancel, getSession } from './session/session.js';
 import { cancelAllChannelJobs } from '@scalyclaw/shared/queue/cancel.js';
-import type { PendingMessage } from '@scalyclaw/shared/queue/jobs.js';
 import { randomUUID } from 'node:crypto';
 import { subscribeToProgress, type ProgressEvent } from './queue/progress.js';
 import { initGateway, listenGateway, closeGateway } from './gateway/server.js';
@@ -69,10 +67,10 @@ async function startSystem(): Promise<void> {
 
   const workers: Worker[] = [];
 
-  // Messages queue — user message processing + commands
+  // Messages queue — user message processing + commands (concurrency=1: single-user serialization)
   const messagesWorker = new Worker(getQueueName('messages'), processMessageQueueJob, {
     ...workerOpts,
-    concurrency,
+    concurrency: 1,
   });
   workers.push(messagesWorker);
 
@@ -159,15 +157,6 @@ async function startSystem(): Promise<void> {
 
   // ── Periodic cleanup ──
 
-  const orphanDrainInterval = setInterval(async () => {
-    try {
-      await drainOrphanedPending(redis);
-    } catch (err) {
-      log('warn', 'Orphan drain failed', { error: String(err) });
-    }
-  }, 30_000);
-  orphanDrainInterval.unref();
-
   const progressDrainInterval = setInterval(async () => {
     try {
       await drainProgressBuffers(redis);
@@ -217,7 +206,6 @@ async function startSystem(): Promise<void> {
     try {
       await closeGateway();
       await deregisterProcess(redis);
-      clearInterval(orphanDrainInterval);
       clearInterval(progressDrainInterval);
       await disconnectAll();
       await Promise.allSettled(workers.map(w => w.close()));
@@ -263,48 +251,6 @@ async function drainProgressBuffers(redis: Redis): Promise<void> {
   }
   if (keys.length > 0) {
     log('info', 'Drained progress buffers', { keyCount: keys.length });
-  }
-}
-
-// ─── Orphaned pending message drain ───
-
-async function drainOrphanedPending(redis: Redis): Promise<void> {
-  const keys = await redis.keys(`${PENDING_KEY_PREFIX}*`);
-  for (const key of keys) {
-    const channelId = key.slice(PENDING_KEY_PREFIX.length);
-
-    const session = await getSession(channelId);
-    if (session) continue;
-
-    const pending = await redis.eval(
-      `local msgs = redis.call('lrange', KEYS[1], 0, -1)
-       if #msgs > 0 then redis.call('del', KEYS[1]) end
-       return msgs`,
-      1, key,
-    ) as string[];
-    if (pending.length === 0) continue;
-
-    log('info', 'Draining orphaned pending messages', { channelId, count: pending.length });
-
-    const first = JSON.parse(pending[0]) as PendingMessage;
-
-    if (pending.length > 1) {
-      await redis.rpush(key, ...pending.slice(1));
-    }
-
-    try {
-      await enqueueJob({
-        name: 'message-processing',
-        data: {
-          channelId,
-          text: first.text,
-          ...(first.attachments && { attachments: first.attachments }),
-        },
-        opts: { attempts: 2, backoff: { type: 'fixed', delay: 2000 } },
-      });
-    } catch (err) {
-      log('error', 'Failed to enqueue orphaned message', { channelId, error: String(err) });
-    }
   }
 }
 
@@ -382,38 +328,23 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
   // ─── Typing indicator ───
   sendTypingToChannel(channelId).catch(() => {});
 
-  // ─── Stop detection (replaces old /cancel) ───
+  // ─── Stop detection ───
   if (trimmed === '/stop') {
-    const session = await getSession(channelId);
-    if (session && session.state !== 'IDLE') {
-      await requestCancel(channelId);
-      // Also cancel all tracked jobs for this channel
-      await cancelAllChannelJobs(channelId).catch(() => {});
-      const redis = getRedis();
-      const pendingKey = `${PENDING_KEY_PREFIX}${channelId}`;
-      const cancelMsg: PendingMessage = {
-        id: randomUUID(),
-        text: '/stop',
-        type: 'cancel',
-        priority: 0,
-        enqueuedAt: new Date().toISOString(),
-      };
-      await redis.rpush(pendingKey, JSON.stringify(cancelMsg));
-      log('info', 'Stop requested for active session', { channelId, sessionId: session.sessionId });
-    } else {
-      await sendToChannel(channelId, 'Nothing running right now.');
-    }
+    const redis = getRedis();
+    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await cancelAllChannelJobs(channelId).catch(() => {});
+    await sendToChannel(channelId, 'Got it, stopping.');
     return;
   }
 
-  // ─── /clear — clear session (conversation + prompt cache) ───
+  // ─── /clear — clear conversation + prompt cache ───
   if (trimmed === '/clear') {
-    const { clearChannelMessages } = await import('./core/db.js');
+    const { clearMessages } = await import('./core/db.js');
     const { invalidatePromptCache } = await import('./prompt/builder.js');
-    clearChannelMessages(channelId);
+    clearMessages();
     invalidatePromptCache();
-    await sendToChannel(channelId, 'Session cleared.');
-    log('info', 'Session cleared', { channelId });
+    await sendToChannel(channelId, 'Conversation cleared.');
+    log('info', 'Conversation cleared', { channelId });
     return;
   }
 

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Settings, Trash2, RotateCw, Eye, XCircle, CheckCircle2, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Settings, Trash2, RotateCw, Eye, XCircle, CheckCircle2 } from 'lucide-react';
 import { toast } from 'sonner';
-import { getJobs, getJobCounts, deleteJob, retryJob, failJob, completeJob, getPendingMessages } from '@/lib/api';
+import { getJobs, getJobCounts, deleteJob, retryJob, failJob, completeJob } from '@/lib/api';
 import { useApi } from '@/hooks/use-api';
 import { useConfigSection } from '@/hooks/use-config-section';
 import { formatDate } from '@/lib/utils';
@@ -78,13 +78,6 @@ export default function Jobs() {
     [queueFilter],
   );
 
-  const { data: pendingData, refetch: refetchPending } = useApi(
-    useCallback(() => getPendingMessages(), []),
-    [],
-  );
-
-  const [pendingOpen, setPendingOpen] = useState(true);
-
   // Auto-refresh on "active" status tab
   useEffect(() => {
     if (intervalRef.current) {
@@ -96,7 +89,6 @@ export default function Jobs() {
       intervalRef.current = setInterval(() => {
         refetch();
         refetchCounts();
-        refetchPending();
       }, AUTO_REFRESH_INTERVAL);
     }
 
@@ -106,7 +98,7 @@ export default function Jobs() {
         intervalRef.current = null;
       }
     };
-  }, [statusTab, refetch, refetchCounts, refetchPending]);
+  }, [statusTab, refetch, refetchCounts]);
 
   const jobs = data?.jobs ?? [];
 
@@ -183,7 +175,6 @@ export default function Jobs() {
       toast.success(`Job #${id} failed.`);
       refetch();
       refetchCounts();
-      refetchPending();
     } catch (err) {
       toast.error('Failed to fail job', {
         description: err instanceof Error ? err.message : String(err),
@@ -205,7 +196,6 @@ export default function Jobs() {
       toast.success(`Job #${id} completed.`);
       refetch();
       refetchCounts();
-      refetchPending();
     } catch (err) {
       toast.error('Failed to complete job', {
         description: err instanceof Error ? err.message : String(err),
@@ -218,7 +208,6 @@ export default function Jobs() {
   function handleRefresh() {
     refetch();
     refetchCounts();
-    refetchPending();
   }
 
   return (
@@ -306,59 +295,6 @@ export default function Jobs() {
           </TabsContent>
         ))}
       </Tabs>
-
-      {/* Pending messages */}
-      {pendingData?.channels && pendingData.channels.length > 0 && (
-        <div className="rounded-md border">
-          <button
-            className="flex w-full items-center gap-2 p-3 text-left text-sm font-medium hover:bg-muted/50"
-            onClick={() => setPendingOpen(!pendingOpen)}
-          >
-            {pendingOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-            <Clock className="h-4 w-4 text-yellow-500" />
-            Pending Messages
-            <Badge variant="secondary" className="ml-1">
-              {pendingData.channels.reduce((sum, ch) => sum + ch.messages.length, 0)}
-            </Badge>
-            <span className="ml-auto text-xs text-muted-foreground">
-              Messages queued in Redis while channels are busy
-            </span>
-          </button>
-          {pendingOpen && (
-            <div className="border-t">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Channel</TableHead>
-                    <TableHead>Messages</TableHead>
-                    <TableHead>Types</TableHead>
-                    <TableHead>Oldest</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingData.channels.map((ch) => {
-                    const types = [...new Set(ch.messages.map((m) => String(m.type ?? 'unknown')))].join(', ');
-                    const oldest = ch.messages
-                      .map((m) => m.enqueuedAt as string | undefined)
-                      .filter(Boolean)
-                      .sort()[0];
-                    return (
-                      <TableRow key={ch.channelId}>
-                        <TableCell className="font-mono text-sm">{ch.channelId}</TableCell>
-                        <TableCell>
-                          <Badge variant="secondary">{ch.messages.length}</Badge>
-                        </TableCell>
-                        <TableCell className="text-sm capitalize">{types}</TableCell>
-                        <TableCell className="text-sm">{oldest ? formatDate(oldest) : '-'}</TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Job detail dialog */}
       <Dialog open={selectedJob !== null} onOpenChange={(open) => { if (!open) setSelectedJob(null); }}>

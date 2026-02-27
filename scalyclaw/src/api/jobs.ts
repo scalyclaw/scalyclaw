@@ -1,7 +1,5 @@
 import type { FastifyInstance } from 'fastify';
 import { getQueue, getJobStatus, QUEUE_NAMES, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
-import { getRedis } from '@scalyclaw/shared/core/redis.js';
-import { PENDING_KEY_PREFIX } from '../processors/message-processor.js';
 
 export function registerJobsRoutes(server: FastifyInstance): void {
   // GET /api/jobs/queues — list available queue names
@@ -159,23 +157,4 @@ export function registerJobsRoutes(server: FastifyInstance): void {
     return { completed: true, removed: true };
   });
 
-  // GET /api/pending — list pending messages across all channels
-  server.get('/api/pending', async () => {
-    const redis = getRedis();
-    const keys = await redis.keys(`${PENDING_KEY_PREFIX}*`);
-    const channels: Array<{ channelId: string; messages: Array<Record<string, unknown>> }> = [];
-
-    for (const key of keys) {
-      const channelId = key.slice(PENDING_KEY_PREFIX.length);
-      const raw = await redis.lrange(key, 0, -1);
-      const messages = raw.map((entry) => {
-        try { return JSON.parse(entry); } catch { return { raw: entry }; }
-      });
-      if (messages.length > 0) {
-        channels.push({ channelId, messages });
-      }
-    }
-
-    return { channels };
-  });
 }
