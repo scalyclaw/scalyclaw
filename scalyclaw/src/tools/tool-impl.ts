@@ -236,7 +236,7 @@ async function dispatchTool(toolName: string, payload: Record<string, unknown>, 
       }
       return await enqueueAndWait('agents', toolName, payload, ctx, 300_000);
     }
-    return await enqueueAndWait(queueKey, toolName, payload, ctx, 60_000);
+    return await enqueueAndWait(queueKey, toolName, payload, ctx, 300_000);
   }
   if (toolName.startsWith('mcp_')) {
     const { callMcpTool } = await import('../mcp/mcp-manager.js');

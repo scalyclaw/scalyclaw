@@ -159,7 +159,7 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
   logs: { level: 'info', format: 'json', type: 'console' },
   memory: { topK: 10, scoreThreshold: 0.5, embeddingModel: 'auto' },
   queue: {
-    lockDuration: 120_000,
+    lockDuration: 300_000,
     stalledInterval: 30_000,
     limiter: { max: 10, duration: 1000 },
     removeOnComplete: { age: 86400, count: 1000 },

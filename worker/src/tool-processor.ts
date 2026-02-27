@@ -226,7 +226,7 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
     scriptLanguage: skill.scriptLanguage,
     skillDir,
     workspacePath: PATHS.workspace,
-    timeoutMs: skill.timeout ?? 120_000,
+    timeoutMs: skill.timeout ?? 300_000,
     secrets,
     signal,
   });

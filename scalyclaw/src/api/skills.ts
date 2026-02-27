@@ -115,7 +115,7 @@ export function registerSkillsRoutes(server: FastifyInstance): void {
       }
 
       const { input, timeoutMs } = request.body ?? {};
-      const timeout = timeoutMs ?? 120_000;
+      const timeout = timeoutMs ?? 300_000;
 
       try {
         const jobId = await enqueueJob({
