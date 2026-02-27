@@ -8,7 +8,7 @@ import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
-import { runSkillGuard } from '../guards/guard.js';
+import { runSkillGuard, runCommandShield } from '../guards/guard.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
@@ -173,7 +173,9 @@ async function enqueueAndWait(
   // Resolve secrets on orchestrator and pass in job data for remote workers
   if (queueKey === 'tools') {
     const secrets = await getAllSecrets();
-    payload = { ...payload, _secrets: secrets };
+    const config = getConfigRef();
+    const denied = config.guards.commandShield?.enabled ? config.guards.commandShield.denied : [];
+    payload = { ...payload, _secrets: secrets, _deniedCommands: denied };
   }
 
   const toolCallId = randomUUID();
@@ -381,6 +383,18 @@ function rewriteStringValues(obj: Record<string, unknown>, destMap: Map<string, 
 }
 
 async function dispatchTool(toolName: string, payload: Record<string, unknown>, ctx: ToolContext): Promise<string> {
+  // Command Shield — block dangerous commands before enqueue
+  if (toolName === 'execute_command' || toolName === 'execute_code') {
+    const commandText = (payload.command ?? payload.code) as string;
+    if (commandText) {
+      const shieldResult = runCommandShield(commandText);
+      if (!shieldResult.passed) {
+        log('warn', 'Command blocked by Command Shield', { toolName, reason: shieldResult.reason });
+        return JSON.stringify({ error: shieldResult.reason });
+      }
+    }
+  }
+
   const queueKey = TOOL_QUEUE[toolName];
   if (queueKey) {
     if (queueKey === 'agents') {
@@ -999,6 +1013,11 @@ function handleListGuards(): string {
       },
       skill: { enabled: g.skill.enabled, model: g.skill.model },
       agent: { enabled: g.agent.enabled, model: g.agent.model },
+      commandShield: {
+        enabled: g.commandShield.enabled,
+        deniedCount: g.commandShield.denied.length,
+        allowedCount: g.commandShield.allowed.length,
+      },
     },
   });
 }
@@ -1009,11 +1028,17 @@ async function handleToggleGuard(input: Record<string, unknown>): Promise<string
   if (!guard || typeof enabled !== 'boolean') {
     return JSON.stringify({ error: 'Missing required fields: guard, enabled' });
   }
-  if (guard !== 'message' && guard !== 'skill' && guard !== 'agent') {
-    return JSON.stringify({ error: `Invalid guard: "${guard}". Must be message, skill, or agent.` });
+  if (guard !== 'message' && guard !== 'skill' && guard !== 'agent' && guard !== 'commandShield') {
+    return JSON.stringify({ error: `Invalid guard: "${guard}". Must be message, skill, agent, or commandShield.` });
   }
 
-  await updateConfig(draft => { draft.guards[guard].enabled = enabled; });
+  await updateConfig(draft => {
+    if (guard === 'commandShield') {
+      draft.guards.commandShield.enabled = enabled;
+    } else {
+      draft.guards[guard].enabled = enabled;
+    }
+  });
   await publishConfigReload().catch(err => log('warn', 'Failed to publish config reload', { error: String(err) }));
   return JSON.stringify({ toggled: true, guard, enabled });
 }

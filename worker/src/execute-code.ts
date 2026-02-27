@@ -23,6 +23,16 @@ export async function executeCode(input: Record<string, unknown>, signal?: Abort
     return JSON.stringify({ error: `Unsupported language: "${language}". Supported: ${Object.keys(LANG_CONFIG).join(', ')}` });
   }
 
+  // Defense in depth: check denied patterns passed from orchestrator
+  const denied = (input._deniedCommands as string[]) ?? [];
+  if (denied.length > 0) {
+    const lower = code.toLowerCase();
+    const match = denied.find(p => lower.includes(p.toLowerCase()));
+    if (match) {
+      return JSON.stringify({ error: `Command blocked by Command Shield: matches denied pattern "${match}"` });
+    }
+  }
+
   const secrets = (input._secrets as Record<string, string>) ?? {};
   const execDir = join(PATHS.workspace, '_exec');
   await mkdir(execDir, { recursive: true });

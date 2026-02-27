@@ -112,6 +112,11 @@ export interface ScalyClawConfig {
     };
     skill: { enabled: boolean; model: string };
     agent: { enabled: boolean; model: string };
+    commandShield: {
+      enabled: boolean;
+      denied: string[];
+      allowed: string[];
+    };
   };
   budget: {
     monthlyLimit: number;
@@ -186,6 +191,51 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
     },
     skill: { enabled: true, model: '' },
     agent: { enabled: true, model: '' },
+    commandShield: {
+      enabled: true,
+      denied: [
+        // Filesystem destruction
+        'rm -rf /',
+        'rm -rf /*',
+        'rm -rf ~',
+        'rm -rf .',
+        'mkfs.',
+        'wipefs',
+        'dd if=/dev/zero of=/dev',
+        'dd if=/dev/urandom of=/dev',
+        '> /dev/sda',
+        ':(){:|:&};:',
+        // Pipe-to-shell (download & execute)
+        '| sh',
+        '| bash',
+        '| zsh',
+        // Reverse shells
+        '/dev/tcp/',
+        'nc -e /bin',
+        'ncat -e /bin',
+        // System power
+        'shutdown',
+        'reboot',
+        'poweroff',
+        'halt',
+        'init 0',
+        'init 6',
+        // Credential / user manipulation
+        'passwd',
+        'userdel',
+        'visudo',
+        // Firewall / security bypass
+        'iptables -F',
+        'ufw disable',
+        // Anti-forensics
+        'history -c',
+        // Crypto miners
+        'xmrig',
+        'minerd',
+        'cryptonight',
+      ],
+      allowed: [],
+    },
   },
   channels: {},
   skills: [],
@@ -196,7 +246,7 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
 
 /** Keys whose values are dynamic records or arrays — kept as-is from loaded data */
 const DYNAMIC_KEYS = new Set([
-  'channels', 'mcpServers', 'providers', 'models', 'embeddingModels', 'agents', 'skills', 'cors', 'alertThresholds',
+  'channels', 'mcpServers', 'providers', 'models', 'embeddingModels', 'agents', 'skills', 'cors', 'alertThresholds', 'denied', 'allowed',
 ]);
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {
@@ -333,6 +383,7 @@ export async function loadConfig(): Promise<ScalyClawConfig> {
     g.message.enabled && `message(echo=${g.message.echoGuard.enabled},content=${g.message.contentGuard.enabled})`,
     g.skill.enabled && 'skill',
     g.agent.enabled && 'agent',
+    g.commandShield?.enabled && `commandShield(${g.commandShield.denied.length} denied)`,
   ].filter(Boolean);
   log('info', 'Config loaded from Redis', {
     chatModels: merged.models.models.length,

@@ -1,6 +1,6 @@
 export interface GuardResult {
   passed: boolean;
-  guardType: 'message' | 'skill' | 'agent';
+  guardType: 'message' | 'skill' | 'agent' | 'command';
   failedLayer?: string;
   reason?: string;
   score?: number;

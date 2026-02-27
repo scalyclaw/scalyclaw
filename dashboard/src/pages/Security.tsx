@@ -16,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { X } from 'lucide-react';
 
 interface GuardsConfig {
   message: {
@@ -26,9 +27,14 @@ interface GuardsConfig {
   };
   skill: { enabled: boolean; model: string };
   agent: { enabled: boolean; model: string };
+  commandShield: {
+    enabled: boolean;
+    denied: string[];
+    allowed: string[];
+  };
 }
 
-type GuardTab = 'message' | 'skill' | 'agent';
+type GuardTab = 'message' | 'skill' | 'agent' | 'commandShield';
 
 function ModelSelect({
   value,
@@ -59,6 +65,70 @@ function ModelSelect({
         ))}
       </SelectContent>
     </Select>
+  );
+}
+
+function PatternList({
+  label,
+  description,
+  patterns,
+  onAdd,
+  onRemove,
+}: {
+  label: string;
+  description: string;
+  patterns: string[];
+  onAdd: (pattern: string) => void;
+  onRemove: (index: number) => void;
+}) {
+  const [input, setInput] = useState('');
+
+  const handleAdd = () => {
+    const trimmed = input.trim();
+    if (trimmed && !patterns.includes(trimmed)) {
+      onAdd(trimmed);
+      setInput('');
+    }
+  };
+
+  return (
+    <div className="rounded-md border p-4 space-y-3">
+      <div>
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{label}</p>
+        <p className="text-xs text-muted-foreground mt-1">{description}</p>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          placeholder="Add pattern..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleAdd(); }}
+          className="flex-1"
+        />
+        <Button variant="outline" size="sm" onClick={handleAdd} disabled={!input.trim()}>
+          Add
+        </Button>
+      </div>
+      {patterns.length > 0 && (
+        <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto">
+          {patterns.map((p, i) => (
+            <Badge key={i} variant="secondary" className="gap-1 pr-1 font-mono text-xs">
+              {p}
+              <button
+                type="button"
+                onClick={() => onRemove(i)}
+                className="ml-0.5 rounded-sm hover:bg-muted-foreground/20 p-0.5"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+      {patterns.length === 0 && (
+        <p className="text-xs text-muted-foreground italic">No patterns configured.</p>
+      )}
+    </div>
   );
 }
 
@@ -129,6 +199,12 @@ export default function Security() {
           <TabsTrigger value="agent">
             Agent Guard
             {guards.agent.enabled && (
+              <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="commandShield">
+            Command Shield
+            {guards.commandShield?.enabled && (
               <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />
             )}
           </TabsTrigger>
@@ -263,6 +339,43 @@ export default function Security() {
                 <p className="text-xs text-muted-foreground">
                   Audits agent definitions for prompt injection, excessive permissions, data exfiltration, and hidden instruction overrides.
                 </p>
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* Command Shield */}
+        <TabsContent value="commandShield" className="mt-4">
+          <div className="space-y-6">
+            <div className="flex items-center gap-3">
+              <Switch
+                checked={guards.commandShield?.enabled ?? false}
+                onCheckedChange={(v) => config.update((c) => { c.commandShield.enabled = v; })}
+              />
+              <Label className="text-sm font-medium">
+                {guards.commandShield?.enabled ? 'Enabled' : 'Disabled'}
+              </Label>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Pattern-based guard that blocks dangerous commands before they reach the worker. No LLM call needed — uses fast substring matching against denied patterns.
+            </p>
+
+            {guards.commandShield?.enabled && (
+              <div className="space-y-6">
+                <PatternList
+                  label="Denied Patterns"
+                  description="Commands matching any of these patterns (case-insensitive substring) will be blocked."
+                  patterns={guards.commandShield.denied ?? []}
+                  onAdd={(p) => config.update((c) => { c.commandShield.denied = [...c.commandShield.denied, p]; })}
+                  onRemove={(i) => config.update((c) => { c.commandShield.denied = c.commandShield.denied.filter((_, idx) => idx !== i); })}
+                />
+                <PatternList
+                  label="Allowed Patterns"
+                  description="If non-empty, only commands matching at least one allowed pattern will run (after denied check). Leave empty to allow everything not denied."
+                  patterns={guards.commandShield.allowed ?? []}
+                  onAdd={(p) => config.update((c) => { c.commandShield.allowed = [...c.commandShield.allowed, p]; })}
+                  onRemove={(i) => config.update((c) => { c.commandShield.allowed = c.commandShield.allowed.filter((_, idx) => idx !== i); })}
+                />
               </div>
             )}
           </div>

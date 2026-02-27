@@ -149,7 +149,7 @@ const TOOL_DEFS: ToolDefinition[] = [
   // ─── Guards ───
   tool('list_guards', 'List guard configuration'),
   tool('toggle_guard', 'Enable or disable a guard', schema({
-    guard: ENUM('Guard type', ['message', 'skill', 'agent']),
+    guard: ENUM('Guard type', ['message', 'skill', 'agent', 'commandShield']),
     enabled: TOGGLE,
   }, ['guard', 'enabled'])),
 

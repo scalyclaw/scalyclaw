@@ -144,6 +144,48 @@ async function runContentGuard(
   }
 }
 
+// ─── Command Shield (deterministic, no LLM) ───
+
+export function runCommandShield(text: string, overrideDenied?: string[]): GuardResult {
+  const start = Date.now();
+  const config = getConfigRef();
+  const shield = config.guards.commandShield;
+
+  if (!shield?.enabled) {
+    return { passed: true, guardType: 'command', durationMs: Date.now() - start };
+  }
+
+  const denied = overrideDenied ?? shield.denied;
+  const lower = text.toLowerCase();
+
+  for (const pattern of denied) {
+    if (lower.includes(pattern.toLowerCase())) {
+      return {
+        passed: false,
+        guardType: 'command',
+        failedLayer: 'denied',
+        reason: `Command blocked: matches denied pattern "${pattern}"`,
+        durationMs: Date.now() - start,
+      };
+    }
+  }
+
+  if (shield.allowed.length > 0) {
+    const isAllowed = shield.allowed.some(p => lower.includes(p.toLowerCase()));
+    if (!isAllowed) {
+      return {
+        passed: false,
+        guardType: 'command',
+        failedLayer: 'allowed',
+        reason: 'Command blocked: does not match any allowed pattern',
+        durationMs: Date.now() - start,
+      };
+    }
+  }
+
+  return { passed: true, guardType: 'command', durationMs: Date.now() - start };
+}
+
 // ─── Response Echo Guard ───
 
 export async function runResponseEchoGuard(text: string): Promise<GuardResult> {

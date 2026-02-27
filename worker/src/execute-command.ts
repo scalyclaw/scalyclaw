@@ -12,6 +12,16 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
     return JSON.stringify({ error: 'Missing required field: command (bash script/command to execute)' });
   }
 
+  // Defense in depth: check denied patterns passed from orchestrator
+  const denied = (input._deniedCommands as string[]) ?? [];
+  if (denied.length > 0) {
+    const lower = command.toLowerCase();
+    const match = denied.find(p => lower.includes(p.toLowerCase()));
+    if (match) {
+      return JSON.stringify({ error: `Command blocked by Command Shield: matches denied pattern "${match}"` });
+    }
+  }
+
   const secrets = (input._secrets as Record<string, string>) ?? {};
   const execDir = join(PATHS.workspace, '_exec');
   await mkdir(execDir, { recursive: true });
