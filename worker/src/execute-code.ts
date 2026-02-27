@@ -36,7 +36,7 @@ export async function executeCode(input: Record<string, unknown>, signal?: Abort
     const result = await spawnProcess({
       cmd: lang.cmd,
       args: lang.args(tmpFile),
-      cwd: PATHS.workspace,
+      cwd: process.env.HOME ?? PATHS.workspace,
       timeoutMs: 30_000,
       workspacePath: PATHS.workspace,
       extraEnv: secrets,

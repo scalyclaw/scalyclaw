@@ -95,7 +95,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
         caption: { type: 'string', description: 'Optional caption' },
       },
       required: ['path'],
@@ -475,12 +475,23 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
 
   // ─── File I/O ───
   {
+    name: 'list_directory',
+    description: 'List contents of a directory',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Home-relative directory path (e.g. "skills", "mind", "logs"). Defaults to home root.' },
+        recursive: { type: 'boolean', description: 'List recursively (default false)' },
+      },
+    },
+  },
+  {
     name: 'read_file',
     description: 'Read entire file content',
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
       },
       required: ['path'],
     },
@@ -491,7 +502,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
         startLine: { type: 'number', description: 'Start line (1-indexed)' },
         endLine: { type: 'number', description: 'End line (inclusive, omit for rest of file)' },
       },
@@ -504,7 +515,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
         content: { type: 'string', description: 'File content' },
       },
       required: ['path', 'content'],
@@ -516,7 +527,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
         search: { type: 'string', description: 'String to find' },
         replace: { type: 'string', description: 'Replacement string' },
         all: { type: 'boolean', description: 'Replace all occurrences (default false)' },
@@ -530,7 +541,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
         content: { type: 'string', description: 'Content to append' },
       },
       required: ['path', 'content'],
@@ -554,7 +565,7 @@ const DIRECT_TOOL_DEFS: ToolDefinition[] = [
     input_schema: {
       type: 'object',
       properties: {
-        path: { type: 'string', description: 'Workspace-relative file path' },
+        path: { type: 'string', description: 'Home-relative file path' },
       },
       required: ['path'],
     },
@@ -662,7 +673,7 @@ const AGENT_DIRECT_NAMES = new Set([
   'send_message', 'send_file',
   'memory_store', 'memory_search', 'memory_recall', 'memory_update', 'memory_delete',
   'vault_check', 'vault_list',
-  'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
+  'list_directory', 'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
   'diff_files', 'file_info', 'copy_file', 'copy_folder',
   'delete_file', 'delete_folder', 'rename_file', 'rename_folder',
   'register_skill',

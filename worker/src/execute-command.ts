@@ -25,7 +25,7 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
     const result = await spawnProcess({
       cmd: 'bash',
       args: [tmpFile],
-      cwd: PATHS.workspace,
+      cwd: process.env.HOME ?? PATHS.workspace,
       timeoutMs: 30_000,
       input: stdinInput,
       workspacePath: PATHS.workspace,

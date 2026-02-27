@@ -32,11 +32,7 @@ export function spawnProcess(opts: SpawnOptions): Promise<SpawnResult> {
       timeout: timeoutMs,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: {
-        PATH: process.env.PATH ?? '',
-        HOME: process.env.HOME ?? '',
-        TMPDIR: process.env.TMPDIR ?? '/tmp',
-        LANG: process.env.LANG ?? '',
-        TERM: process.env.TERM ?? '',
+        ...process.env,
         ...extraEnv,
         WORKSPACE_DIR: workspacePath,
       },

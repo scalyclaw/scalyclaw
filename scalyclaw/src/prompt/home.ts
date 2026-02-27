@@ -5,15 +5,16 @@ The home directory (\`${basePath}\`) is the root of all ScalyClaw data. Everythi
 
 | Directory | Purpose |
 |-----------|---------|
-| \`workspace/\` | Scratch files, outputs, downloads — default target for file operations |
 | \`skills/\` | Skill packages (scripts, SKILL.md, configs) |
 | \`agents/\` | Agent definitions (AGENT.md) |
-| \`database/\` | SQLite database (messages, memory, usage) |
+| \`mind/\` | Identity and reference documents |
+| \`workspace/\` | Scratch files, outputs, downloads |
 | \`logs/\` | Process log files |
+| \`database/\` | SQLite database (messages, memory, usage) |
 
 ## File I/O
 
-All file operations use relative paths. The system resolves paths based on prefix:
+All file operations use home-relative paths. The system resolves paths based on prefix:
 
 ### Path Routing
 
@@ -21,7 +22,11 @@ All file operations use relative paths. The system resolves paths based on prefi
 |--------|-------------|---------|
 | \`skills/...\` | Skills directory | Skill scripts, SKILL.md, configs |
 | \`agents/...\` | Agents directory | Agent definitions (AGENT.md) |
-| Everything else | Workspace directory | Scratch files, outputs, downloads |
+| \`mind/...\` | Mind directory | Identity and reference docs |
+| \`workspace/...\` | Workspace directory | Scratch files, outputs, downloads |
+| \`logs/...\` | Logs directory | Process log files |
+| \`database/...\` | Database directory | SQLite databases |
+| Everything else | Home directory | Resolves relative to home root |
 
 ### Hot Reload
 
@@ -29,6 +34,7 @@ Writing to \`skills/\` or \`agents/\` triggers hot-reload — the skill or agent
 
 ### Rules
 
+- Use \`list_directory\` to browse directories (e.g. \`skills\`, \`agents\`, \`mind\`, \`logs\`).
 - Config lives in Redis, not on disk. Never try to read or write config files.
 - Use \`read_file_lines\` for large files to avoid flooding your context. Check \`file_info\` first if unsure about size.
 - Use \`patch_file\` for targeted edits instead of reading the whole file, modifying it, and writing it back.`;

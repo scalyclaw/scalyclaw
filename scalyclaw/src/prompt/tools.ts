@@ -51,7 +51,8 @@ Most tools are called directly by name. Tools marked with ⚡ are **job tools** 
 | | \`clean_queue\` | Clean completed/failed jobs |
 | | \`stop_job\` | Stop a running or pending job by ID |
 | **Processes** | \`list_processes\` | List registered processes |
-| **File I/O** | \`read_file\` | Read entire file content |
+| **File I/O** | \`list_directory\` | List directory contents (path, optional recursive) |
+| | \`read_file\` | Read entire file content |
 | | \`read_file_lines\` | Read a line range (1-indexed) |
 | | \`write_file\` | Create or overwrite a file |
 | | \`patch_file\` | Search-and-replace (search, replace, optional all) |

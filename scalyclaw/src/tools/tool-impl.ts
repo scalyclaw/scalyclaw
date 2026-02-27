@@ -1,4 +1,4 @@
-import { access, mkdir, readdir, readFile, writeFile as fsWriteFile } from 'node:fs/promises';
+import { access, mkdir, readdir, readFile, stat, writeFile as fsWriteFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { storeSecret, resolveSecret, deleteSecret, listSecrets, getAllSecrets } from '../core/vault.js';
@@ -209,15 +209,50 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
     }
   }
 
+  // Build a map of original dest → workspace-prefixed dest for path rewriting
+  const destMap = new Map<string, string>();
+  for (const entry of workerFiles) {
+    const dest = entry.dest;
+    if (!dest.startsWith('workspace/') && !dest.startsWith('workspace\\')) {
+      destMap.set(dest, `workspace/${dest}`);
+    }
+  }
+
   // Strip _workerFiles and _workerProcessId from both levels
   delete outer._workerFiles;
   delete outer._workerProcessId;
   if (inner !== outer) {
     delete inner._workerFiles;
     delete inner._workerProcessId;
+    // Rewrite worker dest paths in inner result so LLM sees workspace-prefixed paths
+    if (destMap.size > 0) rewriteStringValues(inner, destMap);
     outer.stdout = JSON.stringify(inner);
+  } else if (destMap.size > 0) {
+    rewriteStringValues(outer, destMap);
   }
   return JSON.stringify(outer);
+}
+
+/** Recursively walk a JSON object and replace string values that match destMap keys */
+function rewriteStringValues(obj: Record<string, unknown>, destMap: Map<string, string>): void {
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (typeof val === 'string') {
+      const replacement = destMap.get(val);
+      if (replacement) obj[key] = replacement;
+    } else if (Array.isArray(val)) {
+      for (let i = 0; i < val.length; i++) {
+        if (typeof val[i] === 'string') {
+          const replacement = destMap.get(val[i]);
+          if (replacement) val[i] = replacement;
+        } else if (val[i] && typeof val[i] === 'object') {
+          rewriteStringValues(val[i] as Record<string, unknown>, destMap);
+        }
+      }
+    } else if (val && typeof val === 'object') {
+      rewriteStringValues(val as Record<string, unknown>, destMap);
+    }
+  }
 }
 
 async function dispatchTool(toolName: string, payload: Record<string, unknown>, ctx: ToolContext): Promise<string> {
@@ -1351,6 +1386,47 @@ async function handleCleanQueue(input: Record<string, unknown>): Promise<string>
 
 // ─── File I/O ───
 
+async function handleListDirectory(input: Record<string, unknown>): Promise<string> {
+  const dirPath = (input.path as string) || '.';
+  const recursive = (input.recursive as boolean) ?? false;
+
+  log('debug', 'list_directory', { path: dirPath, recursive });
+
+  const fullPath = resolveFilePath(dirPath);
+  const entries = await readdir(fullPath, { withFileTypes: true });
+
+  if (recursive) {
+    const allEntries = await readdir(fullPath, { withFileTypes: true, recursive: true });
+    const result = await Promise.all(
+      allEntries.map(async (entry) => {
+        const entryPath = join(entry.parentPath ?? entry.path, entry.name);
+        const type = entry.isDirectory() ? 'directory' : 'file';
+        try {
+          const st = await stat(entryPath);
+          return { name: entryPath.slice(fullPath.length + 1), type, size: st.size, modified: st.mtime.toISOString() };
+        } catch {
+          return { name: entryPath.slice(fullPath.length + 1), type };
+        }
+      }),
+    );
+    return JSON.stringify({ path: dirPath, entries: result });
+  }
+
+  const result = await Promise.all(
+    entries.map(async (entry) => {
+      const entryPath = join(fullPath, entry.name);
+      const type = entry.isDirectory() ? 'directory' : 'file';
+      try {
+        const st = await stat(entryPath);
+        return { name: entry.name, type, size: st.size, modified: st.mtime.toISOString() };
+      } catch {
+        return { name: entry.name, type };
+      }
+    }),
+  );
+  return JSON.stringify({ path: dirPath, entries: result });
+}
+
 /** Enforce -skill / -agent suffix on skill and agent directory paths */
 function enforcePathSuffix(filePath: string): string {
   const norm = filePath.replace(/\\/g, '/');
@@ -1833,6 +1909,7 @@ registerTool('pause_queue', handlePauseQueue);
 registerTool('resume_queue', handleResumeQueue);
 registerTool('clean_queue', handleCleanQueue);
 // File I/O
+registerTool('list_directory', handleListDirectory);
 registerTool('read_file', handleReadFile);
 registerTool('read_file_lines', handleReadFileLines);
 registerTool('write_file', handleWriteFile);

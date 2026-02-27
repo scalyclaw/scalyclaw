@@ -8,7 +8,10 @@ import { log } from '@scalyclaw/shared/core/logger.js';
  * - `skills/...` → skills dir
  * - `agents/...` → agents dir
  * - `mind/...` → mind dir (reference docs)
- * - everything else → workspace dir
+ * - `workspace/...` → workspace dir
+ * - `logs/...` → logs dir
+ * - `database/...` → database dir
+ * - everything else → home dir (PATHS.base)
  */
 export function resolveFilePath(path: string): string {
   if (path.includes('\0')) throw new Error('Path traversal blocked: null byte');
@@ -25,8 +28,17 @@ export function resolveFilePath(path: string): string {
   } else if (path.startsWith('mind/') || path.startsWith('mind\\')) {
     base = PATHS.mind;
     relative = path.slice('mind/'.length);
-  } else {
+  } else if (path.startsWith('workspace/') || path.startsWith('workspace\\')) {
     base = PATHS.workspace;
+    relative = path.slice('workspace/'.length);
+  } else if (path.startsWith('logs/') || path.startsWith('logs\\')) {
+    base = PATHS.logs;
+    relative = path.slice('logs/'.length);
+  } else if (path.startsWith('database/') || path.startsWith('database\\')) {
+    base = PATHS.database;
+    relative = path.slice('database/'.length);
+  } else {
+    base = PATHS.base;
     relative = path;
   }
 
