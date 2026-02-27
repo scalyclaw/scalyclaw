@@ -1,36 +1,16 @@
 export function homeSection(basePath: string): string {
   return `## Home Directory
 
-The home directory (\`${basePath}\`) is the root of all ScalyClaw data. Everything lives under it:
+The home directory (\`${basePath}\`) is the root of all ScalyClaw data. All file operations use home-relative paths.
 
-| Directory | Purpose |
-|-----------|---------|
-| \`skills/\` | Skill packages (scripts, SKILL.md, configs) |
-| \`agents/\` | Agent definitions (AGENT.md) |
-| \`mind/\` | Identity and reference documents |
-| \`workspace/\` | Scratch files, outputs, downloads |
-| \`logs/\` | Process log files |
-| \`database/\` | SQLite database (messages, memory, usage) |
-
-## File I/O
-
-All file operations use home-relative paths. The system resolves paths based on prefix:
-
-### Path Routing
-
-| Prefix | Resolves to | Purpose |
-|--------|-------------|---------|
-| \`skills/...\` | Skills directory | Skill scripts, SKILL.md, configs |
-| \`agents/...\` | Agents directory | Agent definitions (AGENT.md) |
-| \`mind/...\` | Mind directory | Identity and reference docs |
-| \`workspace/...\` | Workspace directory | Scratch files, outputs, downloads |
-| \`logs/...\` | Logs directory | Process log files |
-| \`database/...\` | Database directory | SQLite databases |
-| Everything else | Home directory | Resolves relative to home root |
-
-### Hot Reload
-
-Writing to \`skills/\` or \`agents/\` triggers hot-reload — the skill or agent becomes immediately available without restart.
+| Directory | Purpose | Hot Reload |
+|-----------|---------|------------|
+| \`skills/\` | Skill packages (scripts, SKILL.md, configs) | Yes |
+| \`agents/\` | Agent definitions (AGENT.md) | Yes |
+| \`mind/\` | Identity and reference documents | — |
+| \`workspace/\` | Scratch files, outputs, downloads | — |
+| \`logs/\` | Process log files | — |
+| \`database/\` | SQLite database (messages, memory, usage) | — |
 
 ### Rules
 

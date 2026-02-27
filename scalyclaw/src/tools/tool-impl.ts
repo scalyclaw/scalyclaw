@@ -20,11 +20,136 @@ import { listProcesses } from '@scalyclaw/shared/core/registry.js';
 import { checkBudget, buildModelPricing } from '../core/budget.js';
 import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
-import { DIRECT_TOOL_NAMES_SET } from './tools.js';
+import { TOOL_NAMES_SET } from './tools.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
 import { requestJobCancel } from '@scalyclaw/shared/queue/cancel.js';
 
 export type { ToolContext } from './tool-registry.js';
+
+// ═══════════════════════════════════════════════════════════════════
+// SHARED HELPERS
+// ═══════════════════════════════════════════════════════════════════
+
+/** Reload skills/agents if any path touches their directories */
+async function fileReloadIfNeeded(...paths: string[]): Promise<void> {
+  if (paths.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
+    await loadSkills();
+    await publishSkillReload().catch(e => log('warn', 'Skill reload failed', { error: String(e) }));
+  }
+  if (paths.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
+    await loadAllAgents();
+    await publishAgentReload().catch(e => log('warn', 'Agent reload failed', { error: String(e) }));
+  }
+}
+
+/** Validate agentId → find in config → mutate → save → publish */
+async function withAgentConfig(
+  agentId: string,
+  mutate: (agent: { id: string; enabled: boolean; maxIterations: number; models: { model: string; weight: number; priority: number }[]; skills: string[]; tools: string[]; mcpServers: string[] }) => Record<string, unknown>,
+): Promise<string> {
+  if (!agentId) return JSON.stringify({ error: 'Missing required field: agentId' });
+  const config = getConfig();
+  const agent = config.orchestrator.agents.find(a => a.id === agentId);
+  if (!agent) return JSON.stringify({ error: `Agent "${agentId}" not found in config` });
+  const result = mutate(agent);
+  await saveConfig(config);
+  await publishAgentReload().catch(e => log('warn', 'Agent reload failed', { error: String(e) }));
+  return JSON.stringify({ updated: true, agentId, ...result });
+}
+
+/** Shared job query logic for list_jobs / list_active_jobs */
+async function queryJobs(opts: {
+  queueKey?: QueueKey; status?: string; limit: number; defaultStatuses: readonly string[];
+}): Promise<Record<string, unknown>[]> {
+  const baseStatuses = opts.status
+    ? [opts.status as 'waiting' | 'active' | 'completed' | 'failed' | 'delayed']
+    : opts.defaultStatuses as unknown as ('waiting' | 'active' | 'completed' | 'failed' | 'delayed')[];
+  const statuses = (baseStatuses as string[]).includes('waiting')
+    ? [...baseStatuses, 'prioritized' as any]
+    : [...baseStatuses];
+
+  const queuesToSearch = opts.queueKey
+    ? [{ key: opts.queueKey, q: getQueue(opts.queueKey) }]
+    : Object.keys(QUEUE_NAMES).map(k => ({ key: k, q: getQueue(k as QueueKey) }));
+
+  const jobs: Record<string, unknown>[] = [];
+  for (const { key, q } of queuesToSearch) {
+    const qJobs = await q.getJobs(statuses, 0, opts.limit - 1);
+    for (const j of qJobs) {
+      const state = await j.getState();
+      jobs.push({
+        id: j.id, queue: key, name: j.name,
+        state: state === 'prioritized' ? 'waiting' : state,
+        timestamp: j.timestamp, processedOn: j.processedOn, finishedOn: j.finishedOn,
+      });
+      if (jobs.length >= opts.limit) break;
+    }
+    if (jobs.length >= opts.limit) break;
+  }
+  return jobs;
+}
+
+/** Enforce -skill / -agent suffix on skill and agent directory paths */
+function enforcePathSuffix(filePath: string): string {
+  const norm = filePath.replace(/\\/g, '/');
+  const parts = norm.split('/');
+  if (parts[0] === 'skills' && parts.length >= 2 && !parts[1].endsWith('-skill')) {
+    parts[1] = `${parts[1]}-skill`;
+    return parts.join('/');
+  }
+  if (parts[0] === 'agents' && parts.length >= 2 && !parts[1].endsWith('-agent')) {
+    parts[1] = `${parts[1]}-agent`;
+    return parts.join('/');
+  }
+  return filePath;
+}
+
+/** Parse a delay value that may be milliseconds (number), seconds (number < 1000), or human-readable ("30s", "5m", "1h") */
+function parseDelay(raw: unknown): number | null {
+  if (raw == null) return null;
+  const str = String(raw).trim().toLowerCase();
+  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?|m|min|minutes?|h|hours?|d|days?)$/);
+  if (match) {
+    const val = parseFloat(match[1]);
+    const unit = match[2];
+    if (unit === 'ms') return val;
+    if (unit.startsWith('s')) return val * 1000;
+    if (unit.startsWith('m')) return val * 60_000;
+    if (unit.startsWith('h')) return val * 3_600_000;
+    if (unit.startsWith('d')) return val * 86_400_000;
+  }
+  const num = Number(raw);
+  if (!Number.isFinite(num) || num <= 0) return null;
+  // Heuristic: if < 1000, treat as seconds (models often confuse ms/s)
+  return num < 1000 ? num * 1000 : num;
+}
+
+/** Parse absolute or relative delay from input fields */
+function parseScheduleDelay(input: Record<string, unknown>): { delayMs: number } | { error: string } {
+  if (input.at != null) {
+    const target = new Date(input.at as string);
+    if (isNaN(target.getTime())) {
+      return { error: `Invalid datetime for "at": ${input.at}. Use ISO-8601 format (e.g. "2026-02-23T15:00:00Z").` };
+    }
+    const delayMs = target.getTime() - Date.now();
+    if (delayMs <= 0) return { error: `The time "${input.at}" is in the past.` };
+    return { delayMs };
+  }
+  const parsed = parseDelay(input.delayMs);
+  if (parsed != null) return { delayMs: parsed };
+  return { error: 'Missing required field: either "delayMs" (milliseconds) or "at" (ISO-8601 datetime). Example: { "message": "...", "delayMs": 30000 }' };
+}
+
+/** Parse cron/interval from input fields */
+function parseScheduleRepeat(input: Record<string, unknown>): { cron?: string; intervalMs?: number } | { error: string } {
+  const cron = input.cron as string | undefined || undefined;
+  const parsedInterval = parseDelay(input.intervalMs);
+  const intervalMs = parsedInterval ?? undefined;
+  if (!cron && !intervalMs) {
+    return { error: 'Missing required field: either "cron" (e.g. "*/5 * * * *") or "intervalMs" (e.g. 300000 for 5 min). Example: { "task": "...", "cron": "*/5 * * * *" }' };
+  }
+  return { cron: cron || undefined, intervalMs: cron ? undefined : intervalMs };
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // TOOL ROUTER — dispatches by tool name to the right execution path
@@ -341,56 +466,6 @@ async function handleSubmitParallelJobs(input: Record<string, unknown>, ctx: Too
 // JOB MANAGEMENT HANDLERS
 // ═══════════════════════════════════════════════════════════════════
 
-async function handleGetJobInfo(input: Record<string, unknown>): Promise<string> {
-  const jobId = input.jobId as string;
-  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
-
-  log('debug', 'get_job', { jobId });
-  const { getJobStatus } = await import('@scalyclaw/shared/queue/queue.js');
-  const info = await getJobStatus(jobId);
-  return JSON.stringify(info);
-}
-
-async function handleListActiveJobs(input: Record<string, unknown>): Promise<string> {
-  const queueKey = input.queue as QueueKey | undefined;
-  const status = input.status as string | undefined;
-  const limit = (input.limit as number) ?? 20;
-
-  // BullMQ v5: 'prioritized' jobs are logically 'waiting' — include both
-  const baseStatuses = status
-    ? [status as 'waiting' | 'active' | 'completed' | 'failed' | 'delayed']
-    : ['waiting', 'active', 'delayed'] as const;
-  const statuses = baseStatuses.includes('waiting' as any)
-    ? [...baseStatuses, 'prioritized' as any]
-    : [...baseStatuses];
-
-  const queuesToSearch = queueKey
-    ? [{ key: queueKey, q: getQueue(queueKey) }]
-    : Object.keys(QUEUE_NAMES).map(k => ({ key: k, q: getQueue(k as QueueKey) }));
-
-  const jobs: Record<string, unknown>[] = [];
-  for (const { key, q } of queuesToSearch) {
-    const qJobs = await q.getJobs(statuses, 0, limit - 1);
-    for (const j of qJobs) {
-      const state = await j.getState();
-      jobs.push({
-        id: j.id,
-        queue: key,
-        name: j.name,
-        state: state === 'prioritized' ? 'waiting' : state,
-        timestamp: j.timestamp,
-        processedOn: j.processedOn,
-        finishedOn: j.finishedOn,
-      });
-      if (jobs.length >= limit) break;
-    }
-    if (jobs.length >= limit) break;
-  }
-
-  log('debug', 'list_active_jobs', { count: jobs.length, queueKey, status });
-  return JSON.stringify({ jobs });
-}
-
 async function handleStopJob(input: Record<string, unknown>): Promise<string> {
   const jobId = input.jobId as string;
   if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
@@ -412,23 +487,20 @@ async function handleStopJob(input: Record<string, unknown>): Promise<string> {
   return JSON.stringify({ stopped: true, jobId, previousState: info.state });
 }
 
-/** Meta tools that always pass through — infrastructure, not selectable */
-const META_TOOLS = new Set(['submit_job', 'submit_parallel_jobs', 'get_job', 'list_active_jobs', 'stop_job']);
-
-/** Execute an LLM-facing tool (direct dispatch + meta tools) */
+/** Execute an LLM-facing tool */
 export async function executeAssistantTool(
   toolName: string,
   input: Record<string, unknown>,
   ctx: ToolContext
 ): Promise<string> {
   // Runtime enforcement: block tools not in allowed set (if scoped)
-  if (ctx.allowedToolNames && !META_TOOLS.has(toolName) && !ctx.allowedToolNames.has(toolName)) {
+  if (ctx.allowedToolNames && !ctx.allowedToolNames.has(toolName)) {
     log('warn', `Tool "${toolName}" blocked — not in allowed set`, { channelId: ctx.channelId });
     return JSON.stringify({ error: `Tool "${toolName}" is not available to this agent.` });
   }
 
-  // Direct tools → dispatchTool (handles TOOL_QUEUE routing + local executeTool)
-  if (DIRECT_TOOL_NAMES_SET.has(toolName)) {
+  // Registered tools → dispatchTool (handles TOOL_QUEUE routing + local executeTool)
+  if (TOOL_NAMES_SET.has(toolName)) {
     log('info', 'Tool call', { tool: toolName, channelId: ctx.channelId });
     try {
       const result = await dispatchTool(toolName, input, ctx);
@@ -443,7 +515,7 @@ export async function executeAssistantTool(
     }
   }
 
-  // MCP tools — first-class tool calls (LLM calls them directly by name)
+  // MCP tools
   if (toolName.startsWith('mcp_')) {
     log('info', 'MCP tool call', { tool: toolName, channelId: ctx.channelId });
     try {
@@ -455,16 +527,7 @@ export async function executeAssistantTool(
     }
   }
 
-  // Meta tools
-  switch (toolName) {
-    case 'submit_job':              return await handleSubmitJob(input, ctx);
-    case 'submit_parallel_jobs':    return await handleSubmitParallelJobs(input, ctx);
-    case 'get_job':                 return await handleGetJobInfo(input);
-    case 'list_active_jobs':        return await handleListActiveJobs(input);
-    case 'stop_job':                return await handleStopJob(input);
-    default:
-      return JSON.stringify({ error: `Unknown tool: ${toolName}` });
-  }
+  return JSON.stringify({ error: `Unknown tool: ${toolName}` });
 }
 
 // ═══════════════════════════════════════════════════════════════════
@@ -543,19 +606,11 @@ async function handleMemoryUpdate(input: Record<string, unknown>): Promise<strin
   return JSON.stringify({ updated: true, id });
 }
 
-function handleMemoryDelete(input: Record<string, unknown>): string {
-  const id = input.id as string;
-  log('debug', 'memory_delete', { id });
-  const deleted = deleteMemory(id);
-  log('debug', 'memory_delete result', { id, deleted });
-  return JSON.stringify({ deleted, id });
-}
-
 // ─── Messaging ───
 
 async function handleSendMessage(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const channelId = (input.channelId as string) || ctx.channelId;
-  const text = (input.text ?? input.message ?? input.content ?? input.msg) as string;
+  const text = input.text as string;
   if (!text) return JSON.stringify({ error: 'Missing required field: text' });
   await ctx.sendToChannel(channelId, text);
   return JSON.stringify({ sent: true, channelId });
@@ -689,218 +744,62 @@ async function handleDeleteAgent(input: Record<string, unknown>): Promise<string
   }
 }
 
-// ─── Vault ───
-
-async function handleVaultStore(input: Record<string, unknown>): Promise<string> {
-  const name = input.name as string;
-  await storeSecret(name, input.value as string);
-  log('info', `Vault: secret "${name}" stored`);
-  return JSON.stringify({ stored: true, name });
-}
-
-async function handleVaultCheck(input: Record<string, unknown>): Promise<string> {
-  const name = input.name as string;
-  const value = await resolveSecret(name);
-  log('info', `Vault: secret "${name}" check — ${value !== null ? 'exists' : 'not found'}`);
-  return JSON.stringify({ found: value !== null, name });
-}
-
-async function handleVaultDelete(input: Record<string, unknown>): Promise<string> {
-  const name = input.name as string;
-  const deleted = await deleteSecret(name);
-  log('info', `Vault: secret "${name}" ${deleted ? 'deleted' : 'not found'}`);
-  return JSON.stringify({ deleted, name });
-}
-
-async function handleVaultList(): Promise<string> {
-  const names = await listSecrets();
-  log('info', `Vault: listed ${names.length} secrets`);
-  return JSON.stringify({ secrets: names });
-}
-
 // ─── Scheduling ───
 
-/** Parse a delay value that may be milliseconds (number), seconds (number < 1000), or human-readable ("30s", "5m", "1h") */
-function parseDelay(raw: unknown): number | null {
-  if (raw == null) return null;
-  const str = String(raw).trim().toLowerCase();
-  // Human-readable: "30s", "5m", "2h", "1d"
-  const match = str.match(/^(\d+(?:\.\d+)?)\s*(ms|s|sec|seconds?|m|min|minutes?|h|hours?|d|days?)$/);
-  if (match) {
-    const val = parseFloat(match[1]);
-    const unit = match[2];
-    if (unit === 'ms') return val;
-    if (unit.startsWith('s')) return val * 1000;
-    if (unit.startsWith('m')) return val * 60_000;
-    if (unit.startsWith('h')) return val * 3_600_000;
-    if (unit.startsWith('d')) return val * 86_400_000;
-  }
-  const num = Number(raw);
-  if (!Number.isFinite(num) || num <= 0) return null;
-  // Heuristic: if < 1000, treat as seconds (models often confuse ms/s)
-  return num < 1000 ? num * 1000 : num;
-}
-
 async function handleScheduleReminder(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  // Accept common aliases: text/msg → message, delay/delaySec → delayMs
-  const message = (input.message ?? input.text ?? input.msg ?? input.reminder) as string;
+  const message = input.message as string;
   if (!message) return JSON.stringify({ error: 'Missing required field: message (the reminder text)' });
 
-  // Support both relative (delayMs/delay) and absolute (at) scheduling
-  let delayMs: number;
+  const delay = parseScheduleDelay(input);
+  if ('error' in delay) return JSON.stringify({ error: delay.error });
 
-  if (input.at != null) {
-    // Absolute: ISO-8601 datetime string -> compute delay from now
-    const target = new Date(input.at as string);
-    if (isNaN(target.getTime())) {
-      return JSON.stringify({ error: `Invalid datetime for "at": ${input.at}. Use ISO-8601 format (e.g. "2026-02-23T15:00:00Z").` });
-    }
-    delayMs = target.getTime() - Date.now();
-    if (delayMs <= 0) {
-      return JSON.stringify({ error: `The time "${input.at}" is in the past.` });
-    }
-  } else {
-    // Try all common field names for delay
-    const rawDelay = input.delayMs ?? input.delay ?? input.delaySec ?? input.delaySeconds ?? input.seconds ?? input.time;
-    const parsed = parseDelay(rawDelay);
-    if (parsed != null) {
-      delayMs = parsed;
-    } else {
-      return JSON.stringify({ error: 'Missing required field: either "delayMs" (milliseconds) or "at" (ISO-8601 datetime). Example: { "message": "...", "delayMs": 30000 }' });
-    }
-  }
-
-  log('info', 'schedule_reminder', { message, delayMs, channelId: ctx.channelId });
-  const jobId = await createReminder(
-    ctx.channelId,
-    message,
-    delayMs,
-    (input.context as string) ?? ''
-  );
-  return JSON.stringify({ scheduled: true, jobId, type: 'reminder', delayMs });
+  log('info', 'schedule_reminder', { message, delayMs: delay.delayMs, channelId: ctx.channelId });
+  const jobId = await createReminder(ctx.channelId, message, delay.delayMs, (input.context as string) ?? '');
+  return JSON.stringify({ scheduled: true, jobId, type: 'reminder', delayMs: delay.delayMs });
 }
 
 async function handleScheduleRecurrentReminder(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  // Accept common aliases: message/text → task
-  const task = (input.task ?? input.message ?? input.text ?? input.msg) as string;
+  const task = input.task as string;
   if (!task) return JSON.stringify({ error: 'Missing required field: task (the recurrent reminder description)' });
 
-  const cron = (input.cron ?? input.cronExpression ?? input.pattern) as string | undefined || undefined;
+  const repeat = parseScheduleRepeat(input);
+  if ('error' in repeat) return JSON.stringify({ error: repeat.error });
 
-  // Try to parse interval from various field names
-  const rawInterval = input.intervalMs ?? input.interval ?? input.every ?? input.everyMs;
-  const parsedInterval = parseDelay(rawInterval);
-  const intervalMs = parsedInterval ?? undefined;
-
-  if (!cron && !intervalMs) {
-    return JSON.stringify({ error: 'Missing required field: either "cron" (e.g. "*/5 * * * *") or "intervalMs" (e.g. 300000 for 5 min). Example: { "task": "...", "cron": "*/5 * * * *" }' });
-  }
-
-  const effectiveCron = cron || undefined;
-  const effectiveInterval = cron ? undefined : intervalMs;
-
-  log('info', 'schedule_recurrent_reminder', { task, cron: effectiveCron, intervalMs: effectiveInterval, channelId: ctx.channelId });
-  const jobId = await createRecurrentReminder(
-    ctx.channelId,
-    task,
-    {
-      cron: effectiveCron,
-      intervalMs: effectiveInterval,
-      timezone: (input.timezone as string) ?? undefined,
-    }
-  );
+  log('info', 'schedule_recurrent_reminder', { task, cron: repeat.cron, intervalMs: repeat.intervalMs, channelId: ctx.channelId });
+  const jobId = await createRecurrentReminder(ctx.channelId, task, {
+    cron: repeat.cron,
+    intervalMs: repeat.intervalMs,
+    timezone: (input.timezone as string) ?? undefined,
+  });
   return JSON.stringify({ scheduled: true, jobId, task, type: 'recurrent-reminder' });
 }
 
 async function handleScheduleTask(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  const task = (input.task ?? input.message ?? input.text ?? input.description) as string;
+  const task = input.task as string;
   if (!task) return JSON.stringify({ error: 'Missing required field: task (the task description)' });
 
-  // Support both relative (delayMs/delay) and absolute (at) scheduling
-  let delayMs: number;
+  const delay = parseScheduleDelay(input);
+  if ('error' in delay) return JSON.stringify({ error: delay.error });
 
-  if (input.at != null) {
-    const target = new Date(input.at as string);
-    if (isNaN(target.getTime())) {
-      return JSON.stringify({ error: `Invalid datetime for "at": ${input.at}. Use ISO-8601 format (e.g. "2026-02-23T15:00:00Z").` });
-    }
-    delayMs = target.getTime() - Date.now();
-    if (delayMs <= 0) {
-      return JSON.stringify({ error: `The time "${input.at}" is in the past.` });
-    }
-  } else {
-    const rawDelay = input.delayMs ?? input.delay ?? input.delaySec ?? input.delaySeconds ?? input.seconds ?? input.time;
-    const parsed = parseDelay(rawDelay);
-    if (parsed != null) {
-      delayMs = parsed;
-    } else {
-      return JSON.stringify({ error: 'Missing required field: either "delayMs" (milliseconds) or "at" (ISO-8601 datetime). Example: { "task": "...", "delayMs": 30000 }' });
-    }
-  }
-
-  log('info', 'schedule_task', { task, delayMs, channelId: ctx.channelId });
-  const jobId = await createTask(ctx.channelId, task, delayMs);
-  return JSON.stringify({ scheduled: true, jobId, type: 'task', delayMs });
+  log('info', 'schedule_task', { task, delayMs: delay.delayMs, channelId: ctx.channelId });
+  const jobId = await createTask(ctx.channelId, task, delay.delayMs);
+  return JSON.stringify({ scheduled: true, jobId, type: 'task', delayMs: delay.delayMs });
 }
 
 async function handleScheduleRecurrentTask(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  const task = (input.task ?? input.message ?? input.text ?? input.description) as string;
+  const task = input.task as string;
   if (!task) return JSON.stringify({ error: 'Missing required field: task (the recurrent task description)' });
 
-  const cron = (input.cron ?? input.cronExpression ?? input.pattern) as string | undefined || undefined;
+  const repeat = parseScheduleRepeat(input);
+  if ('error' in repeat) return JSON.stringify({ error: repeat.error });
 
-  const rawInterval = input.intervalMs ?? input.interval ?? input.every ?? input.everyMs;
-  const parsedInterval = parseDelay(rawInterval);
-  const intervalMs = parsedInterval ?? undefined;
-
-  if (!cron && !intervalMs) {
-    return JSON.stringify({ error: 'Missing required field: either "cron" (e.g. "*/5 * * * *") or "intervalMs" (e.g. 300000 for 5 min). Example: { "task": "...", "cron": "*/5 * * * *" }' });
-  }
-
-  const effectiveCron = cron || undefined;
-  const effectiveInterval = cron ? undefined : intervalMs;
-
-  log('info', 'schedule_recurrent_task', { task, cron: effectiveCron, intervalMs: effectiveInterval, channelId: ctx.channelId });
-  const jobId = await createRecurrentTask(
-    ctx.channelId,
-    task,
-    {
-      cron: effectiveCron,
-      intervalMs: effectiveInterval,
-      timezone: (input.timezone as string) ?? undefined,
-    }
-  );
+  log('info', 'schedule_recurrent_task', { task, cron: repeat.cron, intervalMs: repeat.intervalMs, channelId: ctx.channelId });
+  const jobId = await createRecurrentTask(ctx.channelId, task, {
+    cron: repeat.cron,
+    intervalMs: repeat.intervalMs,
+    timezone: (input.timezone as string) ?? undefined,
+  });
   return JSON.stringify({ scheduled: true, jobId, task, type: 'recurrent-task' });
-}
-
-async function handleListReminders(ctx: ToolContext): Promise<string> {
-  const jobs = await listReminders(ctx.channelId);
-  log('debug', 'list_reminders', { channelId: ctx.channelId, jobCount: jobs.length });
-  return JSON.stringify({ jobs });
-}
-
-async function handleListTasks(ctx: ToolContext): Promise<string> {
-  const jobs = await listTasks(ctx.channelId);
-  log('debug', 'list_tasks', { channelId: ctx.channelId, jobCount: jobs.length });
-  return JSON.stringify({ jobs });
-}
-
-async function handleCancelReminder(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  const jobId = input.jobId as string;
-  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
-  log('debug', 'cancel_reminder', { jobId, channelId: ctx.channelId });
-  const result = await cancelReminder(jobId, ctx.channelId);
-  log('debug', 'cancel_reminder result', { jobId, ...result });
-  return JSON.stringify({ ...result, jobId });
-}
-
-async function handleCancelTask(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  const jobId = input.jobId as string;
-  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
-  log('debug', 'cancel_task', { jobId, channelId: ctx.channelId });
-  const result = await cancelTask(jobId, ctx.channelId);
-  log('debug', 'cancel_task result', { jobId, ...result });
-  return JSON.stringify({ ...result, jobId });
 }
 
 // ─── Model Management ───
@@ -1085,98 +984,6 @@ async function handleRegisterSkill(input: Record<string, unknown>): Promise<stri
   });
 }
 
-// ─── Agent Management (extended) ───
-
-async function handleToggleAgent(input: Record<string, unknown>): Promise<string> {
-  const id = input.id as string;
-  const enabled = input.enabled as boolean;
-  if (!id || typeof enabled !== 'boolean') {
-    return JSON.stringify({ error: 'Missing required fields: id, enabled' });
-  }
-
-  const config = getConfig();
-  const agent = config.orchestrator.agents.find(a => a.id === id);
-  if (!agent) {
-    return JSON.stringify({ error: `Agent "${id}" not found in config` });
-  }
-  agent.enabled = enabled;
-  await saveConfig(config);
-  await publishAgentReload().catch(err => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  return JSON.stringify({ toggled: true, id, enabled });
-}
-
-async function handleSetAgentModels(input: Record<string, unknown>): Promise<string> {
-  const agentId = input.agentId as string;
-  const models = input.models as { model: string; weight?: number; priority?: number }[];
-  if (!agentId || !Array.isArray(models)) {
-    return JSON.stringify({ error: 'Missing required fields: agentId, models' });
-  }
-
-  const config = getConfig();
-  const agent = config.orchestrator.agents.find(a => a.id === agentId);
-  if (!agent) {
-    return JSON.stringify({ error: `Agent "${agentId}" not found in config` });
-  }
-  agent.models = models.map(m => ({ model: m.model, weight: m.weight ?? 1, priority: m.priority ?? 1 }));
-  await saveConfig(config);
-  await publishAgentReload().catch(err => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  return JSON.stringify({ updated: true, agentId, modelCount: agent.models.length });
-}
-
-async function handleSetAgentSkills(input: Record<string, unknown>): Promise<string> {
-  const agentId = input.agentId as string;
-  const skills = input.skills as string[];
-  if (!agentId || !Array.isArray(skills)) {
-    return JSON.stringify({ error: 'Missing required fields: agentId, skills' });
-  }
-
-  const config = getConfig();
-  const agent = config.orchestrator.agents.find(a => a.id === agentId);
-  if (!agent) {
-    return JSON.stringify({ error: `Agent "${agentId}" not found in config` });
-  }
-  agent.skills = skills;
-  await saveConfig(config);
-  await publishAgentReload().catch(err => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  return JSON.stringify({ updated: true, agentId, skillCount: skills.length });
-}
-
-async function handleSetAgentTools(input: Record<string, unknown>): Promise<string> {
-  const agentId = input.agentId as string;
-  const tools = input.tools as string[];
-  if (!agentId || !Array.isArray(tools)) {
-    return JSON.stringify({ error: 'Missing required fields: agentId, tools' });
-  }
-
-  const config = getConfig();
-  const agent = config.orchestrator.agents.find(a => a.id === agentId);
-  if (!agent) {
-    return JSON.stringify({ error: `Agent "${agentId}" not found in config` });
-  }
-  agent.tools = tools;
-  await saveConfig(config);
-  await publishAgentReload().catch(err => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  return JSON.stringify({ updated: true, agentId, toolCount: tools.length });
-}
-
-async function handleSetAgentMcps(input: Record<string, unknown>): Promise<string> {
-  const agentId = input.agentId as string;
-  const mcpServers = input.mcpServers as string[];
-  if (!agentId || !Array.isArray(mcpServers)) {
-    return JSON.stringify({ error: 'Missing required fields: agentId, mcpServers' });
-  }
-
-  const config = getConfig();
-  const agent = config.orchestrator.agents.find(a => a.id === agentId);
-  if (!agent) {
-    return JSON.stringify({ error: `Agent "${agentId}" not found in config` });
-  }
-  agent.mcpServers = mcpServers;
-  await saveConfig(config);
-  await publishAgentReload().catch(err => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  return JSON.stringify({ updated: true, agentId, mcpServerCount: mcpServers.length });
-}
-
 // ─── Guards ───
 
 function handleListGuards(): string {
@@ -1289,12 +1096,6 @@ function handleGetUsage(): string {
 
 // ─── Queue/Process Management ───
 
-async function handleListProcesses(): Promise<string> {
-  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
-  const processes = await listProcesses(getRedis());
-  return JSON.stringify({ processes });
-}
-
 async function handleListQueues(): Promise<string> {
   const results: Record<string, unknown>[] = [];
   for (const [key, name] of Object.entries(QUEUE_NAMES)) {
@@ -1304,44 +1105,6 @@ async function handleListQueues(): Promise<string> {
     results.push({ key, name, paused: isPaused, ...counts });
   }
   return JSON.stringify({ queues: results });
-}
-
-async function handleListJobs(input: Record<string, unknown>): Promise<string> {
-  const queueKey = input.queue as QueueKey | undefined;
-  const status = input.status as string | undefined;
-  const limit = (input.limit as number) ?? 20;
-
-  // BullMQ v5: 'prioritized' jobs are logically 'waiting' — include both
-  const baseStatuses = status
-    ? [status as 'waiting' | 'active' | 'completed' | 'failed' | 'delayed']
-    : ['waiting', 'active', 'completed', 'failed', 'delayed'] as const;
-  const statuses = baseStatuses.includes('waiting' as any)
-    ? [...baseStatuses, 'prioritized' as any]
-    : [...baseStatuses];
-
-  const queuesToSearch = queueKey
-    ? [{ key: queueKey, q: getQueue(queueKey) }]
-    : Object.keys(QUEUE_NAMES).map(k => ({ key: k, q: getQueue(k as QueueKey) }));
-
-  const jobs: Record<string, unknown>[] = [];
-  for (const { key, q } of queuesToSearch) {
-    const qJobs = await q.getJobs(statuses, 0, limit - 1);
-    for (const j of qJobs) {
-      const state = await j.getState();
-      jobs.push({
-        id: j.id,
-        queue: key,
-        name: j.name,
-        state: state === 'prioritized' ? 'waiting' : state,
-        timestamp: j.timestamp,
-        processedOn: j.processedOn,
-        finishedOn: j.finishedOn,
-      });
-      if (jobs.length >= limit) break;
-    }
-    if (jobs.length >= limit) break;
-  }
-  return JSON.stringify({ jobs });
 }
 
 async function handlePauseQueue(input: Record<string, unknown>): Promise<string> {
@@ -1425,280 +1188,6 @@ async function handleListDirectory(input: Record<string, unknown>): Promise<stri
     }),
   );
   return JSON.stringify({ path: dirPath, entries: result });
-}
-
-/** Enforce -skill / -agent suffix on skill and agent directory paths */
-function enforcePathSuffix(filePath: string): string {
-  const norm = filePath.replace(/\\/g, '/');
-  const parts = norm.split('/');
-  if (parts[0] === 'skills' && parts.length >= 2 && !parts[1].endsWith('-skill')) {
-    parts[1] = `${parts[1]}-skill`;
-    return parts.join('/');
-  }
-  if (parts[0] === 'agents' && parts.length >= 2 && !parts[1].endsWith('-agent')) {
-    parts[1] = `${parts[1]}-agent`;
-    return parts.join('/');
-  }
-  return filePath;
-}
-
-async function handleReadFile(input: Record<string, unknown>): Promise<string> {
-  const content = await readWorkspaceFile(input.path as string);
-  return JSON.stringify({ content });
-}
-
-async function handleWriteFile(input: Record<string, unknown>): Promise<string> {
-  let filePath = (input.path ?? input.filePath ?? input.file) as string;
-  if (!filePath) return JSON.stringify({ error: 'Missing required field: path' });
-  const content = (input.content ?? input.data ?? input.text) as string;
-  if (content == null) return JSON.stringify({ error: 'Missing required field: content' });
-
-  // Enforce naming conventions on skills/ and agents/ paths
-  filePath = enforcePathSuffix(filePath);
-
-  await writeWorkspaceFile(filePath, content);
-
-  if (filePath.startsWith('skills/') || filePath.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (filePath.startsWith('agents/') || filePath.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ written: true, path: filePath });
-}
-
-async function handleReadFileLines(input: Record<string, unknown>): Promise<string> {
-  const path = input.path as string;
-  const startLine = input.startLine as number;
-  const endLine = input.endLine as number | undefined;
-  log('debug', 'read_file_lines', { path, startLine, endLine });
-  const result = await readWorkspaceFileLines(path, startLine, endLine);
-  return JSON.stringify(result);
-}
-
-async function handlePatchFile(input: Record<string, unknown>): Promise<string> {
-  let path = input.path as string;
-  const search = input.search as string;
-  const replace = input.replace as string;
-  const all = (input.all as boolean) ?? false;
-
-  if (!path || search === undefined || replace === undefined) {
-    return JSON.stringify({ error: 'Missing required fields: path, search, replace' });
-  }
-
-  path = enforcePathSuffix(path);
-  log('debug', 'patch_file', { path, searchLength: search.length, replaceLength: replace.length, all });
-  const result = await patchWorkspaceFile(path, search, replace, all);
-
-  if (!result.matched) {
-    return JSON.stringify({ error: 'Search string not found in file', path });
-  }
-
-  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ patched: true, count: result.count });
-}
-
-async function handleAppendFile(input: Record<string, unknown>): Promise<string> {
-  let path = input.path as string;
-  const content = input.content as string;
-
-  if (!path || content === undefined) {
-    return JSON.stringify({ error: 'Missing required fields: path, content' });
-  }
-
-  path = enforcePathSuffix(path);
-  log('debug', 'append_file', { path, contentLength: content.length });
-  await appendWorkspaceFile(path, content);
-
-  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ appended: true });
-}
-
-async function handleDiffFiles(input: Record<string, unknown>): Promise<string> {
-  const pathA = input.pathA as string;
-  const pathB = input.pathB as string;
-
-  if (!pathA || !pathB) {
-    return JSON.stringify({ error: 'Missing required fields: pathA, pathB' });
-  }
-
-  log('debug', 'diff_files', { pathA, pathB });
-  const diff = await diffWorkspaceFiles(pathA, pathB);
-  return JSON.stringify({ diff });
-}
-
-async function handleFileInfo(input: Record<string, unknown>): Promise<string> {
-  const path = input.path as string;
-  if (!path) {
-    return JSON.stringify({ error: 'Missing required field: path' });
-  }
-  log('debug', 'file_info', { path });
-  const info = await getFileInfo(path);
-  return JSON.stringify(info);
-}
-
-async function handleCopyFile(input: Record<string, unknown>): Promise<string> {
-  const src = input.src as string;
-  let dest = input.dest as string;
-  if (!src || !dest) {
-    return JSON.stringify({ error: 'Missing required fields: src, dest' });
-  }
-  dest = enforcePathSuffix(dest);
-  log('debug', 'copy_file', { src, dest });
-  await copyWorkspaceFile(src, dest);
-
-  if (dest.startsWith('skills/') || dest.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (dest.startsWith('agents/') || dest.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ copied: true });
-}
-
-async function handleCopyFolder(input: Record<string, unknown>): Promise<string> {
-  const src = input.src as string;
-  let dest = input.dest as string;
-  if (!src || !dest) {
-    return JSON.stringify({ error: 'Missing required fields: src, dest' });
-  }
-  dest = enforcePathSuffix(dest);
-  log('debug', 'copy_folder', { src, dest });
-  const result = await copyWorkspaceFolder(src, dest);
-
-  if (dest.startsWith('skills/') || dest.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (dest.startsWith('agents/') || dest.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ copied: true, count: result.count });
-}
-
-async function handleDeleteFile(input: Record<string, unknown>): Promise<string> {
-  let path = input.path as string;
-  if (!path) {
-    return JSON.stringify({ error: 'Missing required field: path' });
-  }
-  path = enforcePathSuffix(path);
-  log('debug', 'delete_file', { path });
-  await deleteWorkspaceFile(path);
-
-  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ deleted: true });
-}
-
-async function handleDeleteFolder(input: Record<string, unknown>): Promise<string> {
-  let path = input.path as string;
-  if (!path) {
-    return JSON.stringify({ error: 'Missing required field: path' });
-  }
-  path = enforcePathSuffix(path);
-  log('debug', 'delete_folder', { path });
-  await deleteWorkspaceFolder(path);
-
-  if (path.startsWith('skills/') || path.startsWith('skills\\')) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  } else if (path.startsWith('agents/') || path.startsWith('agents\\')) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ deleted: true });
-}
-
-async function handleRenameFile(input: Record<string, unknown>): Promise<string> {
-  let src = input.src as string;
-  let dest = input.dest as string;
-  if (!src || !dest) {
-    return JSON.stringify({ error: 'Missing required fields: src, dest' });
-  }
-  src = enforcePathSuffix(src);
-  dest = enforcePathSuffix(dest);
-  log('debug', 'rename_file', { src, dest });
-  await renameWorkspaceFile(src, dest);
-
-  const affected = [src, dest];
-  if (affected.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  }
-  if (affected.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ renamed: true });
-}
-
-async function handleRenameFolder(input: Record<string, unknown>): Promise<string> {
-  let src = input.src as string;
-  let dest = input.dest as string;
-  if (!src || !dest) {
-    return JSON.stringify({ error: 'Missing required fields: src, dest' });
-  }
-  src = enforcePathSuffix(src);
-  dest = enforcePathSuffix(dest);
-  log('debug', 'rename_folder', { src, dest });
-  await renameWorkspaceFolder(src, dest);
-
-  const affected = [src, dest];
-  if (affected.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
-    log('info', 'Skills directory changed — reloading skills');
-    await loadSkills();
-    await publishSkillReload().catch((err) => log('warn', 'Failed to publish skill reload', { error: String(err) }));
-  }
-  if (affected.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
-    log('info', 'Agents directory changed — reloading agents');
-    await loadAllAgents();
-    await publishAgentReload().catch((err) => log('warn', 'Failed to publish agent reload', { error: String(err) }));
-  }
-
-  return JSON.stringify({ renamed: true });
 }
 
 // ─── Context ───
@@ -1848,80 +1337,264 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
 }
 
 // ═══════════════════════════════════════════════════════════════════
-// TOOL REGISTRATION — register all handlers with the shared registry
+// TOOL REGISTRATION
 // ═══════════════════════════════════════════════════════════════════
 
-// Memory
+// ─── Memory ───
 registerTool('memory_store', handleMemoryStore);
 registerTool('memory_search', handleMemorySearch);
 registerTool('memory_recall', handleMemoryRecall);
 registerTool('memory_update', handleMemoryUpdate);
-registerTool('memory_delete', handleMemoryDelete);
-// Messaging
+registerTool('memory_delete', (input) => JSON.stringify((() => {
+  const id = input.id as string;
+  const deleted = deleteMemory(id);
+  return { deleted, id };
+})()));
+
+// ─── Messaging ───
 registerTool('send_message', handleSendMessage);
 registerTool('send_file', handleSendFile);
-// Agents (management)
+
+// ─── Agents (management) ───
 registerTool('list_agents', handleListAgents);
 registerTool('create_agent', handleCreateAgent);
 registerTool('update_agent', handleUpdateAgent);
 registerTool('delete_agent', handleDeleteAgent);
-// Vault
-registerTool('vault_store', handleVaultStore);
-registerTool('vault_check', handleVaultCheck);
-registerTool('vault_delete', handleVaultDelete);
-registerTool('vault_list', handleVaultList);
-// Scheduling
+registerTool('toggle_agent', async (input) => {
+  const id = input.id as string;
+  const enabled = input.enabled as boolean;
+  if (!id || typeof enabled !== 'boolean') return JSON.stringify({ error: 'Missing required fields: id, enabled' });
+  return withAgentConfig(id, (agent) => { agent.enabled = enabled; return { toggled: true, enabled }; });
+});
+registerTool('set_agent_models', async (input) =>
+  withAgentConfig(input.agentId as string, (agent) => {
+    const models = input.models as { model: string; weight?: number; priority?: number }[];
+    agent.models = models.map(m => ({ model: m.model, weight: m.weight ?? 1, priority: m.priority ?? 1 }));
+    return { modelCount: agent.models.length };
+  }),
+);
+registerTool('set_agent_skills', async (input) =>
+  withAgentConfig(input.agentId as string, (agent) => {
+    agent.skills = input.skills as string[];
+    return { skillCount: agent.skills.length };
+  }),
+);
+registerTool('set_agent_tools', async (input) =>
+  withAgentConfig(input.agentId as string, (agent) => {
+    agent.tools = input.tools as string[];
+    return { toolCount: agent.tools.length };
+  }),
+);
+registerTool('set_agent_mcps', async (input) =>
+  withAgentConfig(input.agentId as string, (agent) => {
+    agent.mcpServers = input.mcpServers as string[];
+    return { mcpServerCount: agent.mcpServers.length };
+  }),
+);
+
+// ─── Vault ───
+registerTool('vault_store', async (input) => {
+  const name = input.name as string;
+  await storeSecret(name, input.value as string);
+  return JSON.stringify({ stored: true, name });
+});
+registerTool('vault_check', async (input) => {
+  const name = input.name as string;
+  const value = await resolveSecret(name);
+  return JSON.stringify({ found: value !== null, name });
+});
+registerTool('vault_delete', async (input) => {
+  const name = input.name as string;
+  const deleted = await deleteSecret(name);
+  return JSON.stringify({ deleted, name });
+});
+registerTool('vault_list', async () => JSON.stringify({ secrets: await listSecrets() }));
+
+// ─── Scheduling ───
 registerTool('schedule_reminder', handleScheduleReminder);
 registerTool('schedule_recurrent_reminder', handleScheduleRecurrentReminder);
 registerTool('schedule_task', handleScheduleTask);
 registerTool('schedule_recurrent_task', handleScheduleRecurrentTask);
-registerTool('list_reminders', (_input, ctx) => handleListReminders(ctx));
-registerTool('list_tasks', (_input, ctx) => handleListTasks(ctx));
-registerTool('cancel_reminder', handleCancelReminder);
-registerTool('cancel_task', handleCancelTask);
-// Model management
+registerTool('list_reminders', async (_input, ctx) => JSON.stringify({ jobs: await listReminders(ctx.channelId) }));
+registerTool('list_tasks', async (_input, ctx) => JSON.stringify({ jobs: await listTasks(ctx.channelId) }));
+registerTool('cancel_reminder', async (input, ctx) => {
+  const jobId = input.jobId as string;
+  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
+  const result = await cancelReminder(jobId, ctx.channelId);
+  return JSON.stringify({ ...result, jobId });
+});
+registerTool('cancel_task', async (input, ctx) => {
+  const jobId = input.jobId as string;
+  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
+  const result = await cancelTask(jobId, ctx.channelId);
+  return JSON.stringify({ ...result, jobId });
+});
+
+// ─── Model management ───
 registerTool('list_models', handleListModels);
 registerTool('toggle_model', handleToggleModel);
-// Skill management
+
+// ─── Skill management ───
 registerTool('list_skills', handleListSkills);
 registerTool('toggle_skill', handleToggleSkill);
 registerTool('delete_skill', handleDeleteSkill);
 registerTool('register_skill', handleRegisterSkill);
-// Agent management (extended)
-registerTool('toggle_agent', handleToggleAgent);
-registerTool('set_agent_models', handleSetAgentModels);
-registerTool('set_agent_skills', handleSetAgentSkills);
-registerTool('set_agent_tools', handleSetAgentTools);
-registerTool('set_agent_mcps', handleSetAgentMcps);
-// Guards
+
+// ─── Guards ───
 registerTool('list_guards', handleListGuards);
 registerTool('toggle_guard', handleToggleGuard);
-// Config
+
+// ─── Config ───
 registerTool('get_config', handleGetConfig);
 registerTool('update_config', handleUpdateConfig);
-// Usage
+
+// ─── Usage ───
 registerTool('get_usage', handleGetUsage);
-// Queue/Process management
-registerTool('list_processes', handleListProcesses);
+
+// ─── Queue/Process management ───
+registerTool('list_processes', async () => {
+  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
+  return JSON.stringify({ processes: await listProcesses(getRedis()) });
+});
 registerTool('list_queues', handleListQueues);
-registerTool('list_jobs', handleListJobs);
+registerTool('list_jobs', async (input) => {
+  const jobs = await queryJobs({
+    queueKey: input.queue as QueueKey | undefined,
+    status: input.status as string | undefined,
+    limit: (input.limit as number) ?? 20,
+    defaultStatuses: ['waiting', 'active', 'completed', 'failed', 'delayed'],
+  });
+  return JSON.stringify({ jobs });
+});
 registerTool('pause_queue', handlePauseQueue);
 registerTool('resume_queue', handleResumeQueue);
 registerTool('clean_queue', handleCleanQueue);
-// File I/O
+
+// ─── File I/O ───
 registerTool('list_directory', handleListDirectory);
-registerTool('read_file', handleReadFile);
-registerTool('read_file_lines', handleReadFileLines);
-registerTool('write_file', handleWriteFile);
-registerTool('patch_file', handlePatchFile);
-registerTool('append_file', handleAppendFile);
-registerTool('diff_files', handleDiffFiles);
-registerTool('file_info', handleFileInfo);
-registerTool('copy_file', handleCopyFile);
-registerTool('copy_folder', handleCopyFolder);
-registerTool('delete_file', handleDeleteFile);
-registerTool('delete_folder', handleDeleteFolder);
-registerTool('rename_file', handleRenameFile);
-registerTool('rename_folder', handleRenameFolder);
-// Context
+registerTool('read_file', async (input) => JSON.stringify({ content: await readWorkspaceFile(input.path as string) }));
+registerTool('read_file_lines', async (input) => {
+  const result = await readWorkspaceFileLines(input.path as string, input.startLine as number, input.endLine as number | undefined);
+  return JSON.stringify(result);
+});
+registerTool('write_file', async (input) => {
+  let path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing: path' });
+  const content = input.content as string;
+  if (content == null) return JSON.stringify({ error: 'Missing: content' });
+  path = enforcePathSuffix(path);
+  await writeWorkspaceFile(path, content);
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ written: true, path });
+});
+registerTool('patch_file', async (input) => {
+  let path = input.path as string;
+  const search = input.search as string;
+  const replace = input.replace as string;
+  const all = (input.all as boolean) ?? false;
+  if (!path || search === undefined || replace === undefined) {
+    return JSON.stringify({ error: 'Missing required fields: path, search, replace' });
+  }
+  path = enforcePathSuffix(path);
+  const result = await patchWorkspaceFile(path, search, replace, all);
+  if (!result.matched) return JSON.stringify({ error: 'Search string not found in file', path });
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ patched: true, count: result.count });
+});
+registerTool('append_file', async (input) => {
+  let path = input.path as string;
+  const content = input.content as string;
+  if (!path || content === undefined) return JSON.stringify({ error: 'Missing required fields: path, content' });
+  path = enforcePathSuffix(path);
+  await appendWorkspaceFile(path, content);
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ appended: true });
+});
+registerTool('diff_files', async (input) => {
+  const pathA = input.pathA as string;
+  const pathB = input.pathB as string;
+  if (!pathA || !pathB) return JSON.stringify({ error: 'Missing required fields: pathA, pathB' });
+  return JSON.stringify({ diff: await diffWorkspaceFiles(pathA, pathB) });
+});
+registerTool('file_info', async (input) => {
+  const path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing required field: path' });
+  return JSON.stringify(await getFileInfo(path));
+});
+registerTool('copy_file', async (input) => {
+  const src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  dest = enforcePathSuffix(dest);
+  await copyWorkspaceFile(src, dest);
+  await fileReloadIfNeeded(dest);
+  return JSON.stringify({ copied: true });
+});
+registerTool('copy_folder', async (input) => {
+  const src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  dest = enforcePathSuffix(dest);
+  const result = await copyWorkspaceFolder(src, dest);
+  await fileReloadIfNeeded(dest);
+  return JSON.stringify({ copied: true, count: result.count });
+});
+registerTool('delete_file', async (input) => {
+  let path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing required field: path' });
+  path = enforcePathSuffix(path);
+  await deleteWorkspaceFile(path);
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ deleted: true });
+});
+registerTool('delete_folder', async (input) => {
+  let path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing required field: path' });
+  path = enforcePathSuffix(path);
+  await deleteWorkspaceFolder(path);
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ deleted: true });
+});
+registerTool('rename_file', async (input) => {
+  let src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  src = enforcePathSuffix(src);
+  dest = enforcePathSuffix(dest);
+  await renameWorkspaceFile(src, dest);
+  await fileReloadIfNeeded(src, dest);
+  return JSON.stringify({ renamed: true });
+});
+registerTool('rename_folder', async (input) => {
+  let src = input.src as string;
+  let dest = input.dest as string;
+  if (!src || !dest) return JSON.stringify({ error: 'Missing required fields: src, dest' });
+  src = enforcePathSuffix(src);
+  dest = enforcePathSuffix(dest);
+  await renameWorkspaceFolder(src, dest);
+  await fileReloadIfNeeded(src, dest);
+  return JSON.stringify({ renamed: true });
+});
+
+// ─── Context ───
 registerTool('compact_context', handleCompactContext);
+
+// ─── Job submission & management ───
+registerTool('submit_job', handleSubmitJob);
+registerTool('submit_parallel_jobs', handleSubmitParallelJobs);
+registerTool('get_job', async (input) => {
+  const jobId = input.jobId as string;
+  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
+  const { getJobStatus } = await import('@scalyclaw/shared/queue/queue.js');
+  return JSON.stringify(await getJobStatus(jobId));
+});
+registerTool('list_active_jobs', async (input) => {
+  const jobs = await queryJobs({
+    queueKey: input.queue as QueueKey | undefined,
+    status: input.status as string | undefined,
+    limit: (input.limit as number) ?? 20,
+    defaultStatuses: ['waiting', 'active', 'delayed'],
+  });
+  return JSON.stringify({ jobs });
+});
+registerTool('stop_job', handleStopJob);

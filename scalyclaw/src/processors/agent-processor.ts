@@ -117,6 +117,7 @@ async function runAgentLoop(
   const allowedToolNames = new Set<string>([
     ...agent.tools.filter(t => eligibleSet.has(t)),
     ...mcpTools.map(t => t.name),
+    'submit_job', 'submit_parallel_jobs', 'get_job', 'list_active_jobs', 'stop_job',
   ]);
 
   const toolCtx: ToolContext = {

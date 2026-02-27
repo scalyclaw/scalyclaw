@@ -1,658 +1,29 @@
 import type { ToolDefinition } from '../models/provider.js';
 
 // ═══════════════════════════════════════════════════════════════════
-// DIRECT TOOL DEFINITIONS — called by name, no wrapper
+// SCHEMA BUILDER HELPERS
 // ═══════════════════════════════════════════════════════════════════
 
-const DIRECT_TOOL_DEFS: ToolDefinition[] = [
-  // ─── Memory ───
-  {
-    name: 'memory_store',
-    description: 'Store a memory (type, subject, content, tags, confidence, ttl)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        type: { type: 'string', description: 'Memory type (e.g. fact, preference, event)' },
-        subject: { type: 'string', description: 'Short subject/title' },
-        content: { type: 'string', description: 'Full content of the memory' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Tags for categorization' },
-        confidence: { type: 'number', description: 'Confidence score (0-3, default 2)' },
-        source: { type: 'string', enum: ['user-stated', 'inferred'], description: 'Source of the memory' },
-        ttl: { type: 'string', description: 'Time-to-live (e.g. "7d", "1h")' },
-      },
-      required: ['type', 'subject', 'content'],
-    },
-  },
-  {
-    name: 'memory_search',
-    description: 'Semantic search over memories (query, optional type/tags/topK)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        query: { type: 'string', description: 'Search query' },
-        type: { type: 'string', description: 'Filter by memory type' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags' },
-        topK: { type: 'number', description: 'Max results (default 5)' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'memory_recall',
-    description: 'Browse memories by ID, type, or tags',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Recall a specific memory by ID' },
-        type: { type: 'string', description: 'Filter by memory type' },
-        tags: { type: 'array', items: { type: 'string' }, description: 'Filter by tags' },
-      },
-    },
-  },
-  {
-    name: 'memory_update',
-    description: 'Update a memory in place (subject, content, tags, confidence)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Memory ID to update' },
-        subject: { type: 'string' },
-        content: { type: 'string' },
-        tags: { type: 'array', items: { type: 'string' } },
-        confidence: { type: 'number' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'memory_delete',
-    description: 'Delete a memory by ID',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Memory ID to delete' },
-      },
-      required: ['id'],
-    },
-  },
+type Prop = { type: string; description?: string; enum?: string[]; items?: unknown; properties?: Record<string, unknown>; required?: string[] };
 
-  // ─── Messaging ───
-  {
-    name: 'send_message',
-    description: 'Send an intermediate message to a channel',
-    input_schema: {
-      type: 'object',
-      properties: {
-        text: { type: 'string', description: 'Message text' },
-        channelId: { type: 'string', description: 'Target channel (defaults to current)' },
-      },
-      required: ['text'],
-    },
-  },
-  {
-    name: 'send_file',
-    description: 'Send a file to the user',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-        caption: { type: 'string', description: 'Optional caption' },
-      },
-      required: ['path'],
-    },
-  },
+function schema(props: Record<string, Prop | string>, required?: string[]) {
+  const properties: Record<string, Prop> = {};
+  for (const [k, v] of Object.entries(props))
+    properties[k] = typeof v === 'string' ? { type: 'string', description: v } : v;
+  return { type: 'object' as const, properties, ...(required && { required }) };
+}
 
-  // ─── Agents (management) ───
-  {
-    name: 'list_agents',
-    description: 'List registered agents',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'create_agent',
-    description: 'Create a new agent (id, name, systemPrompt, modelId, skills, tools, mcpServers, maxIterations)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Agent ID (will be suffixed with -agent if needed)' },
-        name: { type: 'string', description: 'Display name' },
-        description: { type: 'string', description: 'Short description' },
-        systemPrompt: { type: 'string', description: 'System prompt for the agent' },
-        modelId: { type: 'string', description: 'Model ID to use' },
-        skills: { type: 'array', items: { type: 'string' }, description: 'Skill IDs the agent can use' },
-        tools: { type: 'array', items: { type: 'string' }, description: 'Tool names the agent can use (defaults to all eligible)' },
-        mcpServers: { type: 'array', items: { type: 'string' }, description: 'MCP server IDs the agent can access' },
-        maxIterations: { type: 'number', description: 'Max tool-use iterations' },
-      },
-      required: ['id', 'name', 'systemPrompt'],
-    },
-  },
-  {
-    name: 'update_agent',
-    description: 'Update agent prompt, model, skills, tools, mcpServers, or settings',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Agent ID' },
-        name: { type: 'string' },
-        description: { type: 'string' },
-        systemPrompt: { type: 'string' },
-        modelId: { type: 'string' },
-        skills: { type: 'array', items: { type: 'string' } },
-        tools: { type: 'array', items: { type: 'string' } },
-        mcpServers: { type: 'array', items: { type: 'string' } },
-        maxIterations: { type: 'number' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'delete_agent',
-    description: 'Remove an agent',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Agent ID to delete' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'toggle_agent',
-    description: 'Enable or disable an agent',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Agent ID' },
-        enabled: { type: 'boolean', description: 'Enable (true) or disable (false)' },
-      },
-      required: ['id', 'enabled'],
-    },
-  },
-  {
-    name: 'set_agent_models',
-    description: 'Set agent model configuration',
-    input_schema: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'Agent ID' },
-        models: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              model: { type: 'string' },
-              weight: { type: 'number' },
-              priority: { type: 'number' },
-            },
-            required: ['model'],
-          },
-        },
-      },
-      required: ['agentId', 'models'],
-    },
-  },
-  {
-    name: 'set_agent_skills',
-    description: 'Set agent skill access',
-    input_schema: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'Agent ID' },
-        skills: { type: 'array', items: { type: 'string' }, description: 'Skill IDs' },
-      },
-      required: ['agentId', 'skills'],
-    },
-  },
-  {
-    name: 'set_agent_tools',
-    description: 'Set agent tool access',
-    input_schema: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'Agent ID' },
-        tools: { type: 'array', items: { type: 'string' }, description: 'Tool names from eligible set' },
-      },
-      required: ['agentId', 'tools'],
-    },
-  },
-  {
-    name: 'set_agent_mcps',
-    description: 'Set agent MCP server access',
-    input_schema: {
-      type: 'object',
-      properties: {
-        agentId: { type: 'string', description: 'Agent ID' },
-        mcpServers: { type: 'array', items: { type: 'string' }, description: 'MCP server IDs' },
-      },
-      required: ['agentId', 'mcpServers'],
-    },
-  },
+function tool(name: string, description: string, input?: ReturnType<typeof schema>): ToolDefinition {
+  return { name, description, input_schema: input ?? { type: 'object', properties: {} } };
+}
 
-  // ─── Scheduling (direct management only) ───
-  {
-    name: 'list_reminders',
-    description: 'List reminders and recurrent reminders',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_tasks',
-    description: 'List tasks and recurrent tasks',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'cancel_reminder',
-    description: 'Cancel a reminder or recurrent reminder by ID',
-    input_schema: {
-      type: 'object',
-      properties: {
-        jobId: { type: 'string', description: 'Reminder job ID to cancel' },
-      },
-      required: ['jobId'],
-    },
-  },
-  {
-    name: 'cancel_task',
-    description: 'Cancel a task or recurrent task by ID',
-    input_schema: {
-      type: 'object',
-      properties: {
-        jobId: { type: 'string', description: 'Task job ID to cancel' },
-      },
-      required: ['jobId'],
-    },
-  },
-
-  // ─── Vault ───
-  {
-    name: 'vault_store',
-    description: 'Store a secret (name, value)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Secret name' },
-        value: { type: 'string', description: 'Secret value' },
-      },
-      required: ['name', 'value'],
-    },
-  },
-  {
-    name: 'vault_check',
-    description: 'Check if a secret exists (returns true/false, never the value)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Secret name to check' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'vault_delete',
-    description: 'Delete a secret',
-    input_schema: {
-      type: 'object',
-      properties: {
-        name: { type: 'string', description: 'Secret name to delete' },
-      },
-      required: ['name'],
-    },
-  },
-  {
-    name: 'vault_list',
-    description: 'List stored secret names',
-    input_schema: { type: 'object', properties: {} },
-  },
-
-  // ─── Models ───
-  {
-    name: 'list_models',
-    description: 'List all chat and embedding models',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'toggle_model',
-    description: 'Enable or disable a model',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Model ID' },
-        enabled: { type: 'boolean', description: 'Enable (true) or disable (false)' },
-      },
-      required: ['id', 'enabled'],
-    },
-  },
-
-  // ─── Skills ───
-  {
-    name: 'list_skills',
-    description: 'List installed skills',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'toggle_skill',
-    description: 'Enable or disable a skill',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Skill ID' },
-        enabled: { type: 'boolean', description: 'Enable (true) or disable (false)' },
-      },
-      required: ['id', 'enabled'],
-    },
-  },
-  {
-    name: 'delete_skill',
-    description: 'Delete a skill by ID',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Skill ID to delete' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'register_skill',
-    description: 'Register a skill after writing its files. Loads from disk, runs security guard, adds to config, notifies workers.',
-    input_schema: {
-      type: 'object',
-      properties: {
-        id: { type: 'string', description: 'Skill ID (e.g. "weather-skill")' },
-      },
-      required: ['id'],
-    },
-  },
-
-  // ─── Guards ───
-  {
-    name: 'list_guards',
-    description: 'List guard configuration',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'toggle_guard',
-    description: 'Enable or disable a guard (message, skill, or agent)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        guard: { type: 'string', enum: ['message', 'skill', 'agent'], description: 'Guard type' },
-        enabled: { type: 'boolean', description: 'Enable (true) or disable (false)' },
-      },
-      required: ['guard', 'enabled'],
-    },
-  },
-
-  // ─── Config ───
-  {
-    name: 'get_config',
-    description: 'Read config (optional section filter)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        section: { type: 'string', description: 'Config section to read (omit for full config)' },
-      },
-    },
-  },
-  {
-    name: 'update_config',
-    description: 'Update a config section',
-    input_schema: {
-      type: 'object',
-      properties: {
-        section: { type: 'string', description: 'Config section to update' },
-        values: { type: 'object', description: 'Key-value pairs to merge into the section' },
-      },
-      required: ['section', 'values'],
-    },
-  },
-
-  // ─── Usage ───
-  {
-    name: 'get_usage',
-    description: 'Get token usage and cost summary (today, this month, by model, budget status)',
-    input_schema: { type: 'object', properties: {} },
-  },
-
-  // ─── Queue/Process Management ───
-  {
-    name: 'list_processes',
-    description: 'List registered processes',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_queues',
-    description: 'List all queues with job counts',
-    input_schema: { type: 'object', properties: {} },
-  },
-  {
-    name: 'list_jobs',
-    description: 'List jobs (optional queue, status, limit)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        queue: { type: 'string', description: 'Queue key to filter' },
-        status: { type: 'string', enum: ['waiting', 'active', 'completed', 'failed', 'delayed'], description: 'Status filter' },
-        limit: { type: 'number', description: 'Max jobs to return (default 20)' },
-      },
-    },
-  },
-  {
-    name: 'pause_queue',
-    description: 'Pause a queue',
-    input_schema: {
-      type: 'object',
-      properties: {
-        queue: { type: 'string', description: 'Queue key to pause' },
-      },
-      required: ['queue'],
-    },
-  },
-  {
-    name: 'resume_queue',
-    description: 'Resume a paused queue',
-    input_schema: {
-      type: 'object',
-      properties: {
-        queue: { type: 'string', description: 'Queue key to resume' },
-      },
-      required: ['queue'],
-    },
-  },
-  {
-    name: 'clean_queue',
-    description: 'Clean completed or failed jobs from a queue',
-    input_schema: {
-      type: 'object',
-      properties: {
-        queue: { type: 'string', description: 'Queue key to clean' },
-        status: { type: 'string', enum: ['completed', 'failed'], description: 'Job status to clean' },
-        age: { type: 'number', description: 'Max age in ms (default 24h)' },
-      },
-      required: ['queue', 'status'],
-    },
-  },
-
-  // ─── File I/O ───
-  {
-    name: 'list_directory',
-    description: 'List contents of a directory',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative directory path (e.g. "skills", "mind", "logs"). Defaults to home root.' },
-        recursive: { type: 'boolean', description: 'List recursively (default false)' },
-      },
-    },
-  },
-  {
-    name: 'read_file',
-    description: 'Read entire file content',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'read_file_lines',
-    description: 'Read a line range (1-indexed)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-        startLine: { type: 'number', description: 'Start line (1-indexed)' },
-        endLine: { type: 'number', description: 'End line (inclusive, omit for rest of file)' },
-      },
-      required: ['path', 'startLine'],
-    },
-  },
-  {
-    name: 'write_file',
-    description: 'Create or overwrite a file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-        content: { type: 'string', description: 'File content' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'patch_file',
-    description: 'Search-and-replace in a file (search, replace, optional all)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-        search: { type: 'string', description: 'String to find' },
-        replace: { type: 'string', description: 'Replacement string' },
-        all: { type: 'boolean', description: 'Replace all occurrences (default false)' },
-      },
-      required: ['path', 'search', 'replace'],
-    },
-  },
-  {
-    name: 'append_file',
-    description: 'Append content to end of file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-        content: { type: 'string', description: 'Content to append' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'diff_files',
-    description: 'Unified diff between two files',
-    input_schema: {
-      type: 'object',
-      properties: {
-        pathA: { type: 'string', description: 'First file path' },
-        pathB: { type: 'string', description: 'Second file path' },
-      },
-      required: ['pathA', 'pathB'],
-    },
-  },
-  {
-    name: 'file_info',
-    description: 'File metadata (size, lines, modified)',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Home-relative file path' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'copy_file',
-    description: 'Copy a file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        src: { type: 'string', description: 'Source file path' },
-        dest: { type: 'string', description: 'Destination file path' },
-      },
-      required: ['src', 'dest'],
-    },
-  },
-  {
-    name: 'copy_folder',
-    description: 'Copy a folder recursively',
-    input_schema: {
-      type: 'object',
-      properties: {
-        src: { type: 'string', description: 'Source folder path' },
-        dest: { type: 'string', description: 'Destination folder path' },
-      },
-      required: ['src', 'dest'],
-    },
-  },
-  {
-    name: 'delete_file',
-    description: 'Delete a file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'File path to delete' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'delete_folder',
-    description: 'Delete a folder recursively',
-    input_schema: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Folder path to delete' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'rename_file',
-    description: 'Rename or move a file',
-    input_schema: {
-      type: 'object',
-      properties: {
-        src: { type: 'string', description: 'Current file path' },
-        dest: { type: 'string', description: 'New file path' },
-      },
-      required: ['src', 'dest'],
-    },
-  },
-  {
-    name: 'rename_folder',
-    description: 'Rename or move a folder',
-    input_schema: {
-      type: 'object',
-      properties: {
-        src: { type: 'string', description: 'Current folder path' },
-        dest: { type: 'string', description: 'New folder path' },
-      },
-      required: ['src', 'dest'],
-    },
-  },
-
-  // ─── Context ───
-  {
-    name: 'compact_context',
-    description: 'Summarize older messages to free context space',
-    input_schema: {
-      type: 'object',
-      properties: {
-        force: { type: 'boolean', description: 'Force compaction even if below threshold' },
-      },
-    },
-  },
-];
+const STR = (d: string): Prop => ({ type: 'string', description: d });
+const BOOL = (d: string): Prop => ({ type: 'boolean', description: d });
+const NUM = (d: string): Prop => ({ type: 'number', description: d });
+const STRARR = (d: string): Prop => ({ type: 'array', items: { type: 'string' }, description: d });
+const ENUM = (d: string, values: string[]): Prop => ({ type: 'string', description: d, enum: values });
+const PATH = 'Home-relative path';
+const TOGGLE = BOOL('Enable (true) or disable (false)');
 
 // ═══════════════════════════════════════════════════════════════════
 // JOB-ONLY TOOLS — invoked through submit_job
@@ -665,10 +36,221 @@ const JOB_ONLY_NAMES = [
 ] as const;
 
 // ═══════════════════════════════════════════════════════════════════
+// TOOL DEFINITIONS — all tools in one flat list
+// ═══════════════════════════════════════════════════════════════════
+
+const TOOL_DEFS: ToolDefinition[] = [
+  // ─── Memory ───
+  tool('memory_store', 'Store a memory', schema({
+    type: STR('Memory type (e.g. fact, preference, event)'),
+    subject: 'Short subject/title',
+    content: 'Full content of the memory',
+    tags: STRARR('Tags for categorization'),
+    confidence: NUM('Confidence score (0-3, default 2)'),
+    source: ENUM('Source of the memory', ['user-stated', 'inferred']),
+    ttl: STR('Time-to-live (e.g. "7d", "1h")'),
+  }, ['type', 'subject', 'content'])),
+  tool('memory_search', 'Semantic search over memories', schema({
+    query: 'Search query',
+    type: STR('Filter by memory type'),
+    tags: STRARR('Filter by tags'),
+    topK: NUM('Max results (default 5)'),
+  }, ['query'])),
+  tool('memory_recall', 'Browse memories by ID, type, or tags', schema({
+    id: 'Recall a specific memory by ID',
+    type: STR('Filter by memory type'),
+    tags: STRARR('Filter by tags'),
+  })),
+  tool('memory_update', 'Update a memory in place', schema({
+    id: 'Memory ID to update',
+    subject: STR(''),
+    content: STR(''),
+    tags: STRARR(''),
+    confidence: NUM(''),
+  }, ['id'])),
+  tool('memory_delete', 'Delete a memory by ID', schema({ id: 'Memory ID to delete' }, ['id'])),
+
+  // ─── Messaging ───
+  tool('send_message', 'Send an intermediate message to a channel', schema({
+    text: 'Message text',
+    channelId: STR('Target channel (defaults to current)'),
+  }, ['text'])),
+  tool('send_file', 'Send a file to the user', schema({
+    path: PATH,
+    caption: STR('Optional caption'),
+  }, ['path'])),
+
+  // ─── Agents (management) ───
+  tool('list_agents', 'List registered agents'),
+  tool('create_agent', 'Create a new agent', schema({
+    id: STR('Agent ID (will be suffixed with -agent if needed)'),
+    name: 'Display name',
+    description: 'Short description',
+    systemPrompt: 'System prompt for the agent',
+    modelId: STR('Model ID to use'),
+    skills: STRARR('Skill IDs the agent can use'),
+    tools: STRARR('Tool names the agent can use (defaults to all eligible)'),
+    mcpServers: STRARR('MCP server IDs the agent can access'),
+    maxIterations: NUM('Max tool-use iterations'),
+  }, ['id', 'name', 'systemPrompt'])),
+  tool('update_agent', 'Update agent prompt, model, skills, tools, mcpServers, or settings', schema({
+    id: 'Agent ID',
+    name: STR(''), description: STR(''), systemPrompt: STR(''), modelId: STR(''),
+    skills: STRARR(''), tools: STRARR(''), mcpServers: STRARR(''),
+    maxIterations: NUM(''),
+  }, ['id'])),
+  tool('delete_agent', 'Remove an agent', schema({ id: 'Agent ID to delete' }, ['id'])),
+  tool('toggle_agent', 'Enable or disable an agent', schema({
+    id: 'Agent ID', enabled: TOGGLE,
+  }, ['id', 'enabled'])),
+  tool('set_agent_models', 'Set agent model configuration', schema({
+    agentId: 'Agent ID',
+    models: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { model: { type: 'string' }, weight: { type: 'number' }, priority: { type: 'number' } },
+        required: ['model'],
+      },
+    },
+  }, ['agentId', 'models'])),
+  tool('set_agent_skills', 'Set agent skill access', schema({
+    agentId: 'Agent ID', skills: STRARR('Skill IDs'),
+  }, ['agentId', 'skills'])),
+  tool('set_agent_tools', 'Set agent tool access', schema({
+    agentId: 'Agent ID', tools: STRARR('Tool names from eligible set'),
+  }, ['agentId', 'tools'])),
+  tool('set_agent_mcps', 'Set agent MCP server access', schema({
+    agentId: 'Agent ID', mcpServers: STRARR('MCP server IDs'),
+  }, ['agentId', 'mcpServers'])),
+
+  // ─── Scheduling (direct management only) ───
+  tool('list_reminders', 'List reminders and recurrent reminders'),
+  tool('list_tasks', 'List tasks and recurrent tasks'),
+  tool('cancel_reminder', 'Cancel a reminder or recurrent reminder by ID', schema({ jobId: 'Reminder job ID to cancel' }, ['jobId'])),
+  tool('cancel_task', 'Cancel a task or recurrent task by ID', schema({ jobId: 'Task job ID to cancel' }, ['jobId'])),
+
+  // ─── Vault ───
+  tool('vault_store', 'Store a secret', schema({ name: 'Secret name', value: 'Secret value' }, ['name', 'value'])),
+  tool('vault_check', 'Check if a secret exists (returns true/false, never the value)', schema({ name: 'Secret name to check' }, ['name'])),
+  tool('vault_delete', 'Delete a secret', schema({ name: 'Secret name to delete' }, ['name'])),
+  tool('vault_list', 'List stored secret names'),
+
+  // ─── Models ───
+  tool('list_models', 'List all chat and embedding models'),
+  tool('toggle_model', 'Enable or disable a model', schema({ id: 'Model ID', enabled: TOGGLE }, ['id', 'enabled'])),
+
+  // ─── Skills ───
+  tool('list_skills', 'List installed skills'),
+  tool('toggle_skill', 'Enable or disable a skill', schema({ id: 'Skill ID', enabled: TOGGLE }, ['id', 'enabled'])),
+  tool('delete_skill', 'Delete a skill by ID', schema({ id: 'Skill ID to delete' }, ['id'])),
+  tool('register_skill', 'Register a skill after writing its files. Loads from disk, runs security guard, adds to config, notifies workers.', schema({ id: STR('Skill ID (e.g. "weather-skill")') }, ['id'])),
+
+  // ─── Guards ───
+  tool('list_guards', 'List guard configuration'),
+  tool('toggle_guard', 'Enable or disable a guard', schema({
+    guard: ENUM('Guard type', ['message', 'skill', 'agent']),
+    enabled: TOGGLE,
+  }, ['guard', 'enabled'])),
+
+  // ─── Config ───
+  tool('get_config', 'Read config (optional section filter)', schema({
+    section: STR('Config section to read (omit for full config)'),
+  })),
+  tool('update_config', 'Update a config section', schema({
+    section: 'Config section to update',
+    values: { type: 'object', description: 'Key-value pairs to merge into the section' },
+  }, ['section', 'values'])),
+
+  // ─── Usage ───
+  tool('get_usage', 'Get token usage and cost summary (today, this month, by model, budget status)'),
+
+  // ─── Queue/Process Management ───
+  tool('list_processes', 'List registered processes'),
+  tool('list_queues', 'List all queues with job counts'),
+  tool('list_jobs', 'List jobs', schema({
+    queue: STR('Queue key to filter'),
+    status: ENUM('Status filter', ['waiting', 'active', 'completed', 'failed', 'delayed']),
+    limit: NUM('Max jobs to return (default 20)'),
+  })),
+  tool('pause_queue', 'Pause a queue', schema({ queue: 'Queue key to pause' }, ['queue'])),
+  tool('resume_queue', 'Resume a paused queue', schema({ queue: 'Queue key to resume' }, ['queue'])),
+  tool('clean_queue', 'Clean completed or failed jobs from a queue', schema({
+    queue: 'Queue key to clean',
+    status: ENUM('Job status to clean', ['completed', 'failed']),
+    age: NUM('Max age in ms (default 24h)'),
+  }, ['queue', 'status'])),
+
+  // ─── File I/O ───
+  tool('list_directory', 'List contents of a directory', schema({
+    path: STR('Home-relative directory path (e.g. "skills", "mind", "logs"). Defaults to home root.'),
+    recursive: BOOL('List recursively (default false)'),
+  })),
+  tool('read_file', 'Read entire file content', schema({ path: PATH }, ['path'])),
+  tool('read_file_lines', 'Read a line range (1-indexed)', schema({
+    path: PATH, startLine: NUM('Start line (1-indexed)'), endLine: NUM('End line (inclusive, omit for rest of file)'),
+  }, ['path', 'startLine'])),
+  tool('write_file', 'Create or overwrite a file', schema({ path: PATH, content: 'File content' }, ['path', 'content'])),
+  tool('patch_file', 'Search-and-replace in a file', schema({
+    path: PATH, search: 'String to find', replace: 'Replacement string', all: BOOL('Replace all occurrences (default false)'),
+  }, ['path', 'search', 'replace'])),
+  tool('append_file', 'Append content to end of file', schema({ path: PATH, content: 'Content to append' }, ['path', 'content'])),
+  tool('diff_files', 'Unified diff between two files', schema({ pathA: 'First file path', pathB: 'Second file path' }, ['pathA', 'pathB'])),
+  tool('file_info', 'File metadata (size, lines, modified)', schema({ path: PATH }, ['path'])),
+  tool('copy_file', 'Copy a file', schema({ src: 'Source file path', dest: 'Destination file path' }, ['src', 'dest'])),
+  tool('copy_folder', 'Copy a folder recursively', schema({ src: 'Source folder path', dest: 'Destination folder path' }, ['src', 'dest'])),
+  tool('delete_file', 'Delete a file', schema({ path: 'File path to delete' }, ['path'])),
+  tool('delete_folder', 'Delete a folder recursively', schema({ path: 'Folder path to delete' }, ['path'])),
+  tool('rename_file', 'Rename or move a file', schema({ src: 'Current file path', dest: 'New file path' }, ['src', 'dest'])),
+  tool('rename_folder', 'Rename or move a folder', schema({ src: 'Current folder path', dest: 'New folder path' }, ['src', 'dest'])),
+
+  // ─── Context ───
+  tool('compact_context', 'Summarize older messages to free context space', schema({
+    force: BOOL('Force compaction even if below threshold'),
+  })),
+
+  // ─── Job submission ───
+  tool('submit_job', [
+    'Execute a job tool and wait for the result.',
+    'Payload per tool:',
+    '- execute_command: { command: string, input?: string }',
+    '- execute_skill: { skillId: string, input?: string }',
+    '- execute_code: { language: "python"|"javascript"|"bash", code: string }',
+    '- delegate_agent: { agentId: string, task: string, context?: string }',
+    '- schedule_reminder: { message: string, delayMs?: number, at?: string } — simple text delivery. e.g. { message: "Stand up", delayMs: 1800000 }',
+    '- schedule_recurrent_reminder: { task: string, cron?: string, intervalMs?: number } — repeating text delivery. e.g. { task: "Drink water", cron: "0 * * * *" }',
+    '- schedule_task: { task: string, delayMs?: number, at?: string } — one-shot LLM task. e.g. { task: "Check weather and summarize", at: "2026-02-24T09:00:00Z" }',
+    '- schedule_recurrent_task: { task: string, cron?: string, intervalMs?: number } — repeating LLM task. e.g. { task: "Summarize inbox", cron: "0 9 * * *" }',
+  ].join('\n'), schema({
+    toolName: ENUM('Job tool to execute', [...JOB_ONLY_NAMES]),
+    payload: { type: 'object', description: 'Tool-specific parameters (see description above)' },
+  }, ['toolName', 'payload'])),
+  tool('submit_parallel_jobs', 'Execute multiple tools in parallel and wait for all results.', schema({
+    jobs: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { toolName: { type: 'string', description: 'Any tool name' }, payload: { type: 'object' } },
+        required: ['toolName'],
+      },
+    },
+  }, ['jobs'])),
+
+  // ─── Job management ───
+  tool('get_job', 'Get the status and details of a job by its ID.', schema({ jobId: 'The job ID to look up' }, ['jobId'])),
+  tool('list_active_jobs', 'List active and recent jobs across all queues.', schema({
+    queue: STR('Optional queue key to filter'),
+    status: ENUM('Optional status filter', ['waiting', 'active', 'completed', 'failed', 'delayed']),
+    limit: NUM('Max jobs to return (default 20)'),
+  })),
+  tool('stop_job', 'Stop a running or pending job. Use when a job is stuck, no longer needed, or needs to be retried differently.', schema({ jobId: 'The job ID to stop' }, ['jobId'])),
+];
+
+// ═══════════════════════════════════════════════════════════════════
 // AGENT TOOL SCOPING
 // ═══════════════════════════════════════════════════════════════════
 
-/** Direct tools available to agents (operational only — no admin tools) */
+/** Tools available to agents as direct calls (operational only — no admin tools) */
 const AGENT_DIRECT_NAMES = new Set([
   'send_message', 'send_file',
   'memory_store', 'memory_search', 'memory_recall', 'memory_update', 'memory_delete',
@@ -689,103 +271,18 @@ export const AGENT_ELIGIBLE_TOOL_NAMES: string[] = [...AGENT_DIRECT_NAMES, ...AG
 // EXPORTS
 // ═══════════════════════════════════════════════════════════════════
 
-/** Set of direct tool names for dispatch in tool-impl.ts */
-export const DIRECT_TOOL_NAMES_SET = new Set(DIRECT_TOOL_DEFS.map(t => t.name));
+/** Set of all tool names for dispatch */
+export const TOOL_NAMES_SET = new Set(TOOL_DEFS.map(t => t.name));
 
-// ─── Build tool definitions from context ───
-
-function buildToolDefs(): ToolDefinition[] {
-  return [
-    ...DIRECT_TOOL_DEFS,
-    // ─── Meta: Job submission ───
-    {
-      name: 'submit_job',
-      description: [
-        'Execute a job tool and wait for the result.',
-        'Payload per tool:',
-        '- execute_command: { command: string, input?: string }',
-        '- execute_skill: { skillId: string, input?: string }',
-        '- execute_code: { language: "python"|"javascript"|"bash", code: string }',
-        '- delegate_agent: { agentId: string, task: string, context?: string }',
-        '- schedule_reminder: { message: string, delayMs?: number, at?: string } — simple text delivery. e.g. { message: "Stand up", delayMs: 1800000 }',
-        '- schedule_recurrent_reminder: { task: string, cron?: string, intervalMs?: number } — repeating text delivery. e.g. { task: "Drink water", cron: "0 * * * *" }',
-        '- schedule_task: { task: string, delayMs?: number, at?: string } — one-shot LLM task. e.g. { task: "Check weather and summarize", at: "2026-02-24T09:00:00Z" }',
-        '- schedule_recurrent_task: { task: string, cron?: string, intervalMs?: number } — repeating LLM task. e.g. { task: "Summarize inbox", cron: "0 9 * * *" }',
-      ].join('\n'),
-      input_schema: {
-        type: 'object',
-        properties: {
-          toolName: { type: 'string', enum: [...JOB_ONLY_NAMES], description: 'Job tool to execute' },
-          payload: { type: 'object', description: 'Tool-specific parameters (see description above)' },
-        },
-        required: ['toolName', 'payload'],
-      },
-    },
-    {
-      name: 'submit_parallel_jobs',
-      description: 'Execute multiple tools in parallel and wait for all results.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobs: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                toolName: { type: 'string', description: 'Any tool name' },
-                payload: { type: 'object' },
-              },
-              required: ['toolName'],
-            },
-          },
-        },
-        required: ['jobs'],
-      },
-    },
-    // ─── Meta: Job management ───
-    {
-      name: 'get_job',
-      description: 'Get the status and details of a job by its ID.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobId: { type: 'string', description: 'The job ID to look up' },
-        },
-        required: ['jobId'],
-      },
-    },
-    {
-      name: 'list_active_jobs',
-      description: 'List active and recent jobs across all queues.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          queue: { type: 'string', description: 'Optional queue key to filter' },
-          status: { type: 'string', enum: ['waiting', 'active', 'completed', 'failed', 'delayed'], description: 'Optional status filter' },
-          limit: { type: 'number', description: 'Max jobs to return (default 20)' },
-        },
-      },
-    },
-    {
-      name: 'stop_job',
-      description: 'Stop a running or pending job by requesting cancellation. Use when a job is stuck, no longer needed, or needs to be retried differently.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobId: { type: 'string', description: 'The job ID to stop' },
-        },
-        required: ['jobId'],
-      },
-    },
-  ];
-}
+/** Orchestrator gets all tools */
+export const ASSISTANT_TOOLS: ToolDefinition[] = TOOL_DEFS;
 
 /** Build scoped tool definitions for an agent based on allowed tools, skills, and MCPs */
 export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: string[], mcpTools: ToolDefinition[]): ToolDefinition[] {
   const allowedSet = new Set(allowedTools);
 
   // Filter direct tools to intersection with allowed
-  const directTools = DIRECT_TOOL_DEFS.filter(t => AGENT_DIRECT_NAMES.has(t.name) && allowedSet.has(t.name));
+  const directTools = TOOL_DEFS.filter(t => AGENT_DIRECT_NAMES.has(t.name) && allowedSet.has(t.name));
 
   // Filter job tools to intersection with allowed
   const allowedJobNames = AGENT_JOB_NAMES.filter(n => allowedSet.has(n));
@@ -803,86 +300,37 @@ export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: stri
     if (allowedJobNames.includes('execute_skill')) jobDescLines.push(`- execute_skill: { skillId: string, input?: string }${skillNote}`);
     if (allowedJobNames.includes('execute_code')) jobDescLines.push('- execute_code: { language: "python"|"javascript"|"bash", code: string }');
 
-    result.push({
-      name: 'submit_job',
-      description: jobDescLines.join('\n'),
-      input_schema: {
-        type: 'object',
-        properties: {
-          toolName: { type: 'string', enum: allowedJobNames },
-          payload: { type: 'object', description: 'Input parameters for the tool (see description for schema per tool)' },
-        },
-        required: ['toolName', 'payload'],
-      },
-    });
-    result.push({
-      name: 'submit_parallel_jobs',
-      description: 'Execute multiple tools in parallel and wait for all results.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobs: {
-            type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                toolName: { type: 'string', enum: allowedJobNames },
-                payload: { type: 'object' },
-              },
-              required: ['toolName'],
-            },
+    result.push(
+      tool('submit_job', jobDescLines.join('\n'), schema({
+        toolName: ENUM('', allowedJobNames as unknown as string[]),
+        payload: { type: 'object', description: 'Input parameters for the tool (see description for schema per tool)' },
+      }, ['toolName', 'payload'])),
+      tool('submit_parallel_jobs', 'Execute multiple tools in parallel and wait for all results.', schema({
+        jobs: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: { toolName: { type: 'string', enum: allowedJobNames as unknown as string[] }, payload: { type: 'object' } },
+            required: ['toolName'],
           },
         },
-        required: ['jobs'],
-      },
-    });
+      }, ['jobs'])),
+    );
   }
 
   // Append MCP tools
   result.push(...mcpTools);
 
-  // Always include meta tools for job management
+  // Job management — always included
   result.push(
-    {
-      name: 'get_job',
-      description: 'Get the status and details of a job by its ID.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobId: { type: 'string', description: 'The job ID to look up' },
-        },
-        required: ['jobId'],
-      },
-    },
-    {
-      name: 'list_active_jobs',
-      description: 'List active and recent jobs across all queues.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          queue: { type: 'string', description: 'Optional queue key to filter' },
-          status: { type: 'string', enum: ['waiting', 'active', 'completed', 'failed', 'delayed'], description: 'Optional status filter' },
-          limit: { type: 'number', description: 'Max jobs to return (default 20)' },
-        },
-      },
-    },
-    {
-      name: 'stop_job',
-      description: 'Stop a running or pending job by requesting cancellation. Use when a job is stuck, no longer needed, or needs to be retried differently.',
-      input_schema: {
-        type: 'object',
-        properties: {
-          jobId: { type: 'string', description: 'The job ID to stop' },
-        },
-        required: ['jobId'],
-      },
-    },
+    tool('get_job', 'Get the status and details of a job by its ID.', schema({ jobId: 'The job ID to look up' }, ['jobId'])),
+    tool('list_active_jobs', 'List active and recent jobs across all queues.', schema({
+      queue: STR('Optional queue key to filter'),
+      status: ENUM('Optional status filter', ['waiting', 'active', 'completed', 'failed', 'delayed']),
+      limit: NUM('Max jobs to return (default 20)'),
+    })),
+    tool('stop_job', 'Stop a running or pending job. Use when a job is stuck, no longer needed, or needs to be retried differently.', schema({ jobId: 'The job ID to stop' }, ['jobId'])),
   );
 
   return result;
 }
-
-// ─── LLM-Facing Tools ───
-
-/** Orchestrator gets all tools */
-export const ASSISTANT_TOOLS: ToolDefinition[] = buildToolDefs();
