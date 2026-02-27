@@ -2,6 +2,7 @@ import { ensureDirectories, syncMindFiles, setBasePath, PATHS, loadSetupConfig }
 import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/shared/core/redis.js';
 import { loadConfig, getConfigRef, subscribeToConfigReload, type ScalyClawConfig } from './config.js';
 import { resolveSecrets } from './vault.js';
+import { ensurePasswordFile } from './vault-crypto.js';
 import { initLogger, log } from '@scalyclaw/shared/core/logger.js';
 import { initDatabase } from './db.js';
 import { initEmbeddings, getEmbeddingDimensions } from '../memory/embeddings.js';
@@ -57,6 +58,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
     syncMindFiles();
   }
   log('info', 'Data directory', { base: PATHS.base });
+
+  // ── Vault password file (must exist before any decrypt) ──
+  ensurePasswordFile();
 
   // ── Secrets + Logger ──
   const resolvedConfig = await resolveSecrets(config) as ScalyClawConfig;

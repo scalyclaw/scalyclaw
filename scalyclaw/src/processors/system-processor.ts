@@ -6,7 +6,7 @@ import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { extractMemories } from '../memory/extractor.js';
 import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
-import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData } from '@scalyclaw/shared/queue/jobs.js';
+import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData, VaultKeyRotationData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── System queue job dispatcher ───
 
@@ -22,6 +22,9 @@ export async function processSystemQueueJob(job: Job): Promise<void> {
       break;
     case 'proactive-fire':
       await processProactiveFire(job as Job<ProactiveFireData>);
+      break;
+    case 'vault-key-rotation':
+      await processVaultKeyRotation();
       break;
     default:
       log('warn', `Unknown system queue job type: ${job.name}`, { jobId: job.id });
@@ -105,6 +108,13 @@ async function processScheduledFire(job: Job<ScheduledFireData>): Promise<void> 
     });
     log('info', 'Scheduled-fire delivered', { channelId: targetChannel, type, scheduledJobId });
   }
+}
+
+// ─── Vault Key Rotation ───
+
+async function processVaultKeyRotation(): Promise<void> {
+  const { rotateAllSecrets } = await import('../core/vault.js');
+  await rotateAllSecrets();
 }
 
 // ─── Proactive Fire (from proactive-worker via system queue) ───

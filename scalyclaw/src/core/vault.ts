@@ -1,13 +1,41 @@
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import {
+  encrypt, decrypt, decryptWithKey, encryptWithKey,
+  rotatePassword, getKey,
+} from './vault-crypto.js';
 
 const SECRET_PREFIX = 'scalyclaw:secret:';
+const RECOVERY_KEY = 'scalyclaw:vault:recovery-key';
 const VAR_PATTERN = /\$\{(\w+)\}/g;
+
+// ─── Decrypt with recovery-key fallback ───
+
+async function decryptWithRecovery(raw: string): Promise<string> {
+  try {
+    return decrypt(raw);
+  } catch {
+    // Primary key failed — check for recovery key from a recent rotation
+    const redis = getRedis();
+    const recoveryHex = await redis.get(RECOVERY_KEY);
+    if (recoveryHex) {
+      try {
+        return decryptWithKey(raw, Buffer.from(recoveryHex, 'hex'));
+      } catch {
+        // Recovery key also failed
+      }
+    }
+    throw new Error('Failed to decrypt vault secret (no valid key)');
+  }
+}
+
+// ─── Core CRUD ───
 
 export async function resolveSecret(name: string): Promise<string | null> {
   const redis = getRedis();
-  const value = await redis.get(`${SECRET_PREFIX}${name}`);
-  return value;
+  const raw = await redis.get(`${SECRET_PREFIX}${name}`);
+  if (raw === null) return null;
+  return decryptWithRecovery(raw);
 }
 
 export async function resolveSecrets(obj: unknown): Promise<unknown> {
@@ -46,12 +74,15 @@ async function resolveStringSecrets(str: string): Promise<string> {
 
 export async function storeSecret(name: string, value: string): Promise<void> {
   const redis = getRedis();
-  await redis.set(`${SECRET_PREFIX}${name}`, value);
+  const encrypted = encrypt(value);
+  await redis.set(`${SECRET_PREFIX}${name}`, encrypted);
+  invalidateSecretCache();
 }
 
 export async function deleteSecret(name: string): Promise<boolean> {
   const redis = getRedis();
   const count = await redis.del(`${SECRET_PREFIX}${name}`);
+  invalidateSecretCache();
   return count > 0;
 }
 
@@ -90,7 +121,12 @@ async function getSecretEnv(): Promise<Record<string, string>> {
   for (let i = 0; i < names.length; i++) {
     const [err, value] = results![i];
     if (!err && typeof value === 'string') {
-      secretCache.set(names[i], value);
+      try {
+        const decrypted = await decryptWithRecovery(value);
+        secretCache.set(names[i], decrypted);
+      } catch (e) {
+        log('warn', `Vault: failed to decrypt secret "${names[i]}"`, { error: String(e) });
+      }
     }
   }
   secretCacheAge = Date.now();
@@ -106,4 +142,61 @@ export function invalidateSecretCache(): void {
 /** Resolve all vault secrets as a flat map (for passing in job data). */
 export async function getAllSecrets(): Promise<Record<string, string>> {
   return getSecretEnv();
+}
+
+// ─── Key Rotation ───
+
+export async function rotateAllSecrets(): Promise<void> {
+  const redis = getRedis();
+  const currentKey = getKey();
+
+  // 1. Read all secrets
+  const names = await listSecrets();
+  if (names.length === 0) {
+    // Still rotate the password even with no secrets
+    rotatePassword();
+    log('info', 'Vault key rotation complete (no secrets to re-encrypt)');
+    return;
+  }
+
+  const pipeline = redis.pipeline();
+  for (const name of names) {
+    pipeline.get(`${SECRET_PREFIX}${name}`);
+  }
+  const results = await pipeline.exec();
+
+  // 2. Decrypt all with current key
+  const plaintexts: Array<{ name: string; value: string }> = [];
+  for (let i = 0; i < names.length; i++) {
+    const [err, raw] = results![i];
+    if (err || typeof raw !== 'string') continue;
+    try {
+      const value = decryptWithKey(raw, currentKey);
+      plaintexts.push({ name: names[i], value });
+    } catch (e) {
+      log('warn', `Vault rotation: failed to decrypt "${names[i]}", skipping`, { error: String(e) });
+    }
+  }
+
+  // 3. Set recovery key (old derived key — scrypt output, not the password)
+  await redis.set(RECOVERY_KEY, currentKey.toString('hex'), 'EX', 3600);
+
+  // 4. Rotate password file → new key
+  const { newKey } = rotatePassword();
+
+  // 5. Re-encrypt all with new key
+  const writePipeline = redis.pipeline();
+  for (const { name, value } of plaintexts) {
+    const encrypted = encryptWithKey(value, newKey);
+    writePipeline.set(`${SECRET_PREFIX}${name}`, encrypted);
+  }
+  await writePipeline.exec();
+
+  // 6. Clean up recovery key
+  await redis.del(RECOVERY_KEY);
+
+  // 7. Invalidate caches
+  invalidateSecretCache();
+
+  log('info', 'Vault key rotation complete', { secretCount: plaintexts.length });
 }

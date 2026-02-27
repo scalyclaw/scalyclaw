@@ -3,7 +3,7 @@ import { PATHS } from './core/paths.js';
 import { getRedis, getSubscriber } from '@scalyclaw/shared/core/redis.js';
 import { log, initLogFile } from '@scalyclaw/shared/core/logger.js';
 import { bootstrap } from './core/bootstrap.js';
-import { enqueueJob, closeQueue, getQueueName } from '@scalyclaw/shared/queue/queue.js';
+import { enqueueJob, closeQueue, getQueueName, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
 import { processMessageQueueJob } from './processors/message-processor.js';
 import { processSystemQueueJob } from './processors/system-processor.js';
 import { processAgentJob } from './processors/agent-processor.js';
@@ -48,6 +48,11 @@ async function startSystem(): Promise<void> {
         await registerProactiveCheck();
       } catch (err) {
         log('warn', 'Failed to re-register proactive check after config reload', { error: String(err) });
+      }
+      try {
+        await registerVaultKeyRotation();
+      } catch (err) {
+        log('warn', 'Failed to re-register vault key rotation after config reload', { error: String(err) });
       }
     },
   });
@@ -153,6 +158,12 @@ async function startSystem(): Promise<void> {
     await registerProactiveCheck();
   } catch (err) {
     log('warn', 'Failed to register proactive check', { error: String(err) });
+  }
+
+  try {
+    await registerVaultKeyRotation();
+  } catch (err) {
+    log('warn', 'Failed to register vault key rotation', { error: String(err) });
   }
 
   // ── Periodic cleanup ──
@@ -428,6 +439,23 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
       // Can't send error response either
     }
   }
+}
+
+// ─── Vault key rotation registration ───
+
+async function registerVaultKeyRotation(): Promise<void> {
+  await removeRepeatableJob('vault-key-rotation', 'system');
+
+  await enqueueJob({
+    name: 'vault-key-rotation',
+    data: { trigger: 'scheduled' },
+    opts: {
+      repeat: { every: 600_000 },
+      jobId: 'vault-key-rotation',
+    },
+  });
+
+  log('info', 'Vault key rotation cron registered (every 10 minutes)');
 }
 
 main().catch((err) => {

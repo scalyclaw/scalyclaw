@@ -89,6 +89,10 @@ export interface ProactiveFireData {
   triggerType: string;
 }
 
+export interface VaultKeyRotationData {
+  trigger: 'scheduled';
+}
+
 export type JobData =
   | AgentTaskData
   | ReminderData
@@ -102,7 +106,8 @@ export type JobData =
   | ToolExecutionData
   | MemoryExtractionData
   | ScheduledFireData
-  | ProactiveFireData;
+  | ProactiveFireData
+  | VaultKeyRotationData;
 
 export type JobName =
   | 'message-processing'
@@ -117,7 +122,8 @@ export type JobName =
   | 'recurrent-task'
   | 'memory-extraction'
   | 'scheduled-fire'
-  | 'proactive-fire';
+  | 'proactive-fire'
+  | 'vault-key-rotation';
 
 // ─── Job → Queue Routing ───
 
@@ -133,8 +139,9 @@ export const JOB_QUEUE_MAP: Record<JobName, QueueName> = {
   'task':                'scalyclaw-scheduler',
   'recurrent-task':      'scalyclaw-scheduler',
   'memory-extraction':  'scalyclaw-system',
-  'scheduled-fire':     'scalyclaw-system',
-  'proactive-fire':     'scalyclaw-system',
+  'scheduled-fire':       'scalyclaw-system',
+  'proactive-fire':       'scalyclaw-system',
+  'vault-key-rotation':   'scalyclaw-system',
 };
 
 // ─── Job Spec ───
