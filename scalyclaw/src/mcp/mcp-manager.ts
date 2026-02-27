@@ -48,7 +48,14 @@ async function connectServer(id: string, config: McpServerConfig): Promise<void>
       transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
-        env: { ...process.env, ...(config.env ?? {}) } as Record<string, string>,
+        env: {
+          PATH: process.env.PATH ?? '',
+          HOME: process.env.HOME ?? '',
+          TMPDIR: process.env.TMPDIR ?? '/tmp',
+          LANG: process.env.LANG ?? '',
+          TERM: process.env.TERM ?? '',
+          ...(config.env ?? {}),
+        } as Record<string, string>,
         cwd: config.cwd,
       });
       break;

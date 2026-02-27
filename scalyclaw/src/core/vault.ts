@@ -7,13 +7,7 @@ const VAR_PATTERN = /\$\{(\w+)\}/g;
 export async function resolveSecret(name: string): Promise<string | null> {
   const redis = getRedis();
   const value = await redis.get(`${SECRET_PREFIX}${name}`);
-  if (value !== null) return value;
-
-  // Fallback to environment variable
-  const envValue = process.env[name];
-  if (envValue !== undefined) return envValue;
-
-  return null;
+  return value;
 }
 
 export async function resolveSecrets(obj: unknown): Promise<unknown> {
@@ -97,10 +91,6 @@ async function getSecretEnv(): Promise<Record<string, string>> {
     const [err, value] = results![i];
     if (!err && typeof value === 'string') {
       secretCache.set(names[i], value);
-    } else {
-      // Fallback to env var
-      const envValue = process.env[names[i]];
-      if (envValue !== undefined) secretCache.set(names[i], envValue);
     }
   }
   secretCacheAge = Date.now();

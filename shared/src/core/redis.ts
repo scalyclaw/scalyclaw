@@ -10,16 +10,6 @@ export interface RedisConfig {
   tls: boolean;
 }
 
-/** Bootstrap Redis config from env vars with sensible defaults */
-export function bootstrapRedisConfig(): RedisConfig {
-  return {
-    host: process.env.REDIS_HOST ?? 'localhost',
-    port: Number(process.env.REDIS_PORT ?? 6379),
-    password: process.env.REDIS_PASSWORD || null,
-    tls: process.env.REDIS_TLS === 'true',
-  };
-}
-
 export function createRedisClient(config: RedisConfig): Redis {
   return new Redis({
     host: config.host,
