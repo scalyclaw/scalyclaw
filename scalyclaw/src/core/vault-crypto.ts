@@ -1,7 +1,7 @@
 import { randomBytes, scryptSync, createCipheriv, createDecipheriv } from 'node:crypto';
 import { readFileSync, writeFileSync, renameSync, statSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { homedir, tmpdir } from 'node:os';
+import { getBasePath } from '@scalyclaw/shared/core/paths.js';
 
 // ─── Constants ───
 
@@ -9,27 +9,32 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
 const AUTH_TAG_LENGTH = 16;
 const SALT = Buffer.from('scalyclaw-vault-kdf-salt-v1');
-const PASSWORD_FILE = join(homedir(), 'scalyclaw.ps');
+
+function getPasswordFile(): string {
+  return join(getBasePath(), 'scalyclaw.ps');
+}
 
 // ─── Password File ───
 
 export function ensurePasswordFile(): void {
+  const target = getPasswordFile();
   try {
-    statSync(PASSWORD_FILE);
+    statSync(target);
   } catch {
     const password = randomBytes(64).toString('base64');
-    const tmp = join(tmpdir(), `.scalyclaw-ps-${process.pid}-${Date.now()}`);
+    mkdirSync(dirname(target), { recursive: true });
+    const tmp = join(dirname(target), `.scalyclaw-ps-${process.pid}-${Date.now()}`);
     writeFileSync(tmp, password + '\n', { mode: 0o600 });
-    mkdirSync(dirname(PASSWORD_FILE), { recursive: true });
-    renameSync(tmp, PASSWORD_FILE);
+    renameSync(tmp, target);
   }
 }
 
 export function readPassword(): string {
+  const target = getPasswordFile();
   try {
-    return readFileSync(PASSWORD_FILE, 'utf-8').trim();
+    return readFileSync(target, 'utf-8').trim();
   } catch {
-    throw new Error(`Vault password file not found at ${PASSWORD_FILE}. Run ensurePasswordFile() first.`);
+    throw new Error(`Vault password file not found at ${target}. Run ensurePasswordFile() first.`);
   }
 }
 
@@ -43,7 +48,7 @@ export function deriveKey(password: string): Buffer {
 }
 
 export function getKey(): Buffer {
-  const mtime = statSync(PASSWORD_FILE).mtimeMs;
+  const mtime = statSync(getPasswordFile()).mtimeMs;
   if (cachedKey && mtime === cachedMtime) return cachedKey;
   const password = readPassword();
   cachedKey = deriveKey(password);
@@ -91,10 +96,11 @@ export function rotatePassword(): { oldKey: Buffer; newKey: Buffer } {
   const oldPassword = readPassword();
   const oldKey = deriveKey(oldPassword);
 
+  const target = getPasswordFile();
   const newPassword = randomBytes(64).toString('base64');
-  const tmp = join(tmpdir(), `.scalyclaw-ps-${process.pid}-${Date.now()}`);
+  const tmp = join(dirname(target), `.scalyclaw-ps-${process.pid}-${Date.now()}`);
   writeFileSync(tmp, newPassword + '\n', { mode: 0o600 });
-  renameSync(tmp, PASSWORD_FILE);
+  renameSync(tmp, target);
 
   const newKey = deriveKey(newPassword);
   invalidateKeyCache();

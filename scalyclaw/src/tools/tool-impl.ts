@@ -1186,31 +1186,35 @@ async function handleListDirectory(input: Record<string, unknown>): Promise<stri
   if (recursive) {
     const allEntries = await readdir(fullPath, { withFileTypes: true, recursive: true });
     const result = await Promise.all(
-      allEntries.map(async (entry) => {
-        const entryPath = join(entry.parentPath ?? entry.path, entry.name);
-        const type = entry.isDirectory() ? 'directory' : 'file';
-        try {
-          const st = await stat(entryPath);
-          return { name: entryPath.slice(fullPath.length + 1), type, size: st.size, modified: st.mtime.toISOString() };
-        } catch {
-          return { name: entryPath.slice(fullPath.length + 1), type };
-        }
-      }),
+      allEntries
+        .filter((entry) => entry.name !== 'scalyclaw.ps')
+        .map(async (entry) => {
+          const entryPath = join(entry.parentPath ?? entry.path, entry.name);
+          const type = entry.isDirectory() ? 'directory' : 'file';
+          try {
+            const st = await stat(entryPath);
+            return { name: entryPath.slice(fullPath.length + 1), type, size: st.size, modified: st.mtime.toISOString() };
+          } catch {
+            return { name: entryPath.slice(fullPath.length + 1), type };
+          }
+        }),
     );
     return JSON.stringify({ path: dirPath, entries: result });
   }
 
   const result = await Promise.all(
-    entries.map(async (entry) => {
-      const entryPath = join(fullPath, entry.name);
-      const type = entry.isDirectory() ? 'directory' : 'file';
-      try {
-        const st = await stat(entryPath);
-        return { name: entry.name, type, size: st.size, modified: st.mtime.toISOString() };
-      } catch {
-        return { name: entry.name, type };
-      }
-    }),
+    entries
+      .filter((entry) => entry.name !== 'scalyclaw.ps')
+      .map(async (entry) => {
+        const entryPath = join(fullPath, entry.name);
+        const type = entry.isDirectory() ? 'directory' : 'file';
+        try {
+          const st = await stat(entryPath);
+          return { name: entry.name, type, size: st.size, modified: st.mtime.toISOString() };
+        } catch {
+          return { name: entry.name, type };
+        }
+      }),
   );
   return JSON.stringify({ path: dirPath, entries: result });
 }

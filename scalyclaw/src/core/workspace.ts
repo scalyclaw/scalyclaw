@@ -47,6 +47,9 @@ export function resolveFilePath(path: string): string {
   if (resolved !== resolvedBase && !resolved.startsWith(resolvedBase + '/')) {
     throw new Error(`Path traversal blocked: ${path}`);
   }
+  if (resolved.endsWith('/scalyclaw.ps')) {
+    throw new Error('Access denied: protected file');
+  }
   return resolved;
 }
 
