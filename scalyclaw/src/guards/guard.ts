@@ -82,7 +82,7 @@ async function runEchoGuard(
   start: number,
 ): Promise<GuardResult | null> {
   try {
-    const threshold = echoGuard.similarityThreshold ?? 0.9;
+    const threshold = echoGuard.similarityThreshold ?? 0.8;
     const response = await guardLlmCall(ECHO_GUARD_SYSTEM_PROMPT, text, model);
     const score = similarity(text, response.text);
 
@@ -142,6 +142,23 @@ async function runContentGuard(
       durationMs: Date.now() - start,
     };
   }
+}
+
+// ─── Response Echo Guard ───
+
+export async function runResponseEchoGuard(text: string): Promise<GuardResult> {
+  const start = Date.now();
+  const config = getConfigRef();
+
+  if (!config.guards?.message?.enabled || !config.guards.message.echoGuard?.enabled) {
+    return { passed: true, guardType: 'message', durationMs: Date.now() - start };
+  }
+
+  const { model, echoGuard } = config.guards.message;
+  const result = await runEchoGuard(text, echoGuard, model, start);
+  if (result && !result.passed) return result;
+
+  return { passed: true, guardType: 'message', durationMs: Date.now() - start };
 }
 
 // ─── Message Guard ───

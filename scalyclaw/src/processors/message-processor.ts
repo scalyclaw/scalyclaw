@@ -5,7 +5,7 @@ import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { runOrchestrator, type StopReason } from '../orchestrator/orchestrator.js';
-import { runMessageGuard } from '../guards/guard.js';
+import { runMessageGuard, runResponseEchoGuard } from '../guards/guard.js';
 import type { MessageProcessingData, CommandData, AttachmentData } from '@scalyclaw/shared/queue/jobs.js';
 import { recordChannelActivity } from '../scheduler/proactive.js';
 import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
@@ -121,6 +121,19 @@ async function processMessage(
     log('info', 'Orchestrator response ready', { channelId, durationMs, responseLength: response.length });
 
     if (response.length > 0) {
+      const responseGuard = await runResponseEchoGuard(response);
+      if (!responseGuard.passed) {
+        log('warn', 'Response blocked by echo guard', {
+          channelId,
+          reason: responseGuard.reason,
+          durationMs: responseGuard.durationMs,
+        });
+        const safeResponse = 'My response was flagged by the security guard. Please try rephrasing your request.';
+        storeMessage(channelId, 'assistant', safeResponse);
+        await publishProgress(redis, channelId, { jobId, type: 'complete', result: safeResponse });
+        return;
+      }
+
       storeMessage(channelId, 'assistant', response);
 
       await enqueueJob({
@@ -211,6 +224,19 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
     });
 
     if (response.length > 0) {
+      const responseGuard = await runResponseEchoGuard(response);
+      if (!responseGuard.passed) {
+        log('warn', 'Response blocked by echo guard', {
+          channelId,
+          reason: responseGuard.reason,
+          durationMs: responseGuard.durationMs,
+        });
+        const safeResponse = 'My response was flagged by the security guard. Please try rephrasing your request.';
+        storeMessage(channelId, 'assistant', safeResponse);
+        await publishProgress(redis, channelId, { jobId: job.id!, type: 'complete', result: safeResponse });
+        return;
+      }
+
       storeMessage(channelId, 'assistant', response);
 
       await enqueueJob({

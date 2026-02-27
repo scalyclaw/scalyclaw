@@ -181,7 +181,7 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
     message: {
       enabled: true,
       model: '',
-      echoGuard: { enabled: true, similarityThreshold: 0.9 },
+      echoGuard: { enabled: true, similarityThreshold: 0.8 },
       contentGuard: { enabled: true },
     },
     skill: { enabled: true, model: '' },
