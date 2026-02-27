@@ -146,6 +146,25 @@ async function runContentGuard(
 
 // ─── Command Shield (deterministic, no LLM) ───
 
+/** Collapse all whitespace (spaces, tabs, newlines) into single spaces for shield matching. */
+function normalizeForShield(text: string): string {
+  return text.toLowerCase().replace(/\s+/g, ' ');
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Check if normalized text matches any denied pattern using word-boundary regex. */
+export function matchesDenied(text: string, denied: string[]): string | null {
+  const normalized = normalizeForShield(text);
+  for (const pattern of denied) {
+    const re = new RegExp(`\\b${escapeRegex(pattern.toLowerCase())}\\b`);
+    if (re.test(normalized)) return pattern;
+  }
+  return null;
+}
+
 export function runCommandShield(text: string, overrideDenied?: string[]): GuardResult {
   const start = Date.now();
   const config = getConfigRef();
@@ -156,22 +175,23 @@ export function runCommandShield(text: string, overrideDenied?: string[]): Guard
   }
 
   const denied = overrideDenied ?? shield.denied;
-  const lower = text.toLowerCase();
-
-  for (const pattern of denied) {
-    if (lower.includes(pattern.toLowerCase())) {
-      return {
-        passed: false,
-        guardType: 'command',
-        failedLayer: 'denied',
-        reason: `Command blocked: matches denied pattern "${pattern}"`,
-        durationMs: Date.now() - start,
-      };
-    }
+  const matched = matchesDenied(text, denied);
+  if (matched) {
+    return {
+      passed: false,
+      guardType: 'command',
+      failedLayer: 'denied',
+      reason: `Command blocked: matches denied pattern "${matched}"`,
+      durationMs: Date.now() - start,
+    };
   }
 
   if (shield.allowed.length > 0) {
-    const isAllowed = shield.allowed.some(p => lower.includes(p.toLowerCase()));
+    const normalized = normalizeForShield(text);
+    const isAllowed = shield.allowed.some(p => {
+      const re = new RegExp(`\\b${escapeRegex(p.toLowerCase())}\\b`);
+      return re.test(normalized);
+    });
     if (!isAllowed) {
       return {
         passed: false,

@@ -31,7 +31,21 @@ export function registerAuthHook(server: FastifyInstance): void {
       token = query.token ?? null;
     }
 
-    if (!token || token.length !== authValue.length || !timingSafeEqual(Buffer.from(token), Buffer.from(authValue))) {
+    if (!token) {
+      reply.status(401).send({ error: 'Unauthorized' });
+      return;
+    }
+
+    // Pad both buffers to equal length to avoid leaking token length via timing
+    const tokenBuf = Buffer.from(token);
+    const authBuf = Buffer.from(authValue);
+    const maxLen = Math.max(tokenBuf.length, authBuf.length);
+    const padded1 = Buffer.alloc(maxLen);
+    const padded2 = Buffer.alloc(maxLen);
+    tokenBuf.copy(padded1);
+    authBuf.copy(padded2);
+
+    if (!timingSafeEqual(padded1, padded2) || tokenBuf.length !== authBuf.length) {
       reply.status(401).send({ error: 'Unauthorized' });
     }
   });

@@ -6,6 +6,17 @@ import type { McpServerConfig } from '../core/config.js';
 import type { ToolDefinition } from '../models/provider.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 
+/** Env vars that must never be overridden by MCP server config (code injection vectors). */
+const DENIED_MCP_ENV = new Set([
+  'LD_PRELOAD', 'LD_LIBRARY_PATH',
+  'NODE_OPTIONS', 'NODE_EXTRA_CA_CERTS',
+  'PYTHONPATH', 'PYTHONSTARTUP',
+  'RUBYLIB', 'RUBYOPT',
+  'PERL5LIB', 'PERL5OPT',
+  'DYLD_INSERT_LIBRARIES', 'DYLD_LIBRARY_PATH',
+  'CLASSPATH',
+]);
+
 interface McpConnection {
   id: string;
   config: McpServerConfig;
@@ -45,6 +56,15 @@ async function connectServer(id: string, config: McpServerConfig): Promise<void>
         log('warn', `MCP server "${id}" detected as stdio but no command — skipping`);
         return;
       }
+      // Filter out dangerous env vars that could allow code injection
+      const userEnv: Record<string, string> = {};
+      for (const [key, val] of Object.entries(config.env ?? {})) {
+        if (DENIED_MCP_ENV.has(key)) {
+          log('warn', `MCP server "${id}": blocked dangerous env var "${key}"`);
+        } else {
+          userEnv[key] = val;
+        }
+      }
       transport = new StdioClientTransport({
         command: config.command,
         args: config.args ?? [],
@@ -54,7 +74,7 @@ async function connectServer(id: string, config: McpServerConfig): Promise<void>
           TMPDIR: process.env.TMPDIR ?? '/tmp',
           LANG: process.env.LANG ?? '',
           TERM: process.env.TERM ?? '',
-          ...(config.env ?? {}),
+          ...userEnv,
         } as Record<string, string>,
         cwd: config.cwd,
       });

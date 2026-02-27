@@ -159,7 +159,7 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
     authType: 'none',
     authValue: null,
     tls: { cert: '', key: '' },
-    cors: ['*'],
+    cors: [],
   },
   logs: { level: 'info', format: 'json', type: 'console' },
   memory: { topK: 10, scoreThreshold: 0.5, embeddingModel: 'auto' },
@@ -435,9 +435,16 @@ export async function updateConfig(updater: (draft: ScalyClawConfig) => void): P
 /** Return a deep clone with sensitive fields masked. Safe for API responses. */
 export function redactConfig(config: Readonly<ScalyClawConfig>): Record<string, unknown> {
   const clone = structuredClone(config);
+  // Redact provider API keys and baseUrls that may contain auth tokens
   for (const p of Object.values(clone.models.providers)) {
     if (p.apiKey) p.apiKey = '***';
+    if (p.baseUrl) p.baseUrl = '***';
   }
   if (clone.gateway.authValue) clone.gateway.authValue = '***';
+  // Redact MCP server sensitive fields (headers may contain Bearer tokens, env may contain API keys)
+  for (const s of Object.values(clone.mcpServers ?? {})) {
+    if (s.headers) s.headers = Object.fromEntries(Object.keys(s.headers).map(k => [k, '***']));
+    if (s.env) s.env = Object.fromEntries(Object.keys(s.env).map(k => [k, '***']));
+  }
   return clone as unknown as Record<string, unknown>;
 }

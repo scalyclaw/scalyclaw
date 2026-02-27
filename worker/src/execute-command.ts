@@ -12,11 +12,14 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
     return JSON.stringify({ error: 'Missing required field: command (bash script/command to execute)' });
   }
 
-  // Defense in depth: check denied patterns passed from orchestrator
+  // Defense in depth: check denied patterns passed from orchestrator (normalized matching)
   const denied = (input._deniedCommands as string[]) ?? [];
   if (denied.length > 0) {
-    const lower = command.toLowerCase();
-    const match = denied.find(p => lower.includes(p.toLowerCase()));
+    const normalized = command.toLowerCase().replace(/\s+/g, ' ');
+    const match = denied.find(p => {
+      const re = new RegExp(`\\b${p.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+      return re.test(normalized);
+    });
     if (match) {
       return JSON.stringify({ error: `Command blocked by Command Shield: matches denied pattern "${match}"` });
     }

@@ -26,6 +26,61 @@ import { requestJobCancel } from '@scalyclaw/shared/queue/cancel.js';
 
 export type { ToolContext } from './tool-registry.js';
 
+// ─── Scoped secret resolution ───
+
+/** Extract secret names referenced as env-style vars in text (e.g. $SECRET_NAME or ${SECRET_NAME}). */
+function extractSecretRefs(text: string): Set<string> {
+  const refs = new Set<string>();
+  // Match ${VAR} and $VAR patterns
+  for (const m of text.matchAll(/\$\{([A-Z_][A-Z0-9_]*)\}/g)) refs.add(m[1]);
+  for (const m of text.matchAll(/\$([A-Z_][A-Z0-9_]*)\b/g)) refs.add(m[1]);
+  return refs;
+}
+
+/**
+ * Resolve only the vault secrets actually needed by a tool job.
+ * - execute_skill: scan skill markdown + script for secret refs
+ * - execute_code / execute_command: scan the code/command text for secret refs
+ * - Fallback: return empty object
+ */
+async function resolveNeededSecrets(
+  toolName: string,
+  payload: Record<string, unknown>,
+): Promise<Record<string, string>> {
+  const allSecrets = await getAllSecrets();
+  if (Object.keys(allSecrets).length === 0) return {};
+
+  let refs = new Set<string>();
+
+  if (toolName === 'execute_skill') {
+    const skillId = payload.skillId as string;
+    if (skillId) {
+      const skill = getSkill(skillId);
+      if (skill) {
+        // Scan skill markdown and input for secret references
+        refs = extractSecretRefs(skill.markdown);
+        const inp = payload.input as string;
+        if (inp) for (const r of extractSecretRefs(inp)) refs.add(r);
+      }
+    }
+  } else if (toolName === 'execute_code') {
+    const code = payload.code as string;
+    if (code) refs = extractSecretRefs(code);
+  } else if (toolName === 'execute_command') {
+    const cmd = (payload.command ?? payload.code ?? payload.script) as string;
+    if (cmd) refs = extractSecretRefs(cmd);
+  }
+
+  if (refs.size === 0) return {};
+
+  // Only include secrets whose names are actually referenced
+  const scoped: Record<string, string> = {};
+  for (const name of refs) {
+    if (name in allSecrets) scoped[name] = allSecrets[name];
+  }
+  return scoped;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SHARED HELPERS
 // ═══════════════════════════════════════════════════════════════════
@@ -170,11 +225,11 @@ async function enqueueAndWait(
   ctx: ToolContext,
   timeoutMs: number,
 ): Promise<string> {
-  // Resolve secrets on orchestrator and pass in job data for remote workers
+  // Resolve only needed secrets and pass in job data for remote workers
   if (queueKey === 'tools') {
-    const secrets = await getAllSecrets();
     const config = getConfigRef();
     const denied = config.guards.commandShield?.enabled ? config.guards.commandShield.denied : [];
+    const secrets = await resolveNeededSecrets(toolName, payload);
     payload = { ...payload, _secrets: secrets, _deniedCommands: denied };
   }
 
@@ -1058,6 +1113,31 @@ function handleGetConfig(input: Record<string, unknown>): string {
   return JSON.stringify({ config: redacted });
 }
 
+/** Fields the LLM must never modify via update_config. Dot-paths for nested keys. */
+const IMMUTABLE_CONFIG_FIELDS: Record<string, string[]> = {
+  gateway: ['authType', 'authValue', 'tls', 'bind', 'host', 'port'],
+  guards: ['message.enabled', 'skill.enabled', 'agent.enabled', 'commandShield.enabled', 'commandShield.denied'],
+};
+
+function checkImmutableFields(section: string, values: Record<string, unknown>): string | null {
+  const blocked = IMMUTABLE_CONFIG_FIELDS[section];
+  if (!blocked) return null;
+
+  for (const field of blocked) {
+    const parts = field.split('.');
+    if (parts.length === 1) {
+      if (parts[0] in values) return `${section}.${field}`;
+    } else {
+      // Check nested: e.g. "message.enabled" → values.message?.enabled
+      const top = values[parts[0]];
+      if (top !== undefined && typeof top === 'object' && top !== null && parts[1] in (top as Record<string, unknown>)) {
+        return `${section}.${field}`;
+      }
+    }
+  }
+  return null;
+}
+
 async function handleUpdateConfig(input: Record<string, unknown>): Promise<string> {
   const section = input.section as string;
   const values = input.values as Record<string, unknown>;
@@ -1068,6 +1148,11 @@ async function handleUpdateConfig(input: Record<string, unknown>): Promise<strin
   const config = getConfigRef();
   if (!(section in config)) {
     return JSON.stringify({ error: `Unknown config section: "${section}"` });
+  }
+
+  const protectedField = checkImmutableFields(section, values);
+  if (protectedField) {
+    return JSON.stringify({ error: `Cannot modify protected field: ${protectedField}` });
   }
 
   await updateConfig(draft => {
