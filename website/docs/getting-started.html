@@ -24,7 +24,7 @@
           <thead><tr><th>Dependency</th><th>Version</th><th>Purpose</th></tr></thead>
           <tbody>
             <tr><td><strong>Bun</strong></td><td>latest</td><td>JavaScript runtime for all ScalyClaw processes</td></tr>
-            <tr><td><strong>Redis</strong></td><td>&ge; 6.2</td><td>Message bus, session store, config, vault, pub/sub</td></tr>
+            <tr><td><strong>Redis</strong></td><td>&ge; 6.2</td><td>Message bus, config, vault, pub/sub</td></tr>
             <tr><td><strong>Git</strong></td><td>any</td><td>Cloning the repository</td></tr>
           </tbody>
         </table>
@@ -185,10 +185,9 @@ bun run scalyclaw:dashboard start</pre>
 │   └── <span class="dir">src/</span>
 │       ├── <span class="dir">pages/</span>     <span class="cmt"># admin pages</span>
 │       └── <span class="dir">components/</span> <span class="cmt"># Shared UI components</span>
-├── <span class="dir">shared/</span>           <span class="cmt"># Shared library — types, utils, prompt, session</span>
+├── <span class="dir">shared/</span>           <span class="cmt"># Shared library — types, utils, prompt</span>
 │   └── <span class="dir">src/</span>
 │       ├── <span class="dir">prompt/</span>    <span class="cmt"># System prompt sections</span>
-│       ├── <span class="dir">session/</span>   <span class="cmt"># Per-channel session state machine</span>
 │       └── <span class="dir">memory/</span>    <span class="cmt"># SQLite + sqlite-vec memory system</span>
 ├── <span class="dir">mind/</span>             <span class="cmt"># Personality files (user-editable)</span>
 │   ├── <span class="file">IDENTITY.md</span>  <span class="cmt"># Who it is, tone, boundaries</span>

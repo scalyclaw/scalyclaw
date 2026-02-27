@@ -76,7 +76,7 @@
         </div>
 
         <h4>Memory limit exceeded</h4>
-        <p>Redis has hit its <code>maxmemory</code> limit and is refusing write operations. This can cause BullMQ jobs to fail to enqueue and session state writes to error.</p>
+        <p>Redis has hit its <code>maxmemory</code> limit and is refusing write operations. This can cause BullMQ jobs to fail to enqueue.</p>
 
         <div class="code-block">
           <div class="code-block-header">
@@ -146,32 +146,25 @@
         </div>
 
         <h4>Message not delivered</h4>
-        <p>A message was received and processed but the reply never reached the user. This is often caused by a stuck session state or a stale entry in the pending message queue.</p>
+        <p>A message was received and processed but the reply never reached the user. Common causes:</p>
+
+        <ul>
+          <li>The channel adapter lost its connection to the platform (expired token, network issue). Check the dashboard Logs page for adapter errors.</li>
+          <li>A BullMQ job failed during processing. Check the Jobs page for failed jobs in the <code>scalyclaw-messages</code> queue.</li>
+          <li>A stuck cancel flag is blocking processing. Clear it manually:</li>
+        </ul>
 
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">bash</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre><span class="cmt"># Inspect the pending queue for a channel</span>
-<span class="cmd">redis-cli lrange "scalyclaw:pending:CHANNEL_ID" 0 -1</span>
+          <pre><span class="cmt"># Clear a stuck cancel flag (if /stop was issued but processing didn't resume)</span>
+<span class="cmd">redis-cli del "scalyclaw:cancel"</span>
 
-<span class="cmt"># Inspect the session state for a channel</span>
-<span class="cmd">redis-cli hgetall "scalyclaw:session:CHANNEL_ID"</span>
-
-<span class="cmt"># Reset a stuck session state (replaces CHANNEL_ID with your channel ID)</span>
-<span class="cmd">redis-cli del "scalyclaw:session:CHANNEL_ID"</span>
-
-<span class="cmt"># Clear the pending queue for a channel</span>
-<span class="cmd">redis-cli del "scalyclaw:pending:CHANNEL_ID"</span></pre>
-        </div>
-
-        <div class="callout callout-warn">
-          <div class="callout-label">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Deleting session state drops context
-          </div>
-          <p>Deleting a session key resets that channel to the <em>idle</em> state and discards any in-flight processing context. Any message that was being assembled or held in the pending queue is abandoned. Use this only when the session is clearly stuck and you are prepared to lose the in-progress exchange.</p>
+<span class="cmt"># Check the messages queue for stuck or failed jobs</span>
+<span class="cmd">redis-cli llen "bull:scalyclaw-messages:active"</span>
+<span class="cmd">redis-cli llen "bull:scalyclaw-messages:failed"</span></pre>
         </div>
 
         <h3>Workers</h3>
@@ -310,7 +303,7 @@
         <p>Yes. Any model that exposes an OpenAI-compatible API endpoint works with ScalyClaw. <a href="https://ollama.com" target="_blank" rel="noopener">Ollama</a> is the most common choice — run <code>ollama serve</code>, then add a model in the dashboard <strong>Models</strong> page pointing to <code>http://localhost:11434/v1</code> as the base URL and set the model ID to the Ollama model name (e.g. <code>llama3.2</code>). No API key is required for local endpoints.</p>
 
         <h4>Where is data stored?</h4>
-        <p>All persistent data lives in two places: a SQLite file (memory, conversation history, vector embeddings) and Redis (configuration, secrets, session state, BullMQ queues). There is no external database to provision or manage. The SQLite file path is set via the <code>SQLITE_PATH</code> environment variable; Redis is configured via <code>REDIS_URL</code>.</p>
+        <p>All persistent data lives in two places: a SQLite file (memory, conversation history, vector embeddings) and Redis (configuration, secrets, BullMQ queues). There is no external database to provision or manage. The SQLite file path is set via the <code>SQLITE_PATH</code> environment variable; Redis is configured via <code>REDIS_URL</code>.</p>
 
         <h4>How do I back up my data?</h4>
         <p>Back up both the SQLite file and the Redis dataset.</p>
@@ -338,13 +331,13 @@
         <p>For secrets specifically, note that they are stored in Redis under <code>scalyclaw:secret:*</code>. A full Redis backup captures them. If you only need to migrate secrets, export them individually and re-import via the dashboard Vault page or with <code>redis-cli set</code>.</p>
 
         <h4>Can I run multiple nodes?</h4>
-        <p>No. ScalyClaw is designed to run as a single orchestrator node. The per-channel session state machine and pending message queue are designed around a single writer, and running two orchestrator instances against the same Redis would cause race conditions in session state. To scale throughput, add more <strong>worker</strong> processes instead — workers are stateless and safe to run in parallel. Multiple workers share the same BullMQ queues and distribute job processing without any coordination issues.</p>
+        <p>No. ScalyClaw is designed to run as a single orchestrator node. The messages queue runs with concurrency=1 to serialize message processing for the single user, and running two orchestrator instances against the same Redis would cause race conditions in conversation state. To scale throughput, add more <strong>worker</strong> processes instead — workers are stateless and safe to run in parallel. Multiple workers share the same BullMQ queues and distribute job processing without any coordination issues.</p>
 
         <h4>How much disk space does it need?</h4>
-        <p>Very little. The SQLite memory database grows slowly — roughly 1 MB per 10,000 stored memories including vector embeddings. Redis is in-memory and its footprint depends on queue depth and the number of active sessions, but a typical idle instance uses well under 50 MB. The ScalyClaw codebase itself (including dependencies) is under 200 MB after <code>bun install</code>.</p>
+        <p>Very little. The SQLite memory database grows slowly — roughly 1 MB per 10,000 stored memories including vector embeddings. Redis is in-memory and its footprint depends on queue depth, but a typical idle instance uses well under 50 MB. The ScalyClaw codebase itself (including dependencies) is under 200 MB after <code>bun install</code>.</p>
 
         <h4>Is it production-ready?</h4>
-        <p>Yes, with proper Redis hardening. ScalyClaw itself is stable for production use. The critical requirement is that your Redis instance is secured: enable authentication (<code>requirepass</code>), use TLS for any connections that cross a network boundary, bind Redis to a private interface only, configure ACLs to restrict what the ScalyClaw service account can do, and enable Redis persistence (<code>appendonly yes</code> or scheduled <code>BGSAVE</code>) so queued jobs and session state survive a Redis restart. See the <a href="security.html">Security</a> page for additional guidance.</p>
+        <p>Yes, with proper Redis hardening. ScalyClaw itself is stable for production use. The critical requirement is that your Redis instance is secured: enable authentication (<code>requirepass</code>), use TLS for any connections that cross a network boundary, bind Redis to a private interface only, configure ACLs to restrict what the ScalyClaw service account can do, and enable Redis persistence (<code>appendonly yes</code> or scheduled <code>BGSAVE</code>) so queued jobs survive a Redis restart. See the <a href="security.html">Security</a> page for additional guidance.</p>
 
         <h4>Can I contribute?</h4>
         <p>Yes. ScalyClaw is open-source. Visit the <a href="https://github.com/scalyclaw/scalyclaw" target="_blank" rel="noopener">GitHub repository</a> to browse the code, open issues, or submit pull requests. Contributions of all sizes are welcome — bug fixes, documentation improvements, new channel adapters, and skill ideas.</p>

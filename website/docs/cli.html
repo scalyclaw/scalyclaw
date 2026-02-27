@@ -55,7 +55,7 @@
         </div>
 
         <h4><code>scalyclaw status</code></h4>
-        <p>Print a summary table of all processes: node, worker(s), and dashboard. Shows PID, uptime, queue depths, and last heartbeat timestamp.</p>
+        <p>Print a summary table of all processes: node, worker(s), and dashboard. Shows PID, uptime, and queue depths.</p>
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">bash</span>
@@ -79,7 +79,7 @@
         <p>Commands for the node process — the orchestrator that manages channels, builds system prompts, and enqueues LLM work.</p>
 
         <h4><code>scalyclaw node start</code></h4>
-        <p>Start the node process in the foreground. The node connects to all configured channels, initialises the session state machine in Redis, and begins consuming from the <code>messages</code> and <code>system</code> BullMQ queues.</p>
+        <p>Start the node process in the foreground. The node connects to all configured channels and begins consuming from the <code>messages</code> and <code>system</code> BullMQ queues.</p>
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">bash</span>
@@ -99,7 +99,7 @@
         </div>
 
         <h4><code>scalyclaw node status</code></h4>
-        <p>Show node health: process uptime, connected channels, active session count, and pending message queue depth per channel.</p>
+        <p>Show node health: process uptime, connected channels, and queue depths.</p>
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">bash</span>

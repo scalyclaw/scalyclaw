@@ -20,7 +20,7 @@
 
         <h2 id="overview">Overview</h2>
 
-        <p>All channels share the same orchestrator, memory system, and personality defined in your <code>mind/</code> files. Per-channel session state is stored in Redis at <code>scalyclaw:session:{channelId}</code> using a Lua-atomic state machine, so a busy Telegram conversation never blocks a simultaneous Discord one.</p>
+        <p>All channels share the same orchestrator, memory system, personality, and conversation history. You can start a conversation on Telegram and continue it on Discord seamlessly — there is one unified conversation across all channels. Responses are always sent back to the channel the message came from; the <code>channelId</code> is recorded as a source marker, not an isolation boundary.</p>
 
         <table>
           <thead>

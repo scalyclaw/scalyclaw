@@ -30,7 +30,7 @@
             <tr>
               <td><strong>Node</strong> <span class="badge badge-green">stateful</span></td>
               <td>Bun, TypeScript</td>
-              <td>Channel adapters, session state machine, guards, orchestrator, system prompt assembly, LLM routing, queue producers</td>
+              <td>Channel adapters, guards, orchestrator, system prompt assembly, LLM routing, queue producers</td>
             </tr>
             <tr>
               <td><strong>Worker</strong> <span class="badge badge-blue">stateless</span></td>
@@ -45,12 +45,10 @@
           </tbody>
         </table>
 
-        <p>All three components connect to the same Redis instance. Redis plays six distinct roles in the system:</p>
+        <p>All three components connect to the same Redis instance. Redis plays four distinct roles in the system:</p>
 
         <ul>
           <li><strong>Message bus</strong> — BullMQ queues for all async work</li>
-          <li><strong>Session store</strong> — per-channel state machine data</li>
-          <li><strong>Pending queue</strong> — structured message buffer per channel</li>
           <li><strong>Config store</strong> — live system configuration at <code>scalyclaw:config</code></li>
           <li><strong>Secret vault</strong> — encrypted secrets at <code>scalyclaw:secret:*</code></li>
           <li><strong>Pub/sub</strong> — hot-reload signals for skills, agents, and config</li>
@@ -78,63 +76,33 @@
 
         <h2 id="message-flow">Message Flow</h2>
 
-        <p>Every inbound message follows a deterministic pipeline. The pipeline is designed so that each stage can short-circuit cleanly — a guard rejection or session conflict stops processing early without leaking state.</p>
+        <p>Every inbound message follows a deterministic pipeline. The pipeline is designed so that each stage can short-circuit cleanly — a guard rejection stops processing early without leaking state. BullMQ serialization (concurrency=1 on the messages queue) ensures only one message is processed at a time.</p>
 
         <div class="flow-diagram">
 <span class="node">1. Channel receives message</span>
            <span class="arrow">↓</span>
-<span class="node">2. Session state machine  (Redis Lua — atomic check-and-set)</span>
-           <span class="arrow">↓  accepted → PROCESSING state</span>
-<span class="node">3. Pending queue  (scalyclaw:pending:{channelId})</span>
-           <span class="arrow">↓  dequeue next message</span>
-<span class="node">4. Echo guard  (reject messages from self)</span>
+<span class="node">2. BullMQ messages queue  (concurrency=1 — serialized processing)</span>
+           <span class="arrow">↓  job picked up</span>
+<span class="node">3. Echo guard  (reject messages from self)</span>
            <span class="arrow">↓  passed</span>
-<span class="node">5. Content guard  (LLM-based policy check)</span>
+<span class="node">4. Content guard  (LLM-based policy check)</span>
            <span class="arrow">↓  approved</span>
-<span class="node">6. Orchestrator builds system prompt</span>
+<span class="node">5. Orchestrator builds system prompt</span>
            <span class="arrow">↓  disk files + code sections + dynamic data</span>
-<span class="node">7. LLM call  (streamed, with tool-use support)</span>
+<span class="node">6. LLM call  (streamed, with tool-use support)</span>
            <span class="arrow">↓</span>
-<span class="node">8. Tool execution?  (local / tools queue / agents queue)</span>
+<span class="node">7. Tool execution?  (local / tools queue / agents queue)</span>
            <span class="arrow">↓  loop until done</span>
-<span class="node">9. Response sent back to channel</span>
-           <span class="arrow">↓</span>
-<span class="node">10. Session state → IDLE  (Lua atomic)</span>
+<span class="node">8. Response sent back to source channel</span>
         </div>
 
-        <h3>Session State Machine</h3>
+        <h3>Unified Conversation</h3>
 
-        <p>Each channel gets its own isolated session state stored in Redis at <code>scalyclaw:session:{channelId}</code>. The state machine has six states:</p>
+        <p>ScalyClaw is a single-user assistant. There is one shared conversation history across all channels — stored in SQLite, not isolated per channel. When you send a message from Telegram, the full conversation history (including messages from Discord, Slack, and the web gateway) is loaded into context. Responses are routed back to the source channel only. The <code>channelId</code> is recorded as a source marker in each message, not as an isolation boundary.</p>
 
-        <table>
-          <thead><tr><th>State</th><th>Meaning</th></tr></thead>
-          <tbody>
-            <tr><td><code>IDLE</code></td><td>No active request; ready to accept a new message</td></tr>
-            <tr><td><code>PROCESSING</code></td><td>Orchestrator pipeline is running for this channel</td></tr>
-            <tr><td><code>TOOL_EXEC</code></td><td>Waiting for a BullMQ tool or agent job to complete</td></tr>
-            <tr><td><code>RESPONDING</code></td><td>Streaming or sending the LLM response back to the channel</td></tr>
-            <tr><td><code>DRAINING</code></td><td>Finishing the current turn; will pick up the next pending message</td></tr>
-            <tr><td><code>CANCELLING</code></td><td>Abort requested; cleaning up and returning to IDLE</td></tr>
-          </tbody>
-        </table>
+        <h3>Cancellation</h3>
 
-        <p>All state transitions are performed by a Lua script executed atomically inside Redis. This guarantees that no two concurrent requests — even with multiple worker instances — can race into the <code>PROCESSING</code> state for the same channel simultaneously. The Lua atomicity also ensures the pending queue and session state stay consistent with each other at all times.</p>
-
-        <div class="code-block">
-          <div class="code-block-header">
-            <span class="code-block-lang">lua</span>
-            <button class="code-block-copy" aria-label="Copy"></button>
-          </div>
-          <pre><span class="cmt">-- Atomic transition: IDLE → PROCESSING</span>
-<span class="cmt">-- Returns 1 if acquired, 0 if already busy</span>
-<span class="kw">local</span> key = KEYS[<span class="num">1</span>]           <span class="cmt">-- scalyclaw:session:{channelId}</span>
-<span class="kw">local</span> state = <span class="fn">redis.call</span>(<span class="str">"GET"</span>, key)
-<span class="kw">if</span> state == <span class="str">"PROCESSING"</span> <span class="kw">then</span>
-  <span class="kw">return</span> <span class="num">0</span>                    <span class="cmt">-- enqueue, do not process now</span>
-<span class="kw">end</span>
-<span class="fn">redis.call</span>(<span class="str">"SET"</span>, key, <span class="str">"PROCESSING"</span>, <span class="str">"EX"</span>, <span class="num">300</span>)
-<span class="kw">return</span> <span class="num">1</span>                      <span class="cmt">-- caller may proceed</span></pre>
-        </div>
+        <p>Cancellation uses a simple Redis flag. When the user sends <code>/stop</code>, the Node sets <code>scalyclaw:cancel</code> in Redis with a 30-second TTL. The orchestrator checks this flag between LLM rounds — if set, it aborts the current processing, clears the flag, and returns immediately.</p>
 
         <h3>System Prompt Assembly</h3>
 
@@ -181,7 +149,7 @@
             <tr>
               <td><code>scalyclaw-messages</code></td>
               <td>Node (<code>message-processor.ts</code>)</td>
-              <td>3</td>
+              <td>1</td>
               <td><code>message-processing</code>, <code>command</code></td>
             </tr>
             <tr>
