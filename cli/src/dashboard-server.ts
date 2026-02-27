@@ -29,7 +29,7 @@ interface GatewayAuth {
 
 async function readGatewayAuth(gatewayRedis: { host: string; port: number; password: string | null; tls: boolean }): Promise<GatewayAuth> {
   try {
-    const { createRedisClient } = await import('@scalyclaw/scalyclaw/core/redis.js');
+    const { createRedisClient } = await import('@scalyclaw/shared/core/redis.js');
     const redis = createRedisClient(gatewayRedis);
     await redis.connect();
     const raw = await redis.get(CONFIG_KEY);
@@ -211,8 +211,8 @@ export async function startDashboard(port: number, options: DashboardOptions): P
   let dashboardRedis: import('ioredis').Redis | null = null;
   try {
     const { loadSetupConfig } = await import('@scalyclaw/scalyclaw/core/paths.js');
-    const { createRedisClient } = await import('@scalyclaw/scalyclaw/core/redis.js');
-    const { registerProcess, deregisterProcess, processId } = await import('@scalyclaw/scalyclaw/core/registry.js');
+    const { createRedisClient } = await import('@scalyclaw/shared/core/redis.js');
+    const { registerProcess, deregisterProcess, processId } = await import('@scalyclaw/shared/core/registry.js');
     const setupConfig = loadSetupConfig();
     dashboardRedis = createRedisClient(setupConfig.redis);
     await dashboardRedis.connect();
@@ -273,7 +273,7 @@ export async function startDashboard(port: number, options: DashboardOptions): P
   return {
     async close() {
       if (dashboardRedis) {
-        const { deregisterProcess } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcess } = await import('@scalyclaw/shared/core/registry.js');
         await deregisterProcess(dashboardRedis);
         dashboardRedis.disconnect();
         dashboardRedis = null;

@@ -1,5 +1,5 @@
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
-import { spawnProcess, spawnWithSecrets } from '@scalyclaw/scalyclaw/core/subprocess.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { spawnProcess } from './subprocess.js';
 import { getWorkerExtraEnv } from './worker-env.js';
 
 export interface SkillExecutionParams {
@@ -47,20 +47,17 @@ export async function executeSkill(params: SkillExecutionParams): Promise<SkillE
 
   const extraEnv = getWorkerExtraEnv();
 
-  const spawnOpts = {
+  const result = await spawnProcess({
     cmd,
     args,
     cwd: skillDir,
     timeoutMs,
     input,
     workspacePath,
+    extraEnv: { ...secrets, ...extraEnv },
     label: 'execute-skill',
     signal,
-  };
-
-  const result = secrets
-    ? await spawnProcess({ ...spawnOpts, extraEnv: { ...secrets, ...extraEnv } })
-    : await spawnWithSecrets({ ...spawnOpts, extraEnv });
+  });
 
   return { skillId, ...result };
 }

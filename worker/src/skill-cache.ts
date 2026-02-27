@@ -1,6 +1,6 @@
-import { createSkillFromZip, getSkill, loadSkills } from '@scalyclaw/scalyclaw/skills/skill-loader.js';
-import type { SkillDefinition } from '@scalyclaw/scalyclaw/skills/skill-loader.js';
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
+import { createSkillFromZip, getSkill, loadSkills } from '@scalyclaw/shared/skills/skill-loader.js';
+import type { SkillDefinition } from '@scalyclaw/shared/skills/skill-loader.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { clearInstallInFlight } from './skill-setup.js';
 import type { Redis } from 'ioredis';
 

@@ -1,7 +1,8 @@
-import { setBasePath, PATHS, loadWorkerSetupConfig, type WorkerSetupConfig } from '@scalyclaw/scalyclaw/core/paths.js';
-import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/scalyclaw/core/redis.js';
-import { initQueue, type QueueConfig } from '@scalyclaw/scalyclaw/queue/queue.js';
-import { initLogger, initLogFile, log } from '@scalyclaw/scalyclaw/core/logger.js';
+import { setBasePath, PATHS } from '@scalyclaw/shared/core/paths.js';
+import { loadWorkerSetupConfig, type WorkerSetupConfig } from './config.js';
+import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/shared/core/redis.js';
+import { initQueue, type QueueConfig } from '@scalyclaw/shared/queue/queue.js';
+import { initLogger, initLogFile, log } from '@scalyclaw/shared/core/logger.js';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Redis } from 'ioredis';

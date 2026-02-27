@@ -1,5 +1,5 @@
-import { getRedis } from './redis.js';
-import { log } from './logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { createReloadChannel } from './reload-channel.js';
 
 const CONFIG_KEY = 'scalyclaw:config';

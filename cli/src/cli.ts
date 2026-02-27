@@ -6,7 +6,7 @@ import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import type { Redis } from 'ioredis';
-import type { ProcessInfo } from '@scalyclaw/scalyclaw/core/registry.js';
+import type { ProcessInfo } from '@scalyclaw/shared/core/registry.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -26,7 +26,7 @@ function getVersion(): string {
 /** Quick one-shot Redis connection using scalyclaw.json config */
 async function withRedis<T>(fn: (redis: Redis) => Promise<T>): Promise<T> {
   const { loadSetupConfig } = await import('@scalyclaw/scalyclaw/core/paths.js');
-  const { createRedisClient } = await import('@scalyclaw/scalyclaw/core/redis.js');
+  const { createRedisClient } = await import('@scalyclaw/shared/core/redis.js');
   const setupConfig = loadSetupConfig();
   const redis = createRedisClient({
     host: setupConfig.redis.host,
@@ -51,7 +51,7 @@ function workerConfigPath(name: string): string {
 
 /** Quick one-shot Redis connection, falling back to any worker config if scalyclaw.json is missing */
 async function withAnyRedis<T>(fn: (redis: Redis) => Promise<T>): Promise<T> {
-  const { createRedisClient } = await import('@scalyclaw/scalyclaw/core/redis.js');
+  const { createRedisClient } = await import('@scalyclaw/shared/core/redis.js');
 
   // Try scalyclaw.json first
   try {
@@ -94,7 +94,7 @@ async function withAnyRedis<T>(fn: (redis: Redis) => Promise<T>): Promise<T> {
 
 /** Get registered processes from Redis, optionally filtered by type */
 async function getProcesses(redis: Redis, typeFilter?: ProcessType): Promise<ProcessInfo[]> {
-  const { listProcesses } = await import('@scalyclaw/scalyclaw/core/registry.js');
+  const { listProcesses } = await import('@scalyclaw/shared/core/registry.js');
   let processes = await listProcesses(redis);
   if (typeFilter) {
     processes = processes.filter(p => p.type === typeFilter);
@@ -158,7 +158,7 @@ async function shutdownProcess(proc: ProcessInfo, authToken?: string | null): Pr
 /** Stop all processes of the given type via HTTP shutdown */
 async function stopProcesses(type: ProcessType): Promise<void> {
   await withRedis(async (redis) => {
-    const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+    const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
     const processes = await getProcesses(redis, type);
 
     if (processes.length === 0) {
@@ -190,7 +190,7 @@ async function stopProcesses(type: ProcessType): Promise<void> {
 
 /** Spawn a detached background process */
 function startBackground(args: string[], logFileName: string): string {
-  const { PATHS } = require('@scalyclaw/scalyclaw/core/paths.js') as typeof import('@scalyclaw/scalyclaw/core/paths.js');
+  const { PATHS } = require('@scalyclaw/shared/core/paths.js') as typeof import('@scalyclaw/shared/core/paths.js');
   const logDir = PATHS.logs;
   mkdirSync(logDir, { recursive: true });
   const logPath = resolve(logDir, logFileName);
@@ -219,7 +219,7 @@ function formatUptime(seconds: number): string {
 
 async function showStatus(typeFilter?: ProcessType): Promise<void> {
   await withRedis(async (redis) => {
-    const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+    const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
     const processes = await getProcesses(redis, typeFilter);
 
     // Check reachability and clean up stale entries
@@ -362,7 +362,7 @@ async function runWorkerSetup(name: string): Promise<void> {
   const p = await import('@clack/prompts');
   const pc = (await import('picocolors')).default;
   const IoRedis = (await import('ioredis')).Redis;
-  const { writeWorkerSetupConfig } = await import('@scalyclaw/scalyclaw/core/paths.js');
+  const { writeWorkerSetupConfig } = await import('@scalyclaw/worker/config.js');
   const { randomBytes } = await import('node:crypto');
 
   p.intro(pc.bold(`ScalyClaw Worker Setup (${name})`));
@@ -596,7 +596,7 @@ workerCmd
       }
       const hostPort = `${raw.gateway.host === '0.0.0.0' ? 'localhost' : raw.gateway.host}:${raw.gateway.port}`;
       await withAnyRedis(async (redis) => {
-        const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
         const processes = await getProcesses(redis, 'worker');
         // Match by port (advertised host may differ from config host)
         const target = processes.find(p => p.port === raw.gateway.port);
@@ -617,7 +617,7 @@ workerCmd
       });
     } else {
       await withAnyRedis(async (redis) => {
-        const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
         const processes = await getProcesses(redis, 'worker');
         if (processes.length === 0) {
           console.log('No registered worker processes found.');
@@ -650,7 +650,7 @@ workerCmd
     try {
       const raw = JSON.parse(readFileSync(configFile, 'utf-8'));
       await withAnyRedis(async (redis) => {
-        const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
         const processes = await getProcesses(redis, 'worker');
         const target = processes.find(p => p.port === raw.gateway.port);
         if (target) {
@@ -686,7 +686,7 @@ workerCmd
         process.exit(1);
       }
       await withAnyRedis(async (redis) => {
-        const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
         const processes = await getProcesses(redis, 'worker');
         const target = processes.find(p => p.port === raw.gateway.port);
         if (!target) {
@@ -714,7 +714,7 @@ workerCmd
       });
     } else {
       await withAnyRedis(async (redis) => {
-        const { deregisterProcessByKey } = await import('@scalyclaw/scalyclaw/core/registry.js');
+        const { deregisterProcessByKey } = await import('@scalyclaw/shared/core/registry.js');
         const processes = await getProcesses(redis, 'worker');
 
         const reachableProcesses: ProcessInfo[] = [];

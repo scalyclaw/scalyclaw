@@ -1,7 +1,7 @@
-import { getRedis } from '../core/redis.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getConfigRef, type ScalyClawConfig } from '../core/config.js';
 import { recordUsage } from '../core/db.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { selectModel, parseModelId } from '../models/provider.js';
 import { getProvider } from '../models/registry.js';
 import { PROACTIVE_SYSTEM_PROMPT } from '../prompt/proactive.js';

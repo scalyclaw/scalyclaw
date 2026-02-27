@@ -2,7 +2,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import websocket from '@fastify/websocket';
 import multipart from '@fastify/multipart';
 import rateLimit from '@fastify/rate-limit';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { getConfigRef } from '../core/config.js';
 import { registerRoutes } from './routes.js';
 import { registerAuthHook } from './auth.js';

@@ -7,11 +7,10 @@
     ".": "./src/index.ts",
     "./*": "./src/*",
     "./core/*.js": "./src/core/*.ts",
-    "./queue/*.js": "./src/queue/*.ts",
-    "./skills/*.js": "./src/skills/*.ts",
     "./tools/*.js": "./src/tools/*.ts"
   },
   "dependencies": {
-    "@fastify/rate-limit": "^10.2.1"
+    "@fastify/rate-limit": "^10.2.1",
+    "@scalyclaw/shared": "workspace:*"
   }
 }

@@ -1,5 +1,5 @@
 import type { ChannelAdapter, MessageHandler } from './adapter.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 const adapters = new Map<string, ChannelAdapter>();
 let activeHandler: MessageHandler | null = null;

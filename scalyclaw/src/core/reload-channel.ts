@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis';
-import { getRedis } from './redis.js';
-import { log } from './logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export function createReloadChannel(channel: string) {
   return {

@@ -1,5 +1,5 @@
-import { getRedis } from './redis.js';
-import { log } from './logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 const SECRET_PREFIX = 'scalyclaw:secret:';
 const VAR_PATTERN = /\$\{(\w+)\}/g;
@@ -65,4 +65,55 @@ export async function listSecrets(): Promise<string[]> {
   const redis = getRedis();
   const keys = await redis.keys(`${SECRET_PREFIX}*`);
   return keys.map(k => k.slice(SECRET_PREFIX.length));
+}
+
+// ─── Secret Cache (for bulk resolution into env vars) ───
+
+let secretCache: Map<string, string> | null = null;
+let secretCacheAge = 0;
+const SECRET_CACHE_TTL = 30_000;
+
+async function getSecretEnv(): Promise<Record<string, string>> {
+  if (secretCache && Date.now() - secretCacheAge < SECRET_CACHE_TTL) {
+    return Object.fromEntries(secretCache);
+  }
+  const names = await listSecrets();
+  if (names.length === 0) {
+    secretCache = new Map();
+    secretCacheAge = Date.now();
+    return {};
+  }
+
+  // Pipeline: fetch all secrets in a single Redis round-trip
+  const redis = getRedis();
+  const pipeline = redis.pipeline();
+  for (const name of names) {
+    pipeline.get(`scalyclaw:secret:${name}`);
+  }
+  const results = await pipeline.exec();
+
+  secretCache = new Map();
+  for (let i = 0; i < names.length; i++) {
+    const [err, value] = results![i];
+    if (!err && typeof value === 'string') {
+      secretCache.set(names[i], value);
+    } else {
+      // Fallback to env var
+      const envValue = process.env[names[i]];
+      if (envValue !== undefined) secretCache.set(names[i], envValue);
+    }
+  }
+  secretCacheAge = Date.now();
+  return Object.fromEntries(secretCache);
+}
+
+/** Invalidate the secret cache (e.g. after storing a new secret) */
+export function invalidateSecretCache(): void {
+  secretCache = null;
+  secretCacheAge = 0;
+}
+
+/** Resolve all vault secrets as a flat map (for passing in job data). */
+export async function getAllSecrets(): Promise<Record<string, string>> {
+  return getSecretEnv();
 }

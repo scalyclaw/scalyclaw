@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { getAllSkills, getSkill, loadSkills, createSkillFromZip, deleteSkill } from '../skills/skill-loader.js';
+import { getAllSkills, getSkill, loadSkills, createSkillFromZip, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { getConfig, saveConfig } from '../core/config.js';
 import { PATHS } from '../core/paths.js';
@@ -7,8 +7,8 @@ import { validateId } from '../core/validation.js';
 import { join } from 'node:path';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { runSkillGuard } from '../guards/guard.js';
-import { enqueueJob, getQueue, getQueueEvents } from '../queue/queue.js';
-import { log } from '../core/logger.js';
+import { enqueueJob, getQueue, getQueueEvents } from '@scalyclaw/shared/queue/queue.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export function registerSkillsRoutes(server: FastifyInstance): void {
   // GET /api/skills — list all loaded skills

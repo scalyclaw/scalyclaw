@@ -1,7 +1,5 @@
 import { spawn } from 'node:child_process';
-import { log } from './logger.js';
-import { listSecrets } from './vault.js';
-import { getRedis } from './redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export interface SpawnResult {
   stdout: string;
@@ -21,55 +19,9 @@ export interface SpawnOptions {
   signal?: AbortSignal;
 }
 
-// ─── Secret Cache ───
-
-let secretCache: Map<string, string> | null = null;
-let secretCacheAge = 0;
-const SECRET_CACHE_TTL = 30_000;
-
-async function getSecretEnv(): Promise<Record<string, string>> {
-  if (secretCache && Date.now() - secretCacheAge < SECRET_CACHE_TTL) {
-    return Object.fromEntries(secretCache);
-  }
-  const names = await listSecrets();
-  if (names.length === 0) {
-    secretCache = new Map();
-    secretCacheAge = Date.now();
-    return {};
-  }
-
-  // Pipeline: fetch all secrets in a single Redis round-trip
-  const redis = getRedis();
-  const pipeline = redis.pipeline();
-  for (const name of names) {
-    pipeline.get(`scalyclaw:secret:${name}`);
-  }
-  const results = await pipeline.exec();
-
-  secretCache = new Map();
-  for (let i = 0; i < names.length; i++) {
-    const [err, value] = results![i];
-    if (!err && typeof value === 'string') {
-      secretCache.set(names[i], value);
-    } else {
-      // Fallback to env var
-      const envValue = process.env[names[i]];
-      if (envValue !== undefined) secretCache.set(names[i], envValue);
-    }
-  }
-  secretCacheAge = Date.now();
-  return Object.fromEntries(secretCache);
-}
-
-/** Invalidate the secret cache (e.g. after storing a new secret) */
-export function invalidateSecretCache(): void {
-  secretCache = null;
-  secretCacheAge = 0;
-}
-
 /**
  * Spawn a child process with the given env vars.
- * Does NOT read from vault — use when secrets are passed explicitly (e.g. from job data).
+ * Does NOT read from vault — secrets come from job data.
  */
 export function spawnProcess(opts: SpawnOptions): Promise<SpawnResult> {
   const { cmd, args, cwd, timeoutMs, input, workspacePath, extraEnv, label = 'subprocess', signal } = opts;
@@ -146,22 +98,4 @@ export function spawnProcess(opts: SpawnOptions): Promise<SpawnResult> {
     if (input) child.stdin.write(input);
     child.stdin.end();
   });
-}
-
-/**
- * Resolve all vault secrets and spawn a child process with them as env vars.
- * Use for local execution only — for worker jobs, resolve secrets on the
- * orchestrator and pass them via job data to spawnProcess() instead.
- */
-export async function spawnWithSecrets(opts: SpawnOptions): Promise<SpawnResult> {
-  const secretEnv = await getSecretEnv();
-  return spawnProcess({
-    ...opts,
-    extraEnv: { ...secretEnv, ...opts.extraEnv },
-  });
-}
-
-/** Resolve all vault secrets as a flat map (for passing in job data). */
-export async function getAllSecrets(): Promise<Record<string, string>> {
-  return getSecretEnv();
 }

@@ -2,7 +2,7 @@ import { basename, extname } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from '@fastify/websocket';
 import type { ChannelAdapter, MessageHandler, NormalizedMessage } from './adapter.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export class GatewayChannel implements ChannelAdapter {
   readonly id = 'gateway';

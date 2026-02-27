@@ -1,29 +1,28 @@
 import { access, mkdir, readdir, readFile, writeFile as fsWriteFile } from 'node:fs/promises';
 import { join, dirname, resolve } from 'node:path';
-import { log } from '../core/logger.js';
-import { storeSecret, resolveSecret, deleteSecret, listSecrets } from '../core/vault.js';
-import { getAllSecrets } from '../core/subprocess.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { storeSecret, resolveSecret, deleteSecret, listSecrets, getAllSecrets } from '../core/vault.js';
 import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } from '../memory/memory.js';
 import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask } from '../scheduler/scheduler.js';
-import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
+import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
-import { getAllSkills, getSkill, loadSkills, deleteSkill } from '../skills/skill-loader.js';
+import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
 import { runSkillGuard } from '../guards/guard.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
 import { PATHS } from '../core/paths.js';
 import { randomUUID } from 'node:crypto';
-import type { ToolExecutionData } from '../queue/jobs.js';
+import type { ToolExecutionData } from '@scalyclaw/shared/queue/jobs.js';
 import { getConfig, getConfigRef, saveConfig, updateConfig, publishConfigReload, redactConfig, type ScalyClawConfig } from '../core/config.js';
-import { listProcesses } from '../core/registry.js';
+import { listProcesses } from '@scalyclaw/shared/core/registry.js';
 import { checkBudget, buildModelPricing } from '../core/budget.js';
 import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
 import { DIRECT_TOOL_NAMES_SET } from './tools.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
-import { requestJobCancel } from '../queue/cancel.js';
+import { requestJobCancel } from '@scalyclaw/shared/queue/cancel.js';
 
 export type { ToolContext } from './tool-registry.js';
 
@@ -161,7 +160,7 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
   let workerPort: number;
   let workerToken: string | null;
   try {
-    const { getRedis } = await import('../core/redis.js');
+    const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
     const redis = getRedis();
     const procData = await redis.get(`scalyclaw:proc:${workerProcId}`);
     if (!procData) {
@@ -312,7 +311,7 @@ async function handleGetJobInfo(input: Record<string, unknown>): Promise<string>
   if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
 
   log('debug', 'get_job', { jobId });
-  const { getJobStatus } = await import('../queue/queue.js');
+  const { getJobStatus } = await import('@scalyclaw/shared/queue/queue.js');
   const info = await getJobStatus(jobId);
   return JSON.stringify(info);
 }
@@ -363,7 +362,7 @@ async function handleStopJob(input: Record<string, unknown>): Promise<string> {
 
   log('debug', 'stop_job', { jobId });
 
-  const { getJobStatus } = await import('../queue/queue.js');
+  const { getJobStatus } = await import('@scalyclaw/shared/queue/queue.js');
   const info = await getJobStatus(jobId);
   if (info.state === 'not_found') {
     return JSON.stringify({ error: `Job "${jobId}" not found`, jobId });
@@ -541,7 +540,7 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
     const resolvedPath = resolveFilePath(filePath);
     await access(resolvedPath);
 
-    const { getRedis } = await import('../core/redis.js');
+    const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
     await publishProgress(getRedis(), ctx.channelId, {
       jobId: 'file-send',
       type: 'complete',
@@ -1256,7 +1255,7 @@ function handleGetUsage(): string {
 // ─── Queue/Process Management ───
 
 async function handleListProcesses(): Promise<string> {
-  const { getRedis } = await import('../core/redis.js');
+  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   const processes = await listProcesses(getRedis());
   return JSON.stringify({ processes });
 }

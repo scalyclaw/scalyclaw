@@ -1,5 +1,5 @@
 import type { Redis } from 'ioredis';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export interface ProgressEvent {
   jobId: string;

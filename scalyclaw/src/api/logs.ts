@@ -2,8 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { PATHS } from '../core/paths.js';
-import { listProcesses, type ProcessInfo } from '../core/registry.js';
-import { getRedis } from '../core/redis.js';
+import { listProcesses, type ProcessInfo } from '@scalyclaw/shared/core/registry.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 
 const LOG_FILES: Record<string, string> = {
   node: 'scalyclaw.log',

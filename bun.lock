@@ -62,6 +62,7 @@
       },
       "dependencies": {
         "@scalyclaw/scalyclaw": "workspace:*",
+        "@scalyclaw/shared": "workspace:*",
         "@scalyclaw/worker": "workspace:*",
       },
     },
@@ -74,13 +75,18 @@
       "version": "0.1.0",
       "dependencies": {
         "@fastify/rate-limit": "^10.2.1",
+        "@scalyclaw/shared": "workspace:*",
       },
+    },
+    "shared": {
+      "name": "@scalyclaw/shared",
+      "version": "0.1.0",
     },
     "worker": {
       "name": "@scalyclaw/worker",
       "version": "0.1.0",
       "dependencies": {
-        "@scalyclaw/scalyclaw": "workspace:*",
+        "@scalyclaw/shared": "workspace:*",
       },
     },
   },
@@ -424,6 +430,8 @@
     "@scalyclaw/dashboard": ["@scalyclaw/dashboard@workspace:dashboard"],
 
     "@scalyclaw/scalyclaw": ["@scalyclaw/scalyclaw@workspace:scalyclaw"],
+
+    "@scalyclaw/shared": ["@scalyclaw/shared@workspace:shared"],
 
     "@scalyclaw/worker": ["@scalyclaw/worker@workspace:worker"],
 

@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "workspaces": ["scalyclaw", "worker", "cli", "dashboard"],
+  "workspaces": ["shared", "scalyclaw", "worker", "cli", "dashboard"],
   "scripts": {
     "build": "tsc & bun run --filter @scalyclaw/dashboard build & wait",
     "check": "tsc",

@@ -1,9 +1,9 @@
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '../core/paths.js';
 import { getAllAgents } from '../agents/agent-loader.js';
-import { getAllSkills } from '../skills/skill-loader.js';
+import { getAllSkills } from '@scalyclaw/shared/skills/skill-loader.js';
 import { getConnectionStatuses } from '../mcp/mcp-manager.js';
 import { ORCHESTRATOR_SECTION } from './orchestrator.js';
 import { homeSection } from './home.js';

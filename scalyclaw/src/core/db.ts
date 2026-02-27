@@ -1,6 +1,6 @@
 import { Database } from 'bun:sqlite';
 import { getLoadablePath } from 'sqlite-vec';
-import { log } from './logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 let db: Database | null = null;
 let vecAvailable = false;

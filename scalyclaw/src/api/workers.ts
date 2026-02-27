@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { listProcesses } from '../core/registry.js';
-import { getRedis } from '../core/redis.js';
+import { listProcesses } from '@scalyclaw/shared/core/registry.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 
 export function registerWorkersRoutes(server: FastifyInstance): void {
   // GET /api/workers — list registered processes

@@ -1,14 +1,14 @@
 import type { Job } from 'bullmq';
 import { join } from 'node:path';
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
-import { PATHS } from '@scalyclaw/scalyclaw/core/paths.js';
-import { isJobCancelled } from '@scalyclaw/scalyclaw/queue/cancel.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { PATHS } from '@scalyclaw/shared/core/paths.js';
+import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
 import { executeSkill } from './execute-skill.js';
 import { executeCode } from './execute-code.js';
 import { executeCommand } from './execute-command.js';
 import { getOrFetchSkill } from './skill-cache.js';
 import { ensureInstalled } from './skill-setup.js';
-import type { SkillExecutionData, ToolExecutionData } from '@scalyclaw/scalyclaw/queue/jobs.js';
+import type { SkillExecutionData, ToolExecutionData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── Worker config (set by index.ts after bootstrap) ───
 

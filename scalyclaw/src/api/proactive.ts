@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import { getConfigRef } from '../core/config.js';
-import { getRedis } from '../core/redis.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getDb } from '../core/db.js';
 import { processProactiveEngagement } from '../scheduler/proactive.js';
 import { storeMessage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
 import { withSession } from '../session/session.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export function registerProactiveRoutes(server: FastifyInstance): void {
   // GET /api/proactive/status

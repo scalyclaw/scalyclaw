@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
-import { spawnProcess } from '@scalyclaw/scalyclaw/core/subprocess.js';
-import { PATHS } from '@scalyclaw/scalyclaw/core/paths.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { spawnProcess } from './subprocess.js';
+import { PATHS } from '@scalyclaw/shared/core/paths.js';
 
 const LANG_CONFIG: Record<string, { ext: string; cmd: string; args: (f: string) => string[] }> = {
   javascript: { ext: '.js',  cmd: 'bun',  args: (f) => ['run', f] },

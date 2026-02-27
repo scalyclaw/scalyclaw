@@ -1,6 +1,6 @@
 import OpenAI from 'openai';
 import type { ModelProvider, ModelResponse } from '../provider.js';
-import { log } from '../../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 const BASE_URL = 'https://api.minimax.io/v1';
 

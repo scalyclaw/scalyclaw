@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { getQueue, getJobStatus, QUEUE_NAMES, type QueueKey } from '../queue/queue.js';
-import { getRedis } from '../core/redis.js';
+import { getQueue, getJobStatus, QUEUE_NAMES, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { PENDING_KEY_PREFIX } from '../processors/message-processor.js';
 
 export function registerJobsRoutes(server: FastifyInstance): void {

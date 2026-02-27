@@ -1,8 +1,8 @@
 import type { Job } from 'bullmq';
-import { log } from '../core/logger.js';
-import { enqueueJob } from '../queue/queue.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { isScheduledJobActive, markScheduledCompleted, markScheduledFailed, updateScheduledNextRun } from '../scheduler/scheduler.js';
-import type { ReminderData, RecurrentReminderData, TaskData, RecurrentTaskData } from '../queue/jobs.js';
+import type { ReminderData, RecurrentReminderData, TaskData, RecurrentTaskData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── Schedule job processor (scalyclaw-scheduler queue) ───
 

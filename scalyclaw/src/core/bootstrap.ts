@@ -1,11 +1,11 @@
 import { ensureDirectories, syncMindFiles, setBasePath, PATHS, loadSetupConfig } from './paths.js';
-import { initRedis, getRedis, createRedisClient, type RedisConfig } from './redis.js';
+import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/shared/core/redis.js';
 import { loadConfig, getConfigRef, subscribeToConfigReload, type ScalyClawConfig } from './config.js';
 import { resolveSecrets } from './vault.js';
-import { initLogger, log } from './logger.js';
+import { initLogger, log } from '@scalyclaw/shared/core/logger.js';
 import { initDatabase } from './db.js';
 import { initEmbeddings, getEmbeddingDimensions } from '../memory/embeddings.js';
-import { loadSkills } from '../skills/skill-loader.js';
+import { loadSkills } from '@scalyclaw/shared/skills/skill-loader.js';
 import { subscribeToSkillReload } from '../skills/skill-store.js';
 import { loadAllAgents } from '../agents/agent-loader.js';
 import { subscribeToAgentReload } from '../agents/agent-store.js';
@@ -14,7 +14,7 @@ import { subscribeToMcpReload } from '../mcp/mcp-store.js';
 import { invalidatePromptCache } from '../prompt/builder.js';
 import { registerProvider } from '../models/registry.js';
 import { createMiniMaxProvider } from '../models/providers/minimax.js';
-import { initQueue } from '../queue/queue.js';
+import { initQueue } from '@scalyclaw/shared/queue/queue.js';
 import type { Redis } from 'ioredis';
 
 export interface BootstrapOptions {

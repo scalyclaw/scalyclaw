@@ -1,13 +1,13 @@
 import { randomUUID } from 'node:crypto';
-import { log } from '../core/logger.js';
-import { enqueueJob, removeRepeatableJob } from '../queue/queue.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { enqueueJob, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
 
 const SCHEDULED_PREFIX = 'scalyclaw:scheduled:';
 
 // ─── Redis helpers ───
 
 async function getRedis() {
-  const { getRedis } = await import('../core/redis.js');
+  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   return getRedis();
 }
 

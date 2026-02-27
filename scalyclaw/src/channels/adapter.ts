@@ -57,13 +57,13 @@ export const SLASH_COMMANDS: Array<{ command: string; description: string }> = [
 const CHANNEL_STATE_PREFIX = 'scalyclaw:channel:state:';
 
 export async function saveChannelReplyAddress(channelId: string, address: string): Promise<void> {
-  const { getRedis } = await import('../core/redis.js');
+  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   const redis = getRedis();
   await redis.set(`${CHANNEL_STATE_PREFIX}${channelId}`, address);
 }
 
 export async function loadChannelReplyAddress(channelId: string): Promise<string | null> {
-  const { getRedis } = await import('../core/redis.js');
+  const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   const redis = getRedis();
   return redis.get(`${CHANNEL_STATE_PREFIX}${channelId}`);
 }

@@ -1,4 +1,4 @@
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import type { ChatMessage } from '../models/provider.js';

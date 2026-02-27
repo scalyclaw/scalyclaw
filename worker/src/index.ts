@@ -1,8 +1,8 @@
 import { Worker } from 'bullmq';
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
-import { getQueueName, closeQueue } from '@scalyclaw/scalyclaw/queue/queue.js';
-import { createRedisClient } from '@scalyclaw/scalyclaw/core/redis.js';
-import { registerProcess, deregisterProcess, processId } from '@scalyclaw/scalyclaw/core/registry.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { getQueueName, closeQueue } from '@scalyclaw/shared/queue/queue.js';
+import { createRedisClient } from '@scalyclaw/shared/core/redis.js';
+import { registerProcess, deregisterProcess, processId } from '@scalyclaw/shared/core/registry.js';
 import { bootstrapWorker } from './bootstrap.js';
 import { processToolJob, setWorkerConfig } from './tool-processor.js';
 import { subscribeToSkillInvalidation } from './skill-cache.js';

@@ -1,5 +1,5 @@
-import { getRedis } from '../core/redis.js';
-import { log } from '../core/logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { randomUUID } from 'node:crypto';
 
 // ─── Types ───

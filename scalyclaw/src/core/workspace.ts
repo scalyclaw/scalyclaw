@@ -1,7 +1,7 @@
 import { readFile, writeFile, mkdir, stat, cp, readdir, rm, unlink, rename } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { PATHS } from './paths.js';
-import { log } from './logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 /**
  * Resolve a relative path to the correct base directory.

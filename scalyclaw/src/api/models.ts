@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { getConfig, saveConfig } from '../core/config.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export function registerModelsRoutes(server: FastifyInstance): void {
   // GET /api/models — list configured models

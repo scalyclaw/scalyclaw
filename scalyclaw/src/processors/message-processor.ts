@@ -1,12 +1,12 @@
 import type { Job } from 'bullmq';
-import { getRedis } from '../core/redis.js';
-import { log } from '../core/logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
-import { enqueueJob } from '../queue/queue.js';
+import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { runOrchestrator, type StopReason } from '../orchestrator/orchestrator.js';
 import { runMessageGuard } from '../guards/guard.js';
-import type { MessageProcessingData, CommandData, PendingMessage, AttachmentData } from '../queue/jobs.js';
+import type { MessageProcessingData, CommandData, PendingMessage, AttachmentData } from '@scalyclaw/shared/queue/jobs.js';
 import { withSession, heartbeat, getSessionState } from '../session/session.js';
 import { recordChannelActivity } from '../scheduler/proactive.js';
 import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';

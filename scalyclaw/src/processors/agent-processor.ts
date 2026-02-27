@@ -1,5 +1,5 @@
 import type { Job } from 'bullmq';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import { loadAgent } from '../agents/agent-loader.js';
@@ -9,10 +9,10 @@ import type { ChatMessage } from '../models/provider.js';
 import { buildAgentToolDefs, AGENT_ELIGIBLE_TOOL_NAMES } from '../tools/tools.js';
 import { getMcpToolsForServers } from '../mcp/mcp-manager.js';
 import { executeAssistantTool, type ToolContext } from '../tools/tool-impl.js';
-import { isJobCancelled } from '../queue/cancel.js';
+import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
 import { recordUsage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
-import type { AgentTaskData } from '../queue/jobs.js';
+import type { AgentTaskData } from '@scalyclaw/shared/queue/jobs.js';
 
 export interface AgentResult {
   response: string;

@@ -3,8 +3,8 @@ import { timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, basename } from 'node:path';
-import { PATHS } from '@scalyclaw/scalyclaw/core/paths.js';
-import type { WorkerSetupConfig } from '@scalyclaw/scalyclaw/core/paths.js';
+import { PATHS } from '@scalyclaw/shared/core/paths.js';
+import type { WorkerSetupConfig } from './config.js';
 
 const LOG_FILE = 'worker.log';
 

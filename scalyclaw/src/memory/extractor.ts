@@ -1,4 +1,4 @@
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { recordUsage } from '../core/db.js';
 import { getConfigRef } from '../core/config.js';
 import { selectModel, parseModelId } from '../models/provider.js';

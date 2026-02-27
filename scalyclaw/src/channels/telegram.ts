@@ -7,7 +7,7 @@ import type { ChannelAdapter, MessageHandler, NormalizedMessage, Attachment } fr
 import { chunkText, sanitizeFileName, saveChannelReplyAddress, loadChannelReplyAddress, SLASH_COMMANDS } from './adapter.js';
 import { formatTelegramHTML } from './format.js';
 import { PATHS } from '../core/paths.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export interface TelegramConfig {
   botToken: string;

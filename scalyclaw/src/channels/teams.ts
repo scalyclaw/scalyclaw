@@ -15,7 +15,7 @@ import { pipeline } from 'node:stream/promises';
 import type { ChannelAdapter, MessageHandler, NormalizedMessage, Attachment } from './adapter.js';
 import { chunkText, sanitizeFileName, saveChannelReplyAddress, loadChannelReplyAddress } from './adapter.js';
 import { PATHS } from '../core/paths.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 export interface TeamsConfig {
   appId: string;

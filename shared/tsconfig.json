@@ -8,14 +8,7 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "noEmit": true,
-    "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "noEmit": true
   },
-  "include": [
-    "shared/src/**/*",
-    "scalyclaw/src/**/*",
-    "worker/src/**/*",
-    "cli/src/**/*"
-  ]
+  "include": ["src/**/*"]
 }

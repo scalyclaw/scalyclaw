@@ -1,13 +1,13 @@
 import type { Job } from 'bullmq';
-import { getRedis } from '../core/redis.js';
-import { log } from '../core/logger.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
-import { enqueueJob } from '../queue/queue.js';
+import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { withSession, heartbeat } from '../session/session.js';
 import { extractMemories } from '../memory/extractor.js';
 import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
-import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData } from '../queue/jobs.js';
+import type { MemoryExtractionData, ScheduledFireData, ProactiveFireData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── System queue job dispatcher ───
 

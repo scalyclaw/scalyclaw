@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { getDb, isVecAvailable } from '../core/db.js';
 import { getConfigRef } from '../core/config.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { generateEmbedding, vectorToBlob, isEmbeddingsAvailable } from './embeddings.js';
 
 const TTL_FILTER = "(ttl IS NULL OR ttl > datetime('now'))";

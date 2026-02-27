@@ -1,6 +1,6 @@
 import type { ChannelAdapter } from './adapter.js';
 import type { FastifyInstance } from 'fastify';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { create as createTelegram } from './telegram.js';
 import { create as createDiscord } from './discord.js';
 import { create as createSlack } from './slack.js';

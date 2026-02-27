@@ -1,6 +1,6 @@
 import { readFile, readdir, writeFile, rm, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '../core/paths.js';
 import { getConfig, getConfigRef, saveConfig } from '../core/config.js';
 import { SKILL_CREATOR_PROMPT } from '../prompt/skill-creator.js';

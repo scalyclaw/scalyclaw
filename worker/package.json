@@ -8,6 +8,6 @@
     "./*": "./src/*"
   },
   "dependencies": {
-    "@scalyclaw/scalyclaw": "workspace:*"
+    "@scalyclaw/shared": "workspace:*"
   }
 }

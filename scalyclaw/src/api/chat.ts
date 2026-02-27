@@ -1,9 +1,9 @@
 import type { FastifyInstance } from 'fastify';
-import { enqueueJob } from '../queue/queue.js';
-import { getRedis } from '../core/redis.js';
+import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
+import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getRecentMessages } from '../core/db.js';
 import type { ProgressEvent } from '../queue/progress.js';
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
 // ─── Shared Redis subscriber for chat API ───
 

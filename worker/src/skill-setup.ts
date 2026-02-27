@@ -1,9 +1,9 @@
 import { readFile, writeFile, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { log } from '@scalyclaw/scalyclaw/core/logger.js';
-import { spawnProcess } from '@scalyclaw/scalyclaw/core/subprocess.js';
-import type { SkillDefinition } from '@scalyclaw/scalyclaw/skills/skill-loader.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { spawnProcess } from './subprocess.js';
+import type { SkillDefinition } from '@scalyclaw/shared/skills/skill-loader.js';
 import { getWorkerExtraEnv } from './worker-env.js';
 
 const MARKER_FILE = '.scalyclaw-installed';

@@ -1,4 +1,4 @@
-import { log } from '../core/logger.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 import { executeAssistantTool, type ToolContext } from '../tools/tool-impl.js';
 
 export type { ToolContext } from '../tools/tool-registry.js';

@@ -1,8 +1,8 @@
 import type { Job } from 'bullmq';
-import { log } from '../core/logger.js';
-import { enqueueJob } from '../queue/queue.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
+import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { processProactiveEngagement } from '../scheduler/proactive.js';
-import type { ProactiveCheckData } from '../queue/jobs.js';
+import type { ProactiveCheckData } from '@scalyclaw/shared/queue/jobs.js';
 
 // ─── Proactive job processor (scalyclaw-proactive queue) ───
 
