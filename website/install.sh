@@ -8,6 +8,7 @@ set -euo pipefail
 #   curl -fsSL https://scalyclaw.com/install.sh | bash
 #   ~/.scalyclaw/scalyclaw.sh --stop                               # stop all
 #   ~/.scalyclaw/scalyclaw.sh --start                              # start all
+#   ~/.scalyclaw/scalyclaw.sh --restart                            # restart (keeps Redis)
 #   ~/.scalyclaw/scalyclaw.sh --status                             # show status
 #   ~/.scalyclaw/scalyclaw.sh --update                             # update in-place
 #   ~/.scalyclaw/scalyclaw.sh --uninstall                          # remove all
@@ -389,6 +390,40 @@ do_start() {
 
   echo ""
   success "ScalyClaw is running!"
+  print_access_info "$dashboard_url"
+}
+
+# ─── Restart ──────────────────────────────────────────────────────────────────
+
+do_restart() {
+  header "Restarting ScalyClaw"
+
+  if [ ! -f "$SCALYCLAW_CONFIG" ]; then
+    error "ScalyClaw is not installed (no config at $SCALYCLAW_CONFIG)"
+    exit 1
+  fi
+
+  export PATH="$REDIS_DIR/bin:$HOME/.bun/bin:$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+
+  stop_all_processes
+
+  # Keep Redis running — only restart node/workers/dashboard
+  if ! redis_is_running; then
+    if [ -f "$SCALYCLAW_HOME/redis.conf" ]; then
+      start_redis
+    else
+      error "Redis is not running. Start Redis manually."
+      exit 1
+    fi
+  fi
+
+  start_all_processes
+
+  local dashboard_url
+  dashboard_url=$(get_dashboard_url)
+
+  echo ""
+  success "ScalyClaw restarted!"
   print_access_info "$dashboard_url"
 }
 
@@ -1108,6 +1143,9 @@ case "${1:-}" in
   --start)
     do_start
     ;;
+  --restart)
+    do_restart
+    ;;
   --update)
     do_update
     ;;
@@ -1128,6 +1166,7 @@ case "${1:-}" in
     echo "  install.sh                Install everything and start all processes"
     echo "  scalyclaw.sh --start      Start all processes (Redis, node, workers, dashboard)"
     echo "  scalyclaw.sh --stop       Stop all processes"
+    echo "  scalyclaw.sh --restart    Stop and restart all processes (keeps Redis running)"
     echo "  scalyclaw.sh --update      Pull latest changes, rebuild & restart (keeps data)"
     echo "  scalyclaw.sh --update-auto Same as --update but skips confirmation prompt"
     echo "  scalyclaw.sh --status     Show status of all processes"

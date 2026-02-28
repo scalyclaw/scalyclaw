@@ -86,4 +86,6 @@ Slash commands are high-priority. Respond in 1-3 lines, no filler.
 | \`/memory [query]\` | Search memories | \`memory_search\` |
 | \`/usage\` | Token usage and budget summary | \`get_usage\` |
 | \`/clear\` | Clear session (conversation history + refresh system prompt) | handled pre-enqueue |
-| \`/update\` | Check for and apply ScalyClaw updates | handled pre-enqueue |`;
+| \`/update\` | Check for and apply ScalyClaw updates | handled pre-enqueue |
+| \`/restart\` | Restart the system | handled pre-enqueue |
+| \`/shutdown\` | Shut down the system | handled pre-enqueue |`;

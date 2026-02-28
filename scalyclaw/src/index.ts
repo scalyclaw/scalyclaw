@@ -154,20 +154,23 @@ async function startSystem(): Promise<void> {
 
   await drainProgressBuffers(redis);
 
-  // ── Post-update notification ──
+  // ── Post-startup notification (update or restart) ──
   try {
     const updateNotify = await redis.get('scalyclaw:update:notify');
     if (updateNotify) {
       await redis.del('scalyclaw:update:notify');
-      const { channelId: notifyChannel } = JSON.parse(updateNotify);
+      const { channelId: notifyChannel, reason } = JSON.parse(updateNotify);
       if (notifyChannel) {
+        const message = reason === 'restart'
+          ? 'Restart complete! I\'m back.'
+          : 'Update complete! I\'m back.';
         setTimeout(() => {
-          sendToChannel(notifyChannel, 'Update complete! I\'m back.').catch(() => {});
+          sendToChannel(notifyChannel, message).catch(() => {});
         }, 3000);
       }
     }
   } catch (err) {
-    log('warn', 'Failed to send post-update notification', { error: String(err) });
+    log('warn', 'Failed to send post-startup notification', { error: String(err) });
   }
 
   try {
@@ -327,6 +330,7 @@ async function checkRateLimit(channelId: string): Promise<boolean> {
 
 const KNOWN_COMMANDS = new Set([
   '/start', '/status', '/help', '/stop', '/cancel', '/clear', '/update',
+  '/restart', '/shutdown',
   '/reminders', '/tasks', '/skills', '/agents', '/mcp',
   '/models', '/guards', '/vault', '/memory', '/usage',
 ]);
@@ -394,6 +398,57 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     await cancelAllChannelJobs(channelId).catch(() => {});
     await drainWaitingJobs(channelId).catch(() => {});
     await sendToChannel(channelId, 'Got it, stopping.');
+    return;
+  }
+
+  // ─── /restart — restart the system ───
+  if (trimmed === '/restart') {
+    const scriptPath = join(PATHS.base, 'scalyclaw.sh');
+    if (!existsSync(scriptPath)) {
+      await sendToChannel(channelId, 'Restart not available — management script not found.');
+      return;
+    }
+
+    const redis = getRedis();
+    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await cancelAllChannelJobs(channelId).catch(() => {});
+    await drainWaitingJobs(channelId).catch(() => {});
+    await redis.set('scalyclaw:update:notify', JSON.stringify({ channelId, reason: 'restart', timestamp: Date.now() }), 'EX', 300);
+    await sendToChannel(channelId, 'Restarting...');
+
+    const { spawn } = await import('node:child_process');
+    const child = spawn(scriptPath, ['--restart'], {
+      cwd: PATHS.base,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    log('info', 'Restart process spawned', { pid: child.pid });
+    return;
+  }
+
+  // ─── /shutdown — shut down the system ───
+  if (trimmed === '/shutdown') {
+    const scriptPath = join(PATHS.base, 'scalyclaw.sh');
+    if (!existsSync(scriptPath)) {
+      await sendToChannel(channelId, 'Shutdown not available — management script not found.');
+      return;
+    }
+
+    const redis = getRedis();
+    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await cancelAllChannelJobs(channelId).catch(() => {});
+    await drainWaitingJobs(channelId).catch(() => {});
+    await sendToChannel(channelId, 'Shutting down.');
+
+    const { spawn } = await import('node:child_process');
+    const child = spawn(scriptPath, ['--stop'], {
+      cwd: PATHS.base,
+      detached: true,
+      stdio: 'ignore',
+    });
+    child.unref();
+    log('info', 'Shutdown process spawned', { pid: child.pid });
     return;
   }
 
