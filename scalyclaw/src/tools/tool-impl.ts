@@ -3,8 +3,8 @@ import { join, dirname, resolve } from 'node:path';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { storeSecret, resolveSecret, deleteSecret, listSecrets, getAllSecrets } from '../core/vault.js';
 import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } from '../memory/memory.js';
-import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask } from '../scheduler/scheduler.js';
-import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
+import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask, cancelScheduledJobAdmin, deleteScheduledJob } from '../scheduler/scheduler.js';
+import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, removeRepeatableJob, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
@@ -311,6 +311,9 @@ async function enqueueAndWait(
   if (agentData && !agentData.task) {
     return JSON.stringify({ error: 'delegate_agent requires a "task" parameter describing what the agent should do.' });
   }
+  if (agentData && !agentData.agentId) {
+    return JSON.stringify({ error: 'delegate_agent requires an "agentId" parameter. Use list_agents to find available agents.' });
+  }
 
   const jobId = await enqueueJob({
     name: queueKey === 'agents' ? 'agent-task' : 'tool-execution',
@@ -613,6 +616,32 @@ async function handleStopJob(input: Record<string, unknown>): Promise<string> {
   await requestJobCancel(jobId);
   log('info', 'Job stop requested', { jobId, previousState: info.state });
   return JSON.stringify({ stopped: true, jobId, previousState: info.state });
+}
+
+async function handleDeleteJob(input: Record<string, unknown>): Promise<string> {
+  const jobId = input.jobId as string;
+  if (!jobId) return JSON.stringify({ error: 'Missing required field: jobId' });
+
+  log('debug', 'delete_job', { jobId });
+
+  // 1. Try scheduled job path (tasks/reminders stored in Redis)
+  const cancelled = await cancelScheduledJobAdmin(jobId);
+  if (cancelled) {
+    return JSON.stringify({ deleted: true, jobId, details: 'Scheduled job cancelled and removed' });
+  }
+
+  const deletedState = await deleteScheduledJob(jobId);
+  if (deletedState) {
+    return JSON.stringify({ deleted: true, jobId, details: 'Non-active scheduled job state removed' });
+  }
+
+  // 2. Try direct BullMQ job removal (searches all queues)
+  const removed = await removeRepeatableJob(jobId);
+  if (removed) {
+    return JSON.stringify({ deleted: true, jobId, details: 'BullMQ job removed' });
+  }
+
+  return JSON.stringify({ deleted: false, jobId, error: 'Job not found in any queue or scheduled state' });
 }
 
 /** Execute an LLM-facing tool */
@@ -1771,3 +1800,4 @@ registerTool('list_active_jobs', async (input) => {
   return JSON.stringify({ jobs });
 });
 registerTool('stop_job', handleStopJob);
+registerTool('delete_job', handleDeleteJob);

@@ -244,6 +244,7 @@ const TOOL_DEFS: ToolDefinition[] = [
     limit: NUM('Max jobs to return (default 20)'),
   })),
   tool('stop_job', 'Stop a running or pending job. Use when a job is stuck, no longer needed, or needs to be retried differently.', schema({ jobId: 'The job ID to stop' }, ['jobId'])),
+  tool('delete_job', 'Delete a job permanently. Works for scheduled jobs (tasks/reminders) and queue jobs.', schema({ jobId: 'The job ID to delete' }, ['jobId'])),
 ];
 
 // ═══════════════════════════════════════════════════════════════════
