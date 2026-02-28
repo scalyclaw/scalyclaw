@@ -20,7 +20,7 @@
 
         <h2 id="overview">Overview</h2>
 
-        <p>Three guard types protect different surfaces: inbound messages, skill definitions, and agent configurations. Each guard type is independently enable/disable-able. Failing a guard blocks the message or resource and returns an error to the caller.</p>
+        <p>Four guard types protect different surfaces: inbound messages, skill definitions, agent configurations, and shell command execution. Each guard type is independently enable/disable-able. Failing a guard blocks the message or resource and returns an error to the caller.</p>
 
         <table>
           <thead>
@@ -41,6 +41,11 @@
               <td>3</td>
               <td>Agent Guard</td>
               <td>Validates agent configurations at registration time. Checks that the system prompt does not attempt to override safety guidelines and that requested permissions are proportionate to the agent's stated purpose.</td>
+            </tr>
+            <tr>
+              <td>4</td>
+              <td>Command Shield</td>
+              <td>Deterministic pattern-matching guard that blocks dangerous shell commands before execution. No LLM call required &mdash; uses a configurable deny list with word-boundary matching.</td>
             </tr>
           </tbody>
         </table>
@@ -280,6 +285,59 @@
             Guard timing
           </div>
           <p>Skill and agent guards run at registration time — when a skill or agent is saved, not when it is invoked. A skill that passes the guard at save time will not be re-audited on every <code>execute_skill</code> call. If you update a skill's source, the guard runs again on the updated version. This design keeps per-invocation overhead at zero while ensuring that nothing unsafe is ever stored in the first place.</p>
+        </div>
+
+        <h2 id="command-shield">Command Shield</h2>
+
+        <p>The Command Shield is a deterministic, non-LLM guard that blocks dangerous shell commands before they are executed by a worker. Unlike the other guards, it does not require an LLM call &mdash; it uses fast pattern matching against a configurable deny list, making it zero-latency and zero-cost.</p>
+
+        <h3>How It Works</h3>
+
+        <p>When the LLM requests an <code>execute_command</code> tool call, the command text is normalized (whitespace collapsed, lowercased) and tested against every entry in the <code>denied</code> list using word-boundary regex matching. If any denied pattern matches, the command is blocked immediately and never reaches the worker queue.</p>
+
+        <ol>
+          <li>The command string is normalized: all whitespace sequences are collapsed to single spaces and the text is lowercased.</li>
+          <li>Each entry in the <code>denied</code> list is tested as a word-boundary regex pattern against the normalized text.</li>
+          <li>If any pattern matches, the command is blocked with a <code>failedLayer: "denied"</code> result identifying the matched pattern.</li>
+          <li>If no pattern matches, the command proceeds to the worker for execution.</li>
+        </ol>
+
+        <h3>Configuration</h3>
+
+        <table>
+          <thead>
+            <tr><th>Option</th><th>Type</th><th>Default</th><th>Description</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>guards.commandShield.enabled</code></td>
+              <td>boolean</td>
+              <td><code>true</code></td>
+              <td>Enable or disable the command shield.</td>
+            </tr>
+            <tr>
+              <td><code>guards.commandShield.denied</code></td>
+              <td>string[]</td>
+              <td>(see defaults)</td>
+              <td>List of patterns to block. Each pattern is matched as a word-boundary regex against the normalized command text.</td>
+            </tr>
+            <tr>
+              <td><code>guards.commandShield.allowed</code></td>
+              <td>string[]</td>
+              <td><code>[]</code></td>
+              <td>Explicit allowlist. Commands matching an allowed pattern bypass the denied check.</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>The default denied list includes patterns for filesystem destruction (<code>rm -rf /</code>, <code>mkfs</code>, <code>dd if=</code>), privilege escalation (<code>chmod 777</code>, <code>chown root</code>), network exfiltration (<code>nc -e</code>, <code>ncat</code>), and other dangerous operations. You can customize the list from the dashboard under <strong>Security &rarr; Command Shield</strong>.</p>
+
+        <div class="callout callout-tip">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            Zero overhead
+          </div>
+          <p>Because the Command Shield uses pure string matching with no LLM calls, it adds negligible latency (sub-millisecond) and zero token cost. It is the first line of defense for shell commands and complements the LLM-powered guards that handle more nuanced threats.</p>
         </div>
 
         <h2 id="vault">Vault</h2>

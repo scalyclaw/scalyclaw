@@ -94,7 +94,7 @@ Workers are independently deployable. They share nothing with the node except Re
 | 🧠 | **Persistent Memory** | Hybrid vector + full-text search (sqlite-vec + FTS5). Auto-extracted from conversations |
 | 🤖 | **Autonomous Agents** | Sub-workers with their own prompts, models, and skills. Delegate and let them run |
 | 🔧 | **Extensible Skills** | JavaScript, Python, Rust, Bash. Hot-reload, auto-deps, zip deployment |
-| 🛡️ | **Triple-Layer Security** | Echo guard, content guard, code guard. Every layer fails closed |
+| 🛡️ | **Multi-Layer Security** | Echo guard, content guard, command shield, code guard. Every layer fails closed |
 | ⚡ | **Scalable Workers** | Deploy anywhere — same machine or remote. They only need Redis |
 | 🔌 | **MCP Integration** | Connect any Model Context Protocol server. Tools are auto-discovered |
 | 💰 | **Budget Control** | Monthly/daily limits, per-model tracking, configurable alerts |
@@ -251,15 +251,16 @@ Secrets are stored encrypted in Redis and injected as environment variables when
 
 ## 🛡️ Security
 
-Three independent guard layers — every layer fails closed:
+Four independent guard layers — every layer fails closed:
 
 | Guard | Purpose |
 |---|---|
 | 🔁 **Echo Guard** | Detects if the AI is being tricked into repeating injected text |
 | 🛑 **Content Guard** | Blocks prompt injection, social engineering, and harmful content |
 | 🔍 **Skill & Agent Guard** | Audits skill code and agent configs for malicious patterns |
+| 🛡️ **Command Shield** | Blocks dangerous shell commands with deterministic pattern matching — no LLM needed |
 
-All guards are enabled by default and configurable from the dashboard.
+All guards are configurable from the dashboard.
 
 ---
 
@@ -296,9 +297,10 @@ Workers are named instances (`--name worker1`). Run as many as you need.
 | Path | Description |
 |---|---|
 | 🧠 `scalyclaw/src/` | Core — orchestrator, channels, guards, memory, agents, skills, tools, MCP |
+| 📦 `shared/src/` | Shared — queues, logger, session, skill loader, types used by node and worker |
 | ⚡ `worker/src/` | Worker — command/code/skill execution, skill cache, dependency management |
 | 💻 `cli/src/` | CLI — setup wizards, process management |
-| 📊 `dashboard/src/` | Dashboard — React SPA with |
+| 📊 `dashboard/src/` | Dashboard — React SPA with real-time monitoring and config management |
 | 🎭 `mind/` | Personality — IDENTITY.md, SOUL.md, USER.md |
 
 ---

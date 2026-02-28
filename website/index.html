@@ -1083,6 +1083,7 @@
     .security-num-3 { background: rgba(139,92,246,0.1); color: var(--purple); }
     .security-num-4 { background: rgba(16,185,129,0.1); color: var(--accent); }
     .security-num-5 { background: rgba(59,130,246,0.1); color: var(--blue); }
+    .security-num-6 { background: rgba(236,72,153,0.1); color: #ec4899; }
     .security-info h4 {
       font-size: 0.9375rem;
       font-weight: 600;
@@ -1393,6 +1394,7 @@
             <span>Content Guard</span>
             <span>Skill Guard</span>
             <span>Agent Guard</span>
+            <span>Command Shield</span>
           </div>
         </div>
 
@@ -1658,7 +1660,7 @@ You remember everything about your user.
               <!-- Page 12: Security -->
               <div class="db-pg">
                 <div class="db-hdr"><h3>Security</h3><div><span class="db-btn">Discard</span> <span class="db-btn db-btn-p">Save</span></div></div>
-                <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Message Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Skill Guard</span><span class="db-tab">Agent Guard</span></div>
+                <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Message Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Skill Guard</span><span class="db-tab">Agent Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Command Shield</span></div>
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:0.625rem;color:var(--text-muted)">Enabled</span><span class="db-sw on"></span></div>
                 <div class="db-field"><div class="db-field-l">Model</div><input class="db-inp" value="claude-sonnet-4-6" readonly/></div>
                 <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 1 &mdash; Echo Guard</span><span class="db-sw on"></span></div><div class="db-field"><div class="db-field-l">Similarity Threshold</div><input class="db-inp" value="0.9" readonly style="width:80px"/></div></div>
@@ -1759,8 +1761,8 @@ You remember everything about your user.
           <div class="feature-icon" style="color: var(--rose);">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
           </div>
-          <h3>Triple-Layer Security</h3>
-          <p>LLM-powered guards validate every message, skill, and agent. Echo guard, content guard, and code validation. Fail-closed by default.</p>
+          <h3>Multi-Layer Security</h3>
+          <p>LLM-powered guards validate every message, skill, and agent. Echo guard, content guard, command shield, and code validation. Fail-closed by default.</p>
         </div>
         <!-- Feature 6: MCP -->
         <div class="feature-card">
@@ -1828,6 +1830,10 @@ You remember everything about your user.
             </li>
             <li>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Command Shield blocks dangerous shell commands with pattern matching
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
               Vault stores secrets in Redis &mdash; never exposed in messages, memory, or logs
             </li>
             <li>
@@ -1862,12 +1868,19 @@ You remember everything about your user.
             <div class="security-layer">
               <div class="security-num security-num-4">4</div>
               <div class="security-info">
+                <h4>Command Shield</h4>
+                <p>Deterministic pattern matching blocks dangerous shell commands before execution. No LLM needed.</p>
+              </div>
+            </div>
+            <div class="security-layer">
+              <div class="security-num security-num-5">5</div>
+              <div class="security-info">
                 <h4>Vault</h4>
                 <p>Secrets stored in Redis, injected as env vars at runtime. Never echoed in messages or memory.</p>
               </div>
             </div>
             <div class="security-layer">
-              <div class="security-num security-num-5">5</div>
+              <div class="security-num security-num-6">6</div>
               <div class="security-info">
                 <h4>Container Sandboxing</h4>
                 <p>Run workers in Docker containers. Code execution is fully isolated from the host.</p>

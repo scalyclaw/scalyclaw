@@ -284,7 +284,8 @@ scalyclaw worker start &amp;</pre>
       <span class="prop">"contentGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span> }
     },
     <span class="prop">"skill"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
-    <span class="prop">"agent"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> }
+    <span class="prop">"agent"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
+    <span class="prop">"commandShield"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"denied"</span>: [<span class="str">"rm -rf /"</span>, <span class="str">"mkfs"</span>, <span class="str">"..."</span>], <span class="prop">"allowed"</span>: [] }
   },
   <span class="prop">"budget"</span>: {
     <span class="prop">"monthlyLimit"</span>: <span class="num">0</span>,

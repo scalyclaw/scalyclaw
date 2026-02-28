@@ -86,6 +86,7 @@ const NAV_SECTIONS = [
       { href: 'security.html#echo-guard', label: 'Echo Guard' },
       { href: 'security.html#content-guard', label: 'Content Guard' },
       { href: 'security.html#skill-agent-guard', label: 'Skill & Agent Guard' },
+      { href: 'security.html#command-shield', label: 'Command Shield' },
       { href: 'security.html#vault', label: 'Vault' },
     ]
   },
@@ -185,6 +186,7 @@ const SEARCH_INDEX = [
   { page: 'security.html#echo-guard', title: 'Echo Guard', text: 'echo guard semantic similarity check threshold injection detection' },
   { page: 'security.html#content-guard', title: 'Content Guard', text: 'content guard prompt injection social engineering jailbreak detection' },
   { page: 'security.html#skill-agent-guard', title: 'Skill & Agent Guard', text: 'skill agent guard code validation permission auditing sandbox' },
+  { page: 'security.html#command-shield', title: 'Command Shield', text: 'command shield deterministic pattern matching denied blocked shell commands no LLM' },
   { page: 'security.html#vault', title: 'Vault', text: 'vault secrets Redis env var injection API keys credentials never exposed' },
   { page: 'mcp.html', title: 'MCP Integration', text: 'Model Context Protocol servers tools stdio HTTP SSE transport' },
   { page: 'mcp.html#connecting', title: 'Connecting MCP Servers', text: 'dashboard setup bulk import troubleshooting MCP connect' },
