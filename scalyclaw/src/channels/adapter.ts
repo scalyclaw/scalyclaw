@@ -41,7 +41,6 @@ export const SLASH_COMMANDS: Array<{ command: string; description: string }> = [
   { command: 'skills', description: 'Installed skills' },
   { command: 'mcp', description: 'Connected MCP servers' },
   { command: 'guards', description: 'Security guards' },
-  { command: 'config', description: 'Current config' },
   { command: 'vault', description: 'Stored secrets' },
   { command: 'memory', description: 'Search memories' },
   { command: 'usage', description: 'Token usage and budget' },
