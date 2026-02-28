@@ -6,6 +6,7 @@ import { registerProcess, deregisterProcess, processId } from '@scalyclaw/shared
 import { bootstrapWorker } from './bootstrap.js';
 import { processToolJob, setWorkerConfig } from './tool-processor.js';
 import { subscribeToSkillInvalidation } from './skill-cache.js';
+import { subscribeToCancelSignal } from '@scalyclaw/shared/queue/cancel-signal.js';
 import { initWorkerServer, listenWorkerServer, closeWorkerServer } from './server.js';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -24,6 +25,7 @@ async function main(): Promise<void> {
   const reloadSubscriber = createRedisClient(redisConfig);
   await reloadSubscriber.connect();
   subscribeToSkillInvalidation(reloadSubscriber);
+  subscribeToCancelSignal(reloadSubscriber);
 
   // ── Single BullMQ Worker — tools queue only ──
   const concurrency = process.env.SCALYCLAW_WORKER_CONCURRENCY

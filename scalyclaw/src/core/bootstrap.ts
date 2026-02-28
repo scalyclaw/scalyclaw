@@ -16,6 +16,7 @@ import { invalidatePromptCache } from '../prompt/builder.js';
 import { registerProvider } from '../models/registry.js';
 import { createMiniMaxProvider } from '../models/providers/minimax.js';
 import { initQueue } from '@scalyclaw/shared/queue/queue.js';
+import { subscribeToCancelSignal } from '@scalyclaw/shared/queue/cancel-signal.js';
 import type { Redis } from 'ioredis';
 
 export interface BootstrapOptions {
@@ -111,6 +112,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
     await loadAllAgents();
     invalidatePromptCache();
   });
+  subscribeToCancelSignal(reloadSubscriber);
   subscribeToMcpReload(reloadSubscriber, async () => {
     log('info', 'Received MCP reload notification, refreshing connections');
     const freshConfig = await loadConfig();

@@ -9,7 +9,7 @@ import type { ChatMessage } from '../models/provider.js';
 import { buildAgentToolDefs, AGENT_ELIGIBLE_TOOL_NAMES } from '../tools/tools.js';
 import { getMcpToolsForServers } from '../mcp/mcp-manager.js';
 import { executeAssistantTool, type ToolContext } from '../tools/tool-impl.js';
-import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
+import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
 import { recordUsage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
 import type { AgentTaskData } from '@scalyclaw/shared/queue/jobs.js';
@@ -28,9 +28,10 @@ export interface AgentResult {
 export async function processAgentJob(job: Job<AgentTaskData>): Promise<string> {
   const { channelId, agentId, context } = job.data;
   const task = job.data.task ?? '';
+  const jobId = job.id!;
 
   if (!task) {
-    log('warn', `Agent job missing task`, { jobId: job.id, agentId });
+    log('warn', `Agent job missing task`, { jobId, agentId });
     return JSON.stringify({
       response: `Agent "${agentId ?? 'default'}" failed: no task provided. Use delegate_agent with { agentId, task, context? }.`,
       metadata: { error: true },
@@ -38,10 +39,16 @@ export async function processAgentJob(job: Job<AgentTaskData>): Promise<string> 
     } satisfies AgentResult);
   }
 
-  log('info', `Processing agent task: ${agentId}`, { jobId: job.id, channelId, taskLength: task.length });
+  log('info', `Processing agent task: ${agentId}`, { jobId, channelId, taskLength: task.length });
 
-  const result = await runAgentLoop(agentId ?? 'default', task, context ?? '', channelId, job.id!);
-  return JSON.stringify(result);
+  const ac = new AbortController();
+  registerAbort(jobId, ac);
+  try {
+    const result = await runAgentLoop(agentId ?? 'default', task, context ?? '', channelId, jobId, ac.signal);
+    return JSON.stringify(result);
+  } finally {
+    unregisterAbort(jobId);
+  }
 }
 
 async function runAgentLoop(
@@ -50,6 +57,7 @@ async function runAgentLoop(
   context: string,
   channelId: string,
   jobId: string,
+  signal: AbortSignal,
 ): Promise<AgentResult> {
   log('info', `>>> Agent loop: ${agentId}`, { taskLength: task.length, contextLength: context.length, channelId });
 
@@ -139,7 +147,7 @@ async function runAgentLoop(
   try {
     while (round < maxIterations) {
       // Check cancel before each round
-      if (await isJobCancelled(jobId)) {
+      if (signal.aborted) {
         log('info', `Agent "${agentId}" cancelled`, { round, jobId });
         break;
       }
@@ -167,6 +175,7 @@ async function runAgentLoop(
         maxTokens: modelConfig?.maxTokens ?? 8192,
         temperature: modelConfig?.temperature ?? 0.7,
         reasoningEnabled: modelConfig?.reasoningEnabled,
+        signal,
       });
 
       totalInputTokens += response.usage?.inputTokens ?? 0;
@@ -190,7 +199,7 @@ async function runAgentLoop(
 
       const toolResults = await Promise.all(
         response.toolCalls.map(async (tc) => {
-          if (await isJobCancelled(jobId)) return { id: tc.id, result: '{"error":"Cancelled"}' };
+          if (signal.aborted) return { id: tc.id, result: '{"error":"Cancelled"}' };
           const result = await executeAssistantTool(tc.name, tc.input, toolCtx);
           return { id: tc.id, result };
         })

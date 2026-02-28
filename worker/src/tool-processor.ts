@@ -4,6 +4,7 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
 import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
+import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
 import { executeSkill } from './execute-skill.js';
 import { executeCode } from './execute-code.js';
 import { executeCommand } from './execute-command.js';
@@ -199,8 +200,9 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
   const jobId = job.id!;
   log('info', 'Executing tool on worker', { jobId, toolCallId, toolName });
 
-  // Create an AbortController that fires when the job is cancelled via Redis
+  // Create an AbortController — pub/sub fires instantly, polling is fallback
   const ac = new AbortController();
+  registerAbort(jobId, ac);
   const cancelPoll = setInterval(async () => {
     try {
       if (await isJobCancelled(jobId)) {
@@ -239,6 +241,7 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
     return JSON.stringify({ error: `Tool "${toolName}" failed: ${String(err)}` });
   } finally {
     clearInterval(cancelPoll);
+    unregisterAbort(jobId);
   }
 }
 
@@ -281,36 +284,45 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
 
 async function processSkillExecution(job: Job<SkillExecutionData>): Promise<string> {
   const { skillId, input, timeoutMs, secrets, _workspaceFiles } = job.data;
-  log('info', 'Executing skill on worker', { jobId: job.id, skillId });
+  const jobId = job.id!;
+  log('info', 'Executing skill on worker', { jobId, skillId });
 
-  // Pre-fetch workspace files if provided
-  if (_workspaceFiles && _workspaceFiles.length > 0) {
-    await prefetchWorkspaceFiles(_workspaceFiles);
-  }
+  const ac = new AbortController();
+  registerAbort(jobId, ac);
 
-  const skill = await getOrFetchSkill(skillId, workerNodeUrl, workerNodeToken);
-  if (!skill?.scriptPath || !skill.scriptLanguage) {
-    return JSON.stringify({ skillId, stdout: '', stderr: `Skill "${skillId}" not found or has no script`, exitCode: 1 });
-  }
-
-  const skillDir = join(PATHS.skills, skillId);
   try {
-    await ensureInstalled(skill, skillDir);
-  } catch (err) {
-    return JSON.stringify({ skillId, stdout: '', stderr: `Dependency install failed: ${String(err)}`, exitCode: 1 });
+    // Pre-fetch workspace files if provided
+    if (_workspaceFiles && _workspaceFiles.length > 0) {
+      await prefetchWorkspaceFiles(_workspaceFiles);
+    }
+
+    const skill = await getOrFetchSkill(skillId, workerNodeUrl, workerNodeToken);
+    if (!skill?.scriptPath || !skill.scriptLanguage) {
+      return JSON.stringify({ skillId, stdout: '', stderr: `Skill "${skillId}" not found or has no script`, exitCode: 1 });
+    }
+
+    const skillDir = join(PATHS.skills, skillId);
+    try {
+      await ensureInstalled(skill, skillDir);
+    } catch (err) {
+      return JSON.stringify({ skillId, stdout: '', stderr: `Dependency install failed: ${String(err)}`, exitCode: 1 });
+    }
+
+    const result = await executeSkill({
+      skillId,
+      input,
+      scriptPath: skill.scriptPath,
+      scriptLanguage: skill.scriptLanguage,
+      skillDir,
+      workspacePath: PATHS.workspace,
+      timeoutMs,
+      secrets,
+      signal: ac.signal,
+    });
+
+    log('info', 'Skill execution complete', { jobId, skillId, exitCode: result.exitCode });
+    return annotateWorkerResult(JSON.stringify(result));
+  } finally {
+    unregisterAbort(jobId);
   }
-
-  const result = await executeSkill({
-    skillId,
-    input,
-    scriptPath: skill.scriptPath,
-    scriptLanguage: skill.scriptLanguage,
-    skillDir,
-    workspacePath: PATHS.workspace,
-    timeoutMs,
-    secrets,
-  });
-
-  log('info', 'Skill execution complete', { jobId: job.id, skillId, exitCode: result.exitCode });
-  return annotateWorkerResult(JSON.stringify(result));
 }

@@ -9,6 +9,7 @@ import { runMessageGuard, runResponseEchoGuard } from '../guards/guard.js';
 import type { MessageProcessingData, CommandData, AttachmentData } from '@scalyclaw/shared/queue/jobs.js';
 import { recordChannelActivity } from '../scheduler/proactive.js';
 import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
+import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
 
 // ─── Message queue job dispatcher ───
 
@@ -96,6 +97,7 @@ async function processMessage(
   storeMessage(channelId, 'user', text);
 
   const ac = new AbortController();
+  registerAbort(jobId, ac);
 
   log('info', 'Running orchestrator', { channelId, textLength: text.length });
   const startTime = Date.now();
@@ -159,6 +161,8 @@ async function processMessage(
       type: 'error',
       error: 'Something went wrong on my end. Try again?',
     });
+  } finally {
+    unregisterAbort(jobId);
   }
 }
 
@@ -179,6 +183,7 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
   };
 
   const ac = new AbortController();
+  registerAbort(job.id!, ac);
 
   startAllTypingLoops();
   try {
@@ -267,6 +272,7 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
       error: 'Something went wrong on my end. Try again?',
     });
   } finally {
+    unregisterAbort(job.id!);
     stopAllTypingLoops();
   }
 }

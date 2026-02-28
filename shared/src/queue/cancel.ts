@@ -1,5 +1,6 @@
 import { getRedis } from '../core/redis.js';
 import { log } from '../core/logger.js';
+import { publishCancelSignal } from './cancel-signal.js';
 
 const CANCEL_PREFIX = 'scalyclaw:cancel:';
 const PID_PREFIX = 'scalyclaw:pid:';
@@ -53,7 +54,7 @@ export async function unregisterJobProcess(jobId: string): Promise<void> {
 
 // ─── Channel → Jobs Tracking ───
 
-/** Track a job as belonging to a channel (for /cancel all) */
+/** Track a job as belonging to a channel (for /stop) */
 export async function trackChannelJob(channelId: string, jobId: string): Promise<void> {
   const redis = getRedis();
   await redis.sadd(`${CHANNEL_JOBS_PREFIX}${channelId}`, jobId);
@@ -77,6 +78,8 @@ export async function cancelAllChannelJobs(channelId: string): Promise<number> {
   }
   if (jobIds.length > 0) {
     await redis.del(`${CHANNEL_JOBS_PREFIX}${channelId}`);
+    // Batch-publish cancel signal for instant cross-process abort
+    await publishCancelSignal(jobIds);
   }
   return count;
 }

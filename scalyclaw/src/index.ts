@@ -550,15 +550,35 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
 // ─── Drain waiting jobs for a channel ───
 
 async function drainWaitingJobs(channelId: string): Promise<void> {
-  const q = getQueue('messages');
   let removed = 0;
 
-  for (const state of ['waiting', 'prioritized'] as const) {
-    const jobs = await q.getJobs(state);
-    for (const job of jobs) {
-      if (job.data?.channelId === channelId) {
-        await job.remove().catch(() => {});
-        removed++;
+  // Drain messages + agents queues — match by channelId in job data
+  for (const queueName of ['messages', 'agents'] as const) {
+    const q = getQueue(queueName);
+    for (const state of ['waiting', 'prioritized'] as const) {
+      const jobs = await q.getJobs(state);
+      for (const job of jobs) {
+        if (job.data?.channelId === channelId) {
+          await job.remove().catch(() => {});
+          removed++;
+        }
+      }
+    }
+  }
+
+  // Drain tools queue — match by jobId against the tracked set for this channel
+  const redis = getRedis();
+  const trackedJobIds = await redis.smembers(`scalyclaw:jobs:${channelId}`);
+  if (trackedJobIds.length > 0) {
+    const trackedSet = new Set(trackedJobIds);
+    const toolsQ = getQueue('tools');
+    for (const state of ['waiting', 'prioritized'] as const) {
+      const jobs = await toolsQ.getJobs(state);
+      for (const job of jobs) {
+        if (job.id && trackedSet.has(job.id)) {
+          await job.remove().catch(() => {});
+          removed++;
+        }
       }
     }
   }
