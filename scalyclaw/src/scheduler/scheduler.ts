@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { enqueueJob, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
-
-const SCHEDULED_PREFIX = 'scalyclaw:scheduled:';
+import { SEVEN_DAYS_S } from '@scalyclaw/shared/const/constants.js';
+import { SCHEDULED_KEY_PREFIX } from '../const/constants.js';
 
 // ─── Redis helpers ───
 
@@ -13,27 +13,27 @@ async function getRedis() {
 
 async function setScheduledState(jobId: string, fields: Record<string, string>): Promise<void> {
   const redis = await getRedis();
-  await redis.hmset(`${SCHEDULED_PREFIX}${jobId}`, fields);
+  await redis.hmset(`${SCHEDULED_KEY_PREFIX}${jobId}`, fields);
 }
 
 async function getScheduledState(jobId: string): Promise<Record<string, string> | null> {
   const redis = await getRedis();
-  const data = await redis.hgetall(`${SCHEDULED_PREFIX}${jobId}`);
+  const data = await redis.hgetall(`${SCHEDULED_KEY_PREFIX}${jobId}`);
   if (!data || Object.keys(data).length === 0) return null;
   return data;
 }
 
 async function updateScheduledField(jobId: string, field: string, value: string): Promise<void> {
   const redis = await getRedis();
-  await redis.hset(`${SCHEDULED_PREFIX}${jobId}`, field, value);
+  await redis.hset(`${SCHEDULED_KEY_PREFIX}${jobId}`, field, value);
 }
 
-const TERMINAL_TTL_SECONDS = 604800; // 7 days
+const TERMINAL_TTL_SECONDS = SEVEN_DAYS_S;
 
 /** Set a 7-day TTL on a scheduled job hash after it reaches a terminal state */
 async function expireScheduledJob(jobId: string): Promise<void> {
   const redis = await getRedis();
-  await redis.expire(`${SCHEDULED_PREFIX}${jobId}`, TERMINAL_TTL_SECONDS);
+  await redis.expire(`${SCHEDULED_KEY_PREFIX}${jobId}`, TERMINAL_TTL_SECONDS);
 }
 
 // ─── Create Reminder ───
@@ -78,7 +78,7 @@ export async function createReminder(
   } catch (err) {
     // Cleanup Redis state on failure
     const redis = await getRedis();
-    await redis.del(`${SCHEDULED_PREFIX}${jobId}`);
+    await redis.del(`${SCHEDULED_KEY_PREFIX}${jobId}`);
     throw err;
   }
 
@@ -139,7 +139,7 @@ export async function createRecurrentReminder(
     });
   } catch (err) {
     const redis = await getRedis();
-    await redis.del(`${SCHEDULED_PREFIX}${jobId}`);
+    await redis.del(`${SCHEDULED_KEY_PREFIX}${jobId}`);
     throw err;
   }
 
@@ -185,7 +185,7 @@ export async function createTask(
     });
   } catch (err) {
     const redis = await getRedis();
-    await redis.del(`${SCHEDULED_PREFIX}${jobId}`);
+    await redis.del(`${SCHEDULED_KEY_PREFIX}${jobId}`);
     throw err;
   }
 
@@ -246,7 +246,7 @@ export async function createRecurrentTask(
     });
   } catch (err) {
     const redis = await getRedis();
-    await redis.del(`${SCHEDULED_PREFIX}${jobId}`);
+    await redis.del(`${SCHEDULED_KEY_PREFIX}${jobId}`);
     throw err;
   }
 
@@ -267,7 +267,7 @@ export async function listAllScheduledJobs(): Promise<Array<{
   created_at: string | null;
 }>> {
   const redis = await getRedis();
-  const keys = await redis.keys(`${SCHEDULED_PREFIX}*`);
+  const keys = await redis.keys(`${SCHEDULED_KEY_PREFIX}*`);
   const results: Array<{
     id: string; type: string; description: string; channel: string;
     cron: string | null; next_run: string | null; state: string; created_at: string | null;
@@ -276,7 +276,7 @@ export async function listAllScheduledJobs(): Promise<Array<{
   for (const key of keys) {
     const data = await redis.hgetall(key);
     if (!data || !data.state) continue;
-    const jobId = key.slice(SCHEDULED_PREFIX.length);
+    const jobId = key.slice(SCHEDULED_KEY_PREFIX.length);
     results.push({
       id: jobId,
       type: data.type ?? 'unknown',
@@ -339,7 +339,7 @@ export async function deleteScheduledJob(jobId: string): Promise<boolean> {
   if (!data) return false;
   if (data.state === 'active') return false;
   const redis = await getRedis();
-  await redis.del(`${SCHEDULED_PREFIX}${jobId}`);
+  await redis.del(`${SCHEDULED_KEY_PREFIX}${jobId}`);
   log('info', 'Scheduled job deleted', { jobId });
   return true;
 }

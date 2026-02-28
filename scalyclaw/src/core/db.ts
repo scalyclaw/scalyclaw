@@ -1,6 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { getLoadablePath } from 'sqlite-vec';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { SQLITE_BUSY_TIMEOUT_MS } from '../const/constants.js';
 
 let db: Database | null = null;
 let vecAvailable = false;
@@ -8,7 +9,7 @@ let vecAvailable = false;
 export function initDatabase(dbPath: string, dimensions: number): Database {
   db = new Database(dbPath);
   db.exec('PRAGMA journal_mode = WAL');
-  db.exec('PRAGMA busy_timeout = 30000');
+  db.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   db.exec('PRAGMA foreign_keys = ON');
 
   try {

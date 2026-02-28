@@ -1,10 +1,15 @@
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { createReloadChannel } from './reload-channel.js';
+import {
+  LOCK_DURATION_MS, STALLED_INTERVAL_MS,
+  QUEUE_LIMITER_MAX, QUEUE_LIMITER_DURATION_MS,
+  JOB_COMPLETE_AGE_S, JOB_COMPLETE_COUNT, JOB_FAIL_AGE_S,
+} from '@scalyclaw/shared/const/constants.js';
+import { CONFIG_RELOAD_CHANNEL } from '@scalyclaw/shared/const/constants.js';
+import { CONFIG_KEY } from '../const/constants.js';
 
-const CONFIG_KEY = 'scalyclaw:config';
-
-const configReload = createReloadChannel('scalyclaw:config:reload');
+const configReload = createReloadChannel(CONFIG_RELOAD_CHANNEL);
 export const publishConfigReload = configReload.publish;
 export const subscribeToConfigReload = configReload.subscribe;
 
@@ -160,11 +165,11 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
   logs: { level: 'info', format: 'json', type: 'console' },
   memory: { topK: 10, scoreThreshold: 0.5, embeddingModel: 'auto' },
   queue: {
-    lockDuration: 18_300_000, // 5h + 5min margin
-    stalledInterval: 30_000,
-    limiter: { max: 10, duration: 1000 },
-    removeOnComplete: { age: 86400, count: 1000 },
-    removeOnFail: { age: 604800 },
+    lockDuration: LOCK_DURATION_MS,
+    stalledInterval: STALLED_INTERVAL_MS,
+    limiter: { max: QUEUE_LIMITER_MAX, duration: QUEUE_LIMITER_DURATION_MS },
+    removeOnComplete: { age: JOB_COMPLETE_AGE_S, count: JOB_COMPLETE_COUNT },
+    removeOnFail: { age: JOB_FAIL_AGE_S },
   },
   models: { providers: {}, models: [], embeddingModels: [] },
   budget: { monthlyLimit: 0, dailyLimit: 0, hardLimit: false, alertThresholds: [50, 80, 90] },

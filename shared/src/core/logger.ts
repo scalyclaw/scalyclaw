@@ -1,6 +1,7 @@
 import { createWriteStream, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { WriteStream } from 'node:fs';
+import { LOG_META_TRUNCATE } from '../const/constants.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -76,7 +77,7 @@ function formatMeta(meta: Record<string, unknown>): string {
     if (value === undefined || value === null) continue;
     if (typeof value === 'string') {
       // Truncate long strings
-      const display = value.length > 200 ? value.slice(0, 200) + '...' : value;
+      const display = value.length > LOG_META_TRUNCATE ? value.slice(0, LOG_META_TRUNCATE) + '...' : value;
       parts.push(`${key}="${display}"`);
     } else if (typeof value === 'object') {
       parts.push(`${key}=${JSON.stringify(value)}`);

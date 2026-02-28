@@ -3,6 +3,12 @@ import { loadWorkerSetupConfig, type WorkerSetupConfig } from './config.js';
 import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/shared/core/redis.js';
 import { initQueue, type QueueConfig } from '@scalyclaw/shared/queue/queue.js';
 import { initLogger, initLogFile, log } from '@scalyclaw/shared/core/logger.js';
+import {
+  LOCK_DURATION_MS, STALLED_INTERVAL_MS,
+  QUEUE_LIMITER_MAX, QUEUE_LIMITER_DURATION_MS,
+  JOB_COMPLETE_AGE_S, JOB_COMPLETE_COUNT, JOB_FAIL_AGE_S,
+} from '@scalyclaw/shared/const/constants.js';
+import { WORKER_LOG_FILE } from './const/constants.js';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Redis } from 'ioredis';
@@ -10,11 +16,11 @@ import type { Redis } from 'ioredis';
 // ─── Default queue config (worker doesn't load full config from Redis) ───
 
 const QUEUE_DEFAULTS: QueueConfig = {
-  lockDuration: 18_300_000, // 5h + 5min margin
-  stalledInterval: 30_000,
-  limiter: { max: 10, duration: 1000 },
-  removeOnComplete: { age: 86400, count: 1000 },
-  removeOnFail: { age: 604800 },
+  lockDuration: LOCK_DURATION_MS,
+  stalledInterval: STALLED_INTERVAL_MS,
+  limiter: { max: QUEUE_LIMITER_MAX, duration: QUEUE_LIMITER_DURATION_MS },
+  removeOnComplete: { age: JOB_COMPLETE_AGE_S, count: JOB_COMPLETE_COUNT },
+  removeOnFail: { age: JOB_FAIL_AGE_S },
 };
 
 export interface WorkerBootstrapResult {
@@ -51,7 +57,7 @@ export async function bootstrapWorker(configPath?: string): Promise<WorkerBootst
 
   // 6. Init logger
   initLogger({ level: 'info', format: 'text' });
-  initLogFile(PATHS.logs, 'worker.log');
+  initLogFile(PATHS.logs, WORKER_LOG_FILE);
   log('info', 'Worker bootstrap complete', { homeDir: config.homeDir });
 
   return { redis, config, redisConfig };

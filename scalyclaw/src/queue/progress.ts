@@ -1,5 +1,6 @@
 import type { Redis } from 'ioredis';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { RESPONSE_KEY_PREFIX, RESPONSE_TTL_S, PROGRESS_CHANNEL_PREFIX, PROGRESS_CHANNEL_PATTERN, PROGRESS_BUFFER_KEY_PREFIX } from '../const/constants.js';
 
 export interface ProgressEvent {
   jobId: string;
@@ -12,15 +13,13 @@ export interface ProgressEvent {
   caption?: string;
 }
 
-const RESPONSE_KEY_PREFIX = 'scalyclaw:response:';
-const RESPONSE_TTL = 300; // 5 min
 
 export async function publishProgress(
   redis: Redis,
   channelId: string,
   event: ProgressEvent
 ): Promise<void> {
-  const channel = `progress:${channelId}`;
+  const channel = `${PROGRESS_CHANNEL_PREFIX}${channelId}`;
   const payload = JSON.stringify(event);
   const receivers = await redis.publish(channel, payload);
   log('debug', 'Progress published', { channel, type: event.type, jobId: event.jobId, receivers });
@@ -31,15 +30,15 @@ export async function publishProgress(
 
     if (receivers === 0) {
       // No subscribers — persist + buffer in a single pipeline
-      const bufferKey = `progress-buffer:${channelId}`;
+      const bufferKey = `${PROGRESS_BUFFER_KEY_PREFIX}${channelId}`;
       const pipeline = redis.pipeline();
-      pipeline.set(responseKey, payload, 'EX', RESPONSE_TTL);
+      pipeline.set(responseKey, payload, 'EX', RESPONSE_TTL_S);
       pipeline.rpush(bufferKey, payload);
-      pipeline.expire(bufferKey, RESPONSE_TTL);
+      pipeline.expire(bufferKey, RESPONSE_TTL_S);
       await pipeline.exec();
       log('debug', 'Progress event buffered (no subscribers)', { channel, type: event.type });
     } else {
-      await redis.set(responseKey, payload, 'EX', RESPONSE_TTL);
+      await redis.set(responseKey, payload, 'EX', RESPONSE_TTL_S);
     }
   }
 }
@@ -48,10 +47,10 @@ export async function subscribeToProgress(
   subscriber: Redis,
   handler: (channelId: string, event: ProgressEvent) => void
 ): Promise<void> {
-  await subscriber.psubscribe('progress:*');
+  await subscriber.psubscribe(PROGRESS_CHANNEL_PATTERN);
 
   subscriber.on('pmessage', (_pattern: string, channel: string, message: string) => {
-    const channelId = channel.replace('progress:', '');
+    const channelId = channel.slice(PROGRESS_CHANNEL_PREFIX.length);
     try {
       const event = JSON.parse(message) as ProgressEvent;
       Promise.resolve(handler(channelId, event)).catch((err) => {

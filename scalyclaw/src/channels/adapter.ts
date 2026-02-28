@@ -55,18 +55,18 @@ export const SLASH_COMMANDS: Array<{ command: string; description: string }> = [
 // in Redis so broadcasts work across reloads and channels that haven't received
 // a message in this process lifetime.
 
-const CHANNEL_STATE_PREFIX = 'scalyclaw:channel:state:';
+import { CHANNEL_STATE_KEY_PREFIX } from '../const/constants.js';
 
 export async function saveChannelReplyAddress(channelId: string, address: string): Promise<void> {
   const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   const redis = getRedis();
-  await redis.set(`${CHANNEL_STATE_PREFIX}${channelId}`, address);
+  await redis.set(`${CHANNEL_STATE_KEY_PREFIX}${channelId}`, address);
 }
 
 export async function loadChannelReplyAddress(channelId: string): Promise<string | null> {
   const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
   const redis = getRedis();
-  return redis.get(`${CHANNEL_STATE_PREFIX}${channelId}`);
+  return redis.get(`${CHANNEL_STATE_KEY_PREFIX}${channelId}`);
 }
 
 export function sanitizeFileName(name: string): string {

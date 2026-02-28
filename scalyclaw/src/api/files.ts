@@ -3,6 +3,7 @@ import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, extname } from 'node:path';
 import { resolveFilePath } from '../core/workspace.js';
+import { FILE_CACHE_MAX_AGE_S } from '../const/constants.js';
 
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg',
@@ -59,7 +60,7 @@ export function registerFilesRoutes(server: FastifyInstance): void {
     reply.header('Content-Type', contentType);
     reply.header('Content-Disposition', `${disposition}; filename="${fileName}"`);
     reply.header('X-Content-Type-Options', 'nosniff');
-    reply.header('Cache-Control', 'private, max-age=3600');
+    reply.header('Cache-Control', `private, max-age=${FILE_CACHE_MAX_AGE_S}`);
 
     return reply.send(createReadStream(fullPath));
   });

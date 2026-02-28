@@ -1,6 +1,8 @@
 import { createSkillFromZip, getSkill, loadSkills } from '@scalyclaw/shared/skills/skill-loader.js';
 import type { SkillDefinition } from '@scalyclaw/shared/skills/skill-loader.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { SKILLS_RELOAD_CHANNEL } from '@scalyclaw/shared/const/constants.js';
+import { FETCH_TIMEOUT_MS } from './const/constants.js';
 import { clearInstallInFlight } from './skill-setup.js';
 import type { Redis } from 'ioredis';
 
@@ -10,8 +12,6 @@ const skillCache = new Map<string, SkillDefinition>();
 
 // In-flight dedup: prevent concurrent fetches for the same skill
 const inFlight = new Map<string, Promise<SkillDefinition | null>>();
-
-const FETCH_TIMEOUT_MS = 15_000;
 
 /**
  * Get a skill by ID — checks in-memory cache, then local disk, then fetches
@@ -101,11 +101,11 @@ export function clearSkillCache(): void {
   log('info', 'Skill cache cleared');
 }
 
-/** Subscribe to scalyclaw:skills:reload to invalidate cache when skills change. */
+/** Subscribe to skill reload channel to invalidate cache when skills change. */
 export function subscribeToSkillInvalidation(subscriber: Redis): void {
-  subscriber.subscribe('scalyclaw:skills:reload');
+  subscriber.subscribe(SKILLS_RELOAD_CHANNEL);
   subscriber.on('message', (channel) => {
-    if (channel === 'scalyclaw:skills:reload') {
+    if (channel === SKILLS_RELOAD_CHANNEL) {
       clearSkillCache();
     }
   });

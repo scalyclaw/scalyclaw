@@ -5,9 +5,7 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import { spawnProcess } from './subprocess.js';
 import type { SkillDefinition } from '@scalyclaw/shared/skills/skill-loader.js';
 import { getWorkerExtraEnv } from './worker-env.js';
-
-const MARKER_FILE = '.scalyclaw-installed';
-const INSTALL_TIMEOUT_MS = 120_000;
+import { INSTALL_MARKER_FILE, INSTALL_TIMEOUT_MS, WHICH_TIMEOUT_MS, VENV_TIMEOUT_MS } from './const/constants.js';
 
 /** Required CLI tool per language. */
 const RUNTIME_CMDS: Record<string, string> = {
@@ -105,7 +103,7 @@ export async function ensureInstalled(skill: SkillDefinition, skillDir: string):
         cmd: 'which',
         args: [requiredCmd],
         cwd: skillDir,
-        timeoutMs: 5_000,
+        timeoutMs: WHICH_TIMEOUT_MS,
         workspacePath: skillDir,
         extraEnv: getWorkerExtraEnv(),
         label: `skill-setup:${skill.id}:check`,
@@ -130,7 +128,7 @@ async function doInstall(skill: SkillDefinition, skillDir: string, command: stri
   const hash = await computeDepHash(command, skill.scriptLanguage, skillDir);
 
   // Check marker file
-  const markerPath = join(skillDir, MARKER_FILE);
+  const markerPath = join(skillDir, INSTALL_MARKER_FILE);
   try {
     const existing = await readFile(markerPath, 'utf-8');
     if (existing.trim() === hash) {
@@ -150,7 +148,7 @@ async function doInstall(skill: SkillDefinition, skillDir: string, command: stri
         cmd: 'uv',
         args: ['venv'],
         cwd: skillDir,
-        timeoutMs: 30_000,
+        timeoutMs: VENV_TIMEOUT_MS,
         workspacePath: skillDir,
         extraEnv: getWorkerExtraEnv(),
         label: `skill-setup:${skill.id}:venv`,

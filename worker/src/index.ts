@@ -3,6 +3,8 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import { getQueueName, closeQueue } from '@scalyclaw/shared/queue/queue.js';
 import { createRedisClient } from '@scalyclaw/shared/core/redis.js';
 import { registerProcess, deregisterProcess, processId } from '@scalyclaw/shared/core/registry.js';
+import { LOCK_DURATION_MS, STALLED_INTERVAL_MS } from '@scalyclaw/shared/const/constants.js';
+import { SHUTDOWN_TIMEOUT_MS } from './const/constants.js';
 import { bootstrapWorker } from './bootstrap.js';
 import { processToolJob, setWorkerConfig } from './tool-processor.js';
 import { subscribeToSkillInvalidation } from './skill-cache.js';
@@ -36,8 +38,8 @@ async function main(): Promise<void> {
 
   const toolsWorker = new Worker(getQueueName('tools'), processToolJob, {
     connection: redis.duplicate() as never,
-    lockDuration: 18_300_000, // 5h + 5min margin
-    stalledInterval: 30_000,
+    lockDuration: LOCK_DURATION_MS,
+    stalledInterval: STALLED_INTERVAL_MS,
     concurrency,
   });
 
@@ -86,9 +88,9 @@ async function main(): Promise<void> {
     log('info', 'Worker shutting down...');
 
     const forceTimer = setTimeout(() => {
-      log('error', 'Worker shutdown timed out after 8s, forcing exit');
+      log('error', 'Worker shutdown timed out, forcing exit');
       process.exit(1);
-    }, 8_000);
+    }, SHUTDOWN_TIMEOUT_MS);
     forceTimer.unref();
 
     try {

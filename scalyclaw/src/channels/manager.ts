@@ -1,5 +1,6 @@
 import type { ChannelAdapter, MessageHandler } from './adapter.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { TYPING_INTERVAL_MS } from '../const/constants.js';
 
 const adapters = new Map<string, ChannelAdapter>();
 let activeHandler: MessageHandler | null = null;
@@ -103,8 +104,7 @@ export async function sendTypingToChannel(channelId: string): Promise<void> {
   }
 }
 
-/** Interval-based typing refresh — re-sends every 4s to keep indicators alive on platforms like Telegram/Discord */
-const TYPING_INTERVAL_MS = 4_000;
+/** Interval-based typing refresh — re-sends periodically to keep indicators alive on platforms like Telegram/Discord */
 const activeTypingLoops = new Map<string, ReturnType<typeof setInterval>>();
 
 /**

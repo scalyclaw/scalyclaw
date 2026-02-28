@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { runSkillGuard } from '../guards/guard.js';
 import { enqueueJob, getQueue, getQueueEvents } from '@scalyclaw/shared/queue/queue.js';
+import { EXECUTION_TIMEOUT_MS } from '@scalyclaw/shared/const/constants.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { getAllSecrets } from '../core/vault.js';
 
@@ -140,7 +141,7 @@ export function registerSkillsRoutes(server: FastifyInstance): void {
       }
 
       const { input, timeoutMs } = request.body ?? {};
-      const timeout = timeoutMs ?? 18_000_000; // 5 hours default
+      const timeout = timeoutMs ?? EXECUTION_TIMEOUT_MS;
 
       try {
         const secrets = await resolveSkillSecrets(skill.markdown, input);

@@ -1,11 +1,12 @@
 import { spawnSync } from 'node:child_process';
 import { dirname } from 'node:path';
+import { WHICH_TIMEOUT_MS } from './const/constants.js';
 
 let bunBinDir: string | null = null;
 try {
   bunBinDir = dirname(process.argv[0]);
   if (!bunBinDir || !process.argv[0].includes('bun')) {
-    const which = spawnSync('which', ['bun'], { stdio: 'pipe', timeout: 5000 });
+    const which = spawnSync('which', ['bun'], { stdio: 'pipe', timeout: WHICH_TIMEOUT_MS });
     const resolved = which.stdout?.toString().trim();
     bunBinDir = resolved ? dirname(resolved) : null;
   }

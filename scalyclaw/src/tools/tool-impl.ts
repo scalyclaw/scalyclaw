@@ -5,6 +5,8 @@ import { storeSecret, resolveSecret, deleteSecret, listSecrets, getAllSecrets } 
 import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } from '../memory/memory.js';
 import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask, cancelScheduledJobAdmin, deleteScheduledJob } from '../scheduler/scheduler.js';
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, removeRepeatableJob, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
+import { EXECUTION_TIMEOUT_MS, PROCESS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
+import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constants.js';
 import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
@@ -417,7 +419,7 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
   try {
     const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
     const redis = getRedis();
-    const procData = await redis.get(`scalyclaw:proc:${workerProcId}`);
+    const procData = await redis.get(`${PROCESS_KEY_PREFIX}${workerProcId}`);
     if (!procData) {
       log('warn', 'Worker process not found in registry', { processId: workerProcId });
       return rawResult;
@@ -536,9 +538,9 @@ async function dispatchTool(toolName: string, payload: Record<string, unknown>, 
           error: `Budget limit exceeded — daily: $${budgetStatus.currentDayCost.toFixed(2)}/$${budgetStatus.dailyLimit}, monthly: $${budgetStatus.currentMonthCost.toFixed(2)}/$${budgetStatus.monthlyLimit}.`,
         });
       }
-      return await enqueueAndWait('agents', toolName, payload, ctx, 18_000_000); // 5 hours
+      return await enqueueAndWait('agents', toolName, payload, ctx, EXECUTION_TIMEOUT_MS); // 5 hours
     }
-    return await enqueueAndWait(queueKey, toolName, payload, ctx, 18_000_000); // 5 hours
+    return await enqueueAndWait(queueKey, toolName, payload, ctx, EXECUTION_TIMEOUT_MS); // 5 hours
   }
   if (toolName.startsWith('mcp_')) {
     const { callMcpTool } = await import('../mcp/mcp-manager.js');
@@ -1444,9 +1446,9 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
   const modelEntry = modelId
     ? config.models.models.find(m => m.id === modelId)
     : undefined;
-  const contextWindow = modelEntry?.contextWindow ?? 128_000;
+  const contextWindow = modelEntry?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
 
-  // Estimate current token usage (chars / 3.5 heuristic)
+  // Estimate current token usage (chars / CHARS_PER_TOKEN_RATIO heuristic)
   const estimateChars = (msgs: typeof messages) =>
     msgs.reduce((sum, m) => {
       let chars = m.content.length;
@@ -1455,7 +1457,7 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
     }, 0);
 
   const totalChars = estimateChars(messages);
-  const estimatedTokensBefore = Math.round(totalChars / 3.5);
+  const estimatedTokensBefore = Math.round(totalChars / CHARS_PER_TOKEN_RATIO);
 
   // Check threshold — only compact if over 90% of context window (unless forced)
   const force = input.force === true;
@@ -1491,7 +1493,7 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
 
   // Keep the last few groups (target: keep ~50% of context after compaction).
   // Walk backwards, accumulating chars, until we hit 50% budget.
-  const targetKeepChars = contextWindow * 3.5 * 0.5;
+  const targetKeepChars = contextWindow * CHARS_PER_TOKEN_RATIO * 0.5;
   let keepChars = 0;
   let keepFromGroup = groups.length;
   for (let g = groups.length - 1; g >= 0; g--) {
@@ -1559,7 +1561,7 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
   const messagesAfter = messages.length;
 
   const totalCharsAfter = estimateChars(messages);
-  const estimatedTokensAfter = Math.round(totalCharsAfter / 3.5);
+  const estimatedTokensAfter = Math.round(totalCharsAfter / CHARS_PER_TOKEN_RATIO);
 
   log('info', 'compact_context completed', {
     messagesBefore,

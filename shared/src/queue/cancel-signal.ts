@@ -1,8 +1,7 @@
 import { getRedis } from '../core/redis.js';
 import { log } from '../core/logger.js';
 import type { Redis } from 'ioredis';
-
-const CANCEL_SIGNAL_CHANNEL = 'scalyclaw:cancel:signal';
+import { CANCEL_SIGNAL_CHANNEL } from '../const/constants.js';
 
 // ─── Local abort registry (per-process) ───
 

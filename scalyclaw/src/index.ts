@@ -10,6 +10,7 @@ import { processAgentJob } from './processors/agent-processor.js';
 import { processScheduleJob } from './processors/schedule-processor.js';
 import { processProactiveJob } from './processors/proactive-processor.js';
 import { cancelAllChannelJobs } from '@scalyclaw/shared/queue/cancel.js';
+import { CHANNEL_JOBS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
 import { randomUUID } from 'node:crypto';
 import { subscribeToProgress, type ProgressEvent } from './queue/progress.js';
 import { initGateway, listenGateway, closeGateway } from './gateway/server.js';
@@ -27,6 +28,14 @@ import type { Redis } from 'ioredis';
 import { readFileSync, existsSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { hostname } from 'node:os';
+import {
+  CANCEL_FLAG_KEY, UPDATE_NOTIFY_KEY, UPDATE_AWAITING_KEY_PREFIX,
+  RATE_LIMIT_KEY_PREFIX, DEFAULT_RATE_LIMIT_PER_MINUTE,
+  PROGRESS_BUFFER_KEY_PREFIX,
+  CANCEL_FLAG_TTL_S, UPDATE_NOTIFY_TTL_S, UPDATE_AWAITING_TTL_S,
+  PROGRESS_DRAIN_INTERVAL_MS, STARTUP_NOTIFY_DELAY_MS, SHUTDOWN_TIMEOUT_MS,
+  GIT_FETCH_TIMEOUT_MS, VAULT_ROTATION_INTERVAL_MS,
+} from './const/constants.js';
 
 async function main(): Promise<void> {
   await startSystem();
@@ -156,9 +165,9 @@ async function startSystem(): Promise<void> {
 
   // ── Post-startup notification (update or restart) ──
   try {
-    const updateNotify = await redis.get('scalyclaw:update:notify');
+    const updateNotify = await redis.get(UPDATE_NOTIFY_KEY);
     if (updateNotify) {
-      await redis.del('scalyclaw:update:notify');
+      await redis.del(UPDATE_NOTIFY_KEY);
       const { channelId: notifyChannel, reason } = JSON.parse(updateNotify);
       if (notifyChannel) {
         const message = reason === 'restart'
@@ -166,7 +175,7 @@ async function startSystem(): Promise<void> {
           : 'Update complete! I\'m back.';
         setTimeout(() => {
           sendToChannel(notifyChannel, message).catch(() => {});
-        }, 3000);
+        }, STARTUP_NOTIFY_DELAY_MS);
       }
     }
   } catch (err) {
@@ -193,7 +202,7 @@ async function startSystem(): Promise<void> {
     } catch (err) {
       log('warn', 'Periodic progress drain failed', { error: String(err) });
     }
-  }, 60_000);
+  }, PROGRESS_DRAIN_INTERVAL_MS);
   progressDrainInterval.unref();
 
   // ── Register process ──
@@ -228,9 +237,9 @@ async function startSystem(): Promise<void> {
     log('info', 'Shutting down...');
 
     const forceTimer = setTimeout(() => {
-      log('error', 'Shutdown timed out after 8s, forcing exit');
+      log('error', 'Shutdown timed out, forcing exit');
       process.exit(1);
-    }, 8_000);
+    }, SHUTDOWN_TIMEOUT_MS);
     forceTimer.unref();
 
     try {
@@ -254,9 +263,9 @@ async function startSystem(): Promise<void> {
 // ─── Progress buffer drain ───
 
 async function drainProgressBuffers(redis: Redis): Promise<void> {
-  const keys = await redis.keys('progress-buffer:*');
+  const keys = await redis.keys(`${PROGRESS_BUFFER_KEY_PREFIX}*`);
   for (const key of keys) {
-    const channelId = key.replace('progress-buffer:', '');
+    const channelId = key.slice(PROGRESS_BUFFER_KEY_PREFIX.length);
     const events = await redis.eval(
       `local msgs = redis.call('lrange', KEYS[1], 0, -1)
        if #msgs > 0 then redis.call('del', KEYS[1]) end
@@ -298,8 +307,6 @@ function initChannelAdapters(config: ScalyClawConfig, server: FastifyInstance): 
 
 // ─── Rate limiting (Redis sliding window) ───
 
-const RATE_LIMIT_PREFIX = 'scalyclaw:ratelimit:';
-const DEFAULT_MAX_PER_MINUTE = 20;
 
 const RATE_LIMIT_LUA = `
 local key = KEYS[1]
@@ -317,11 +324,11 @@ return 1
 
 async function checkRateLimit(channelId: string): Promise<boolean> {
   const redis = getRedis();
-  const key = `${RATE_LIMIT_PREFIX}${channelId}`;
+  const key = `${RATE_LIMIT_KEY_PREFIX}${channelId}`;
   const now = Date.now();
   const result = await redis.eval(
     RATE_LIMIT_LUA, 1, key,
-    now, 60_000, DEFAULT_MAX_PER_MINUTE, `${now}-${randomUUID()}`
+    now, 60_000, DEFAULT_RATE_LIMIT_PER_MINUTE, `${now}-${randomUUID()}`
   );
   return result === 1;
 }
@@ -359,7 +366,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
   // ─── Update confirmation intercept ───
   {
     const redis = getRedis();
-    const awaitingKey = `scalyclaw:update:awaiting:${channelId}`;
+    const awaitingKey = `${UPDATE_AWAITING_KEY_PREFIX}${channelId}`;
     const awaitingRaw = await redis.get(awaitingKey);
     if (awaitingRaw) {
       await redis.del(awaitingKey);
@@ -368,7 +375,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
       if (lower === 'yes' || lower === 'y' || lower === 'confirm') {
         try {
           const { repoDir, scriptPath } = JSON.parse(awaitingRaw);
-          await redis.set('scalyclaw:update:notify', JSON.stringify({ channelId, timestamp: Date.now() }), 'EX', 300);
+          await redis.set(UPDATE_NOTIFY_KEY, JSON.stringify({ channelId, timestamp: Date.now() }), 'EX', UPDATE_NOTIFY_TTL_S);
           await sendToChannel(channelId, 'Updating now — I\'ll be back in a moment.');
           const { spawn } = await import('node:child_process');
           const child = spawn(scriptPath, ['--update-auto'], {
@@ -396,7 +403,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
   if (trimmed === '/stop') {
     log('info', 'Command handled: /stop', { channelId });
     const redis = getRedis();
-    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await redis.set(CANCEL_FLAG_KEY, '1', 'EX', CANCEL_FLAG_TTL_S);
     await cancelAllChannelJobs(channelId).catch(() => {});
     await drainWaitingJobs(channelId).catch(() => {});
     await sendToChannel(channelId, 'Got it, stopping.');
@@ -413,10 +420,10 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     }
 
     const redis = getRedis();
-    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await redis.set(CANCEL_FLAG_KEY, '1', 'EX', CANCEL_FLAG_TTL_S);
     await cancelAllChannelJobs(channelId).catch(() => {});
     await drainWaitingJobs(channelId).catch(() => {});
-    await redis.set('scalyclaw:update:notify', JSON.stringify({ channelId, reason: 'restart', timestamp: Date.now() }), 'EX', 300);
+    await redis.set(UPDATE_NOTIFY_KEY, JSON.stringify({ channelId, reason: 'restart', timestamp: Date.now() }), 'EX', UPDATE_NOTIFY_TTL_S);
     await sendToChannel(channelId, 'Restarting...');
 
     const { spawn } = await import('node:child_process');
@@ -440,7 +447,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     }
 
     const redis = getRedis();
-    await redis.set('scalyclaw:cancel', '1', 'EX', 30);
+    await redis.set(CANCEL_FLAG_KEY, '1', 'EX', CANCEL_FLAG_TTL_S);
     await cancelAllChannelJobs(channelId).catch(() => {});
     await drainWaitingJobs(channelId).catch(() => {});
     await sendToChannel(channelId, 'Shutting down.');
@@ -482,7 +489,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
       const { execSync } = await import('node:child_process');
 
       try {
-        execSync('git fetch origin main --quiet', { cwd: repoDir, timeout: 15_000, stdio: 'pipe' });
+        execSync('git fetch origin main --quiet', { cwd: repoDir, timeout: GIT_FETCH_TIMEOUT_MS, stdio: 'pipe' });
       } catch {
         await sendToChannel(channelId, 'Failed to check for updates. Check your internet connection.');
         return;
@@ -503,9 +510,9 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
       // Store confirmation state in Redis with 120s TTL
       const redis = getRedis();
       await redis.set(
-        `scalyclaw:update:awaiting:${channelId}`,
+        `${UPDATE_AWAITING_KEY_PREFIX}${channelId}`,
         JSON.stringify({ repoDir, scriptPath }),
-        'EX', 120,
+        'EX', UPDATE_AWAITING_TTL_S,
       );
 
       await sendToChannel(channelId, `${count} update(s) available:\n\n\`\`\`\n${commitLog}\n\`\`\`\n\nReply **yes** to update or **no** to cancel.`);
@@ -573,7 +580,7 @@ async function drainWaitingJobs(channelId: string): Promise<void> {
 
   // Drain tools queue — match by jobId against the tracked set for this channel
   const redis = getRedis();
-  const trackedJobIds = await redis.smembers(`scalyclaw:jobs:${channelId}`);
+  const trackedJobIds = await redis.smembers(`${CHANNEL_JOBS_KEY_PREFIX}${channelId}`);
   if (trackedJobIds.length > 0) {
     const trackedSet = new Set(trackedJobIds);
     const toolsQ = getQueue('tools');
@@ -602,7 +609,7 @@ async function registerVaultKeyRotation(): Promise<void> {
     name: 'vault-key-rotation',
     data: { trigger: 'scheduled' },
     opts: {
-      repeat: { every: 600_000 },
+      repeat: { every: VAULT_ROTATION_INTERVAL_MS },
       jobId: 'vault-key-rotation',
     },
   });

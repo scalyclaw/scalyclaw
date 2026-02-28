@@ -1,9 +1,6 @@
 import type { Redis } from 'ioredis';
 import { hostname } from 'node:os';
-
-const KEY_PREFIX = 'scalyclaw:proc:';
-const TTL_S = 30;
-const HEARTBEAT_MS = 15_000;
+import { PROCESS_KEY_PREFIX, PROCESS_TTL_S, PROCESS_HEARTBEAT_MS } from '../const/constants.js';
 
 export interface ProcessInfo {
   id: string;
@@ -25,21 +22,21 @@ let registeredInfo: ProcessInfo | null = null;
 let startTime: number = 0;
 
 export async function registerProcess(redis: Redis, info: Omit<ProcessInfo, 'uptime'>): Promise<void> {
-  const key = KEY_PREFIX + info.id;
+  const key = PROCESS_KEY_PREFIX + info.id;
   registeredKey = key;
   registeredInfo = { ...info, uptime: 0 };
   startTime = Date.now();
 
-  await redis.set(key, JSON.stringify(registeredInfo), 'EX', TTL_S);
+  await redis.set(key, JSON.stringify(registeredInfo), 'EX', PROCESS_TTL_S);
 
   // Heartbeat: refresh TTL and update uptime
   heartbeatTimer = setInterval(async () => {
     if (!registeredInfo) return;
     registeredInfo.uptime = Math.floor((Date.now() - startTime) / 1000);
     try {
-      await redis.set(key, JSON.stringify(registeredInfo), 'EX', TTL_S);
+      await redis.set(key, JSON.stringify(registeredInfo), 'EX', PROCESS_TTL_S);
     } catch { /* Redis down — entry will expire, which is correct */ }
-  }, HEARTBEAT_MS);
+  }, PROCESS_HEARTBEAT_MS);
   heartbeatTimer.unref();
 }
 
@@ -57,11 +54,11 @@ export async function deregisterProcess(redis: Redis): Promise<void> {
 
 /** Remove a process entry by its ID (used by CLI to clean up after kill). */
 export async function deregisterProcessByKey(redis: Redis, id: string): Promise<void> {
-  await redis.del(KEY_PREFIX + id).catch(() => {});
+  await redis.del(PROCESS_KEY_PREFIX + id).catch(() => {});
 }
 
 export async function listProcesses(redis: Redis): Promise<ProcessInfo[]> {
-  const keys = await redis.keys(KEY_PREFIX + '*');
+  const keys = await redis.keys(PROCESS_KEY_PREFIX + '*');
   if (keys.length === 0) return [];
 
   const values = await redis.mget(...keys);

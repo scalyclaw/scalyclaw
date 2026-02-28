@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { FORCE_KILL_TIMEOUT_MS, MAX_OUTPUT_BYTES } from './const/constants.js';
 
 export interface SpawnResult {
   stdout: string;
@@ -44,7 +45,7 @@ export function spawnProcess(opts: SpawnOptions): Promise<SpawnResult> {
       // Force kill after 3s if still alive
       setTimeout(() => {
         if (!child.killed) child.kill('SIGKILL');
-      }, 3000).unref();
+      }, FORCE_KILL_TIMEOUT_MS).unref();
     };
     if (signal) {
       if (signal.aborted) {
@@ -56,7 +57,7 @@ export function spawnProcess(opts: SpawnOptions): Promise<SpawnResult> {
 
     let stdout = '';
     let stderr = '';
-    const MAX_OUTPUT = 10 * 1024 * 1024; // 10MB
+    const MAX_OUTPUT = MAX_OUTPUT_BYTES;
     let stdoutTruncated = false;
     let stderrTruncated = false;
 

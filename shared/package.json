@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./const/*.js": "./src/const/*.ts",
     "./core/*.js": "./src/core/*.ts",
     "./queue/*.js": "./src/queue/*.ts",
     "./skills/*.js": "./src/skills/*.ts"

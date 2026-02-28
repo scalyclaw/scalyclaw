@@ -5,8 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, basename } from 'node:path';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
 import type { WorkerSetupConfig } from './config.js';
-
-const LOG_FILE = 'worker.log';
+import { WORKER_LOG_FILE, SHUTDOWN_DELAY_MS } from './const/constants.js';
 
 let version = '0.1.0';
 try {
@@ -49,15 +48,15 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
 
   // GET /api/logs — serve worker log
   server.get<{ Querystring: { lines?: string } }>('/api/logs', async (request) => {
-    const logPath = join(PATHS.logs, LOG_FILE);
+    const logPath = join(PATHS.logs, WORKER_LOG_FILE);
     try {
       const content = await readFile(logPath, 'utf-8');
       const allLines = content.split('\n');
       const lines = Number(request.query.lines) || 100;
       const tail = allLines.slice(-lines).join('\n');
-      return { file: LOG_FILE, content: tail };
+      return { file: WORKER_LOG_FILE, content: tail };
     } catch {
-      return { file: LOG_FILE, content: '' };
+      return { file: WORKER_LOG_FILE, content: '' };
     }
   });
 
@@ -117,7 +116,7 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
   // POST /api/shutdown — graceful shutdown
   server.post('/api/shutdown', async (_request, reply) => {
     reply.send({ status: 'shutting_down' });
-    setTimeout(() => process.kill(process.pid, 'SIGTERM'), 100);
+    setTimeout(() => process.kill(process.pid, 'SIGTERM'), SHUTDOWN_DELAY_MS);
   });
 
   return server;

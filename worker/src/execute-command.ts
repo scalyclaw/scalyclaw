@@ -3,6 +3,8 @@ import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { spawnProcess } from './subprocess.js';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
+import { EXECUTION_TIMEOUT_MS } from '@scalyclaw/shared/const/constants.js';
+import { EXEC_DIR, JOB_FIELD_DENIED_COMMANDS, JOB_FIELD_SECRETS } from './const/constants.js';
 
 export async function executeCommand(input: Record<string, unknown>, signal?: AbortSignal): Promise<string> {
   const command = (input.command ?? input.code ?? input.script) as string;
@@ -13,7 +15,7 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
   }
 
   // Defense in depth: check denied patterns passed from orchestrator (normalized matching)
-  const denied = (input._deniedCommands as string[]) ?? [];
+  const denied = (input[JOB_FIELD_DENIED_COMMANDS] as string[]) ?? [];
   if (denied.length > 0) {
     const normalized = command.toLowerCase().replace(/\s+/g, ' ');
     const match = denied.find(p => {
@@ -25,8 +27,8 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
     }
   }
 
-  const secrets = (input._secrets as Record<string, string>) ?? {};
-  const execDir = join(PATHS.workspace, '_exec');
+  const secrets = (input[JOB_FIELD_SECRETS] as Record<string, string>) ?? {};
+  const execDir = join(PATHS.workspace, EXEC_DIR);
   await mkdir(execDir, { recursive: true });
 
   const tmpFile = join(execDir, `cmd_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.sh`);
@@ -39,7 +41,7 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
       cmd: 'bash',
       args: [tmpFile],
       cwd: process.env.HOME ?? PATHS.workspace,
-      timeoutMs: 18_000_000, // 5 hours
+      timeoutMs: EXECUTION_TIMEOUT_MS,
       input: stdinInput,
       workspacePath: PATHS.workspace,
       extraEnv: secrets,

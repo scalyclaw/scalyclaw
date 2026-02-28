@@ -1,4 +1,5 @@
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import type { ChatMessage } from '../models/provider.js';
@@ -84,7 +85,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
   // Trim old messages if context is too large (model-aware budget)
   const modelConfig = config.models.models.find(m => m.id === modelId);
-  const maxContextChars = (modelConfig?.contextWindow ?? 128_000) * 3.5;
+  const maxContextChars = (modelConfig?.contextWindow ?? DEFAULT_CONTEXT_WINDOW) * CHARS_PER_TOKEN_RATIO;
   trimToContextBudget(messages, maxContextChars);
 
   const toolCtx: ToolContext = {

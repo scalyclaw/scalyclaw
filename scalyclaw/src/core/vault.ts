@@ -4,9 +4,8 @@ import {
   encrypt, decrypt, decryptWithKey, encryptWithKey,
   rotatePassword, getKey,
 } from './vault-crypto.js';
+import { SECRET_KEY_PREFIX, VAULT_RECOVERY_KEY, RECOVERY_KEY_TTL_S, SECRET_CACHE_TTL_MS } from '../const/constants.js';
 
-const SECRET_PREFIX = 'scalyclaw:secret:';
-const RECOVERY_KEY = 'scalyclaw:vault:recovery-key';
 const VAR_PATTERN = /\$\{(\w+)\}/g;
 
 // ─── Decrypt with recovery-key fallback ───
@@ -17,7 +16,7 @@ async function decryptWithRecovery(raw: string): Promise<string> {
   } catch {
     // Primary key failed — check for recovery key from a recent rotation
     const redis = getRedis();
-    const recoveryHex = await redis.get(RECOVERY_KEY);
+    const recoveryHex = await redis.get(VAULT_RECOVERY_KEY);
     if (recoveryHex) {
       try {
         return decryptWithKey(raw, Buffer.from(recoveryHex, 'hex'));
@@ -33,7 +32,7 @@ async function decryptWithRecovery(raw: string): Promise<string> {
 
 export async function resolveSecret(name: string): Promise<string | null> {
   const redis = getRedis();
-  const raw = await redis.get(`${SECRET_PREFIX}${name}`);
+  const raw = await redis.get(`${SECRET_KEY_PREFIX}${name}`);
   if (raw === null) return null;
   return decryptWithRecovery(raw);
 }
@@ -75,28 +74,28 @@ async function resolveStringSecrets(str: string): Promise<string> {
 export async function storeSecret(name: string, value: string): Promise<void> {
   const redis = getRedis();
   const encrypted = encrypt(value);
-  await redis.set(`${SECRET_PREFIX}${name}`, encrypted);
+  await redis.set(`${SECRET_KEY_PREFIX}${name}`, encrypted);
   invalidateSecretCache();
 }
 
 export async function deleteSecret(name: string): Promise<boolean> {
   const redis = getRedis();
-  const count = await redis.del(`${SECRET_PREFIX}${name}`);
+  const count = await redis.del(`${SECRET_KEY_PREFIX}${name}`);
   invalidateSecretCache();
   return count > 0;
 }
 
 export async function listSecrets(): Promise<string[]> {
   const redis = getRedis();
-  const keys = await redis.keys(`${SECRET_PREFIX}*`);
-  return keys.map(k => k.slice(SECRET_PREFIX.length));
+  const keys = await redis.keys(`${SECRET_KEY_PREFIX}*`);
+  return keys.map(k => k.slice(SECRET_KEY_PREFIX.length));
 }
 
 // ─── Secret Cache (for bulk resolution into env vars) ───
 
 let secretCache: Map<string, string> | null = null;
 let secretCacheAge = 0;
-const SECRET_CACHE_TTL = 30_000;
+const SECRET_CACHE_TTL = SECRET_CACHE_TTL_MS;
 
 async function getSecretEnv(): Promise<Record<string, string>> {
   if (secretCache && Date.now() - secretCacheAge < SECRET_CACHE_TTL) {
@@ -161,7 +160,7 @@ export async function rotateAllSecrets(): Promise<void> {
 
   const pipeline = redis.pipeline();
   for (const name of names) {
-    pipeline.get(`${SECRET_PREFIX}${name}`);
+    pipeline.get(`${SECRET_KEY_PREFIX}${name}`);
   }
   const results = await pipeline.exec();
 
@@ -179,7 +178,7 @@ export async function rotateAllSecrets(): Promise<void> {
   }
 
   // 3. Set recovery key (old derived key — scrypt output, not the password)
-  await redis.set(RECOVERY_KEY, currentKey.toString('hex'), 'EX', 300);
+  await redis.set(VAULT_RECOVERY_KEY, currentKey.toString('hex'), 'EX', RECOVERY_KEY_TTL_S);
 
   // 4. Rotate password file → new key
   const { newKey } = rotatePassword();
@@ -188,12 +187,12 @@ export async function rotateAllSecrets(): Promise<void> {
   const writePipeline = redis.pipeline();
   for (const { name, value } of plaintexts) {
     const encrypted = encryptWithKey(value, newKey);
-    writePipeline.set(`${SECRET_PREFIX}${name}`, encrypted);
+    writePipeline.set(`${SECRET_KEY_PREFIX}${name}`, encrypted);
   }
   await writePipeline.exec();
 
   // 6. Clean up recovery key
-  await redis.del(RECOVERY_KEY);
+  await redis.del(VAULT_RECOVERY_KEY);
 
   // 7. Invalidate caches
   invalidateSecretCache();

@@ -6,6 +6,7 @@ import { processProactiveEngagement } from '../scheduler/proactive.js';
 import { storeMessage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { PROACTIVE_COOLDOWN_KEY_PREFIX, PROACTIVE_DAILY_KEY_PREFIX } from '../const/constants.js';
 
 export function registerProactiveRoutes(server: FastifyInstance): void {
   // GET /api/proactive/status
@@ -28,8 +29,8 @@ export function registerProactiveRoutes(server: FastifyInstance): void {
 
     const cooldowns: Record<string, { onCooldown: boolean; dailyCount: number }> = {};
     for (const ch of channels) {
-      const cooldownKey = `proactive:cooldown:${ch.channel}`;
-      const dailyKey = `proactive:daily:${ch.channel}`;
+      const cooldownKey = `${PROACTIVE_COOLDOWN_KEY_PREFIX}${ch.channel}`;
+      const dailyKey = `${PROACTIVE_DAILY_KEY_PREFIX}${ch.channel}`;
       const hasCooldown = await redis.exists(cooldownKey);
       const dailyCount = await redis.get(dailyKey);
       cooldowns[ch.channel] = {

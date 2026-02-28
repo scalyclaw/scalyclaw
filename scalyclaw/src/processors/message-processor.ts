@@ -10,6 +10,7 @@ import type { MessageProcessingData, CommandData, AttachmentData } from '@scalyc
 import { recordChannelActivity } from '../scheduler/proactive.js';
 import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
 import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
+import { CANCEL_FLAG_KEY } from '../const/constants.js';
 
 // ─── Message queue job dispatcher ───
 
@@ -66,9 +67,9 @@ async function runOrchestratorPipeline(
   }
 
   // Check cancel flag between guard and orchestrator start
-  const cancelled = await redis.get('scalyclaw:cancel');
+  const cancelled = await redis.get(CANCEL_FLAG_KEY);
   if (cancelled) {
-    await redis.del('scalyclaw:cancel');
+    await redis.del(CANCEL_FLAG_KEY);
     return;
   }
 
@@ -87,9 +88,9 @@ async function runOrchestratorPipeline(
       sendToChannel,
       signal: ac.signal,
       shouldStop: async (): Promise<StopReason> => {
-        const flag = await redis.get('scalyclaw:cancel');
+        const flag = await redis.get(CANCEL_FLAG_KEY);
         if (flag) {
-          await redis.del('scalyclaw:cancel');
+          await redis.del(CANCEL_FLAG_KEY);
           ac.abort();
           return 'cancelled';
         }

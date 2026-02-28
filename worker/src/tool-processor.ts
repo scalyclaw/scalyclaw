@@ -5,6 +5,8 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
 import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
 import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
+import { EXECUTION_TIMEOUT_MS, CANCEL_POLL_MS } from '@scalyclaw/shared/const/constants.js';
+import { FETCH_TIMEOUT_MS, JOB_FIELD_WORKSPACE_FILES, JOB_FIELD_SECRETS, JOB_FIELD_WORKER_FILES, JOB_FIELD_WORKER_PROCESS_ID } from './const/constants.js';
 import { executeSkill } from './execute-skill.js';
 import { executeCode } from './execute-code.js';
 import { executeCommand } from './execute-command.js';
@@ -26,7 +28,7 @@ export function setWorkerConfig(nodeUrl: string, nodeToken: string, processId: s
 
 // ─── Pre-fetch workspace files from node ───
 
-const PREFETCH_TIMEOUT_MS = 15_000;
+const PREFETCH_TIMEOUT_MS = FETCH_TIMEOUT_MS;
 
 async function prefetchWorkspaceFiles(files: string[]): Promise<void> {
   if (!workerNodeUrl) return;
@@ -128,8 +130,8 @@ function annotateWorkerResult(resultJson: string): string {
 
   if (workerFiles.length === 0) return resultJson;
 
-  parsed._workerFiles = workerFiles;
-  parsed._workerProcessId = workerProcessId;
+  parsed[JOB_FIELD_WORKER_FILES] = workerFiles;
+  parsed[JOB_FIELD_WORKER_PROCESS_ID] = workerProcessId;
   log('info', 'Annotated worker result with files', { files: workerFiles, processId: workerProcessId });
   return JSON.stringify(parsed);
 }
@@ -210,11 +212,11 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
         clearInterval(cancelPoll);
       }
     } catch { /* Redis unavailable — keep going */ }
-  }, 2_000);
+  }, CANCEL_POLL_MS);
   cancelPoll.unref();
 
   // Pre-fetch workspace files referenced in job data
-  const workspaceFiles = (input._workspaceFiles as string[]) ?? [];
+  const workspaceFiles = (input[JOB_FIELD_WORKSPACE_FILES] as string[]) ?? [];
   if (workspaceFiles.length > 0) {
     await prefetchWorkspaceFiles(workspaceFiles);
   }
@@ -266,7 +268,7 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
     return JSON.stringify({ error: `Skill "${skillId}" dependency install failed: ${String(err)}` });
   }
 
-  const secrets = (input._secrets as Record<string, string>) ?? undefined;
+  const secrets = (input[JOB_FIELD_SECRETS] as Record<string, string>) ?? undefined;
   const result = await executeSkill({
     skillId,
     input: skillInput,
@@ -274,7 +276,7 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
     scriptLanguage: skill.scriptLanguage,
     skillDir,
     workspacePath: PATHS.workspace,
-    timeoutMs: skill.timeout ?? 18_000_000, // 5 hours default
+    timeoutMs: skill.timeout ?? EXECUTION_TIMEOUT_MS,
     secrets,
     signal,
   });
@@ -297,7 +299,7 @@ async function processSkillExecution(job: Job<SkillExecutionData>): Promise<stri
         clearInterval(cancelPoll);
       }
     } catch { /* Redis unavailable — keep going */ }
-  }, 2_000);
+  }, CANCEL_POLL_MS);
   cancelPoll.unref();
 
   try {

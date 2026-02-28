@@ -4,6 +4,7 @@ import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getRecentMessages } from '../core/db.js';
 import type { ProgressEvent } from '../queue/progress.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { PROGRESS_CHANNEL_PATTERN, PROGRESS_CHANNEL_PREFIX, CHAT_RESPONSE_TIMEOUT_MS } from '../const/constants.js';
 
 // ─── Shared Redis subscriber for chat API ───
 
@@ -22,11 +23,11 @@ async function getSharedSubscriber(): Promise<void> {
   const redis = getRedis();
   sharedSub = redis.duplicate();
   await sharedSub.connect();
-  await sharedSub.psubscribe('progress:*');
+  await sharedSub.psubscribe(PROGRESS_CHANNEL_PATTERN);
   sharedSub.on('pmessage', (_pattern: string, channel: string, message: string) => {
     try {
       const event = JSON.parse(message) as ProgressEvent;
-      const channelId = channel.replace('progress:', '');
+      const channelId = channel.slice(PROGRESS_CHANNEL_PREFIX.length);
       // Resolve all waiters for this channel on complete/error
       if (event.type === 'complete' || event.type === 'error') {
         for (const [key, waiter] of waiters) {
@@ -71,7 +72,7 @@ export function registerChatRoutes(server: FastifyInstance): void {
       const timeout = setTimeout(() => {
         waiters.delete(waiterKey);
         resolve({ error: 'Timeout waiting for response' });
-      }, 120_000);
+      }, CHAT_RESPONSE_TIMEOUT_MS);
 
       waiters.set(waiterKey, { resolve, timeout });
     });
