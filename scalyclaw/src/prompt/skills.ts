@@ -36,7 +36,7 @@ install: uv sync
 
 - **Input**: JSON via stdin — \`{"url": "...", "format": "mp3"}\`
 - **Output**: JSON to stdout — \`{"status": "ok", "file": "/path"}\`
-- **stdout must contain ONLY the final JSON object** — no debug prints, no progress output, no logging. Redirect all non-JSON output to stderr (Python: \`subprocess.run(..., stdout=sys.stderr)\`, \`print(..., file=sys.stderr)\`; JS: \`console.error()\`). If a subprocess (e.g. yt-dlp, ffmpeg) writes to stdout, capture or redirect it.
+- **stdout must contain ONLY the final JSON object** — no debug prints, no progress output, no logging. Redirect all non-JSON output to stderr (Python: \`subprocess.run(..., stdout=sys.stderr)\`, \`print(..., file=sys.stderr)\`; JS: \`console.error()\`). If a subprocess (e.g. ffmpeg, curl) writes to stdout, capture or redirect it.
 - Scripts must handle errors and always return valid JSON.
 - When a skill creates output files, it MUST output the **absolute path** in stdout JSON. Files in the skill directory or WORKSPACE_DIR are automatically transferred from workers to the node. After transfer, use \`send_file\` with the relative path from the skill result to deliver to the user.
 

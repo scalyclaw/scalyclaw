@@ -196,13 +196,15 @@
             <span class="code-block-lang">text</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre><span class="fn">You:</span>       <span class="str">Create a skill that takes a YouTube URL and returns the transcript.</span>
+          <pre><span class="fn">You:</span>       <span class="str">Create a skill that takes a YouTube URL and returns the transcript</span>
+           <span class="str">using the YouTube MCP server and OpenAI Whisper API.</span>
 
 <span class="fn">ScalyClaw:</span> <span class="str">Delegating to the skill creator agent.</span>
 
 <span class="cmt">→ delegate_agent: skill-creator-agent
   → writes SKILL.md + scripts/main.py
-  → installs dependencies (yt-dlp, whisper)
+  → uses MCP youtube server to get captions / audio URL
+  → uses OpenAI Whisper API for transcription when no captions available
   → runs skill guard (passed)
   → registers skill: youtube-transcript-skill</span>
 

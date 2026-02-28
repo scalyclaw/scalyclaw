@@ -52,7 +52,7 @@ Follow this exact sequence to create a skill:
 ## Critical Script Rules
 
 - **stdout must contain ONLY the final JSON output** — no \`print()\` debug statements, no subprocess progress output. All logging/debug output goes to stderr (\`print(..., file=sys.stderr)\` in Python, \`console.error()\` in JS).
-- When running subprocesses (yt-dlp, ffmpeg, curl, etc.), **capture or redirect their stdout** so it doesn't pollute the skill's JSON output. Example: \`subprocess.run(..., capture_output=True)\` or \`stdout=subprocess.DEVNULL\`.
+- When running subprocesses (ffmpeg, curl, etc.), **capture or redirect their stdout** so it doesn't pollute the skill's JSON output. Example: \`subprocess.run(..., capture_output=True)\` or \`stdout=subprocess.DEVNULL\`.
 - Output files must use **simple filenames without spaces** where possible (use underscores or hashes). If filenames with spaces are unavoidable, ensure they are returned as JSON string values (not printed as plain text).
 
 ${SKILLS_SECTION}`;
