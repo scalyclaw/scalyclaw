@@ -27,23 +27,35 @@
         <ul>
           <li>Remembers your preferences, decisions, and interests across all channels using persistent vector-indexed memory</li>
           <li>Proactively follows up when idle — surfaces reminders, task results, or unfinished topics</li>
-          <li>Adapts tone and style to your personality via <code>mind/SOUL.md</code></li>
+          <li>Adapts tone and style via <code>mind/IDENTITY.md</code>, grounded by core values in <code>mind/SOUL.md</code></li>
         </ul>
 
         <h3>Setup</h3>
-        <p>Enable your channels in the dashboard, set your user ID as the only permitted user, and edit <code>mind/SOUL.md</code> to describe the tone you want. Enable proactive engagement so the assistant reaches out when it has something to share.</p>
+        <p>Enable your channels in the dashboard, set your user ID as the only permitted user, and configure the three mind files. <code>mind/IDENTITY.md</code> defines personality and tone. <code>mind/SOUL.md</code> defines core values — the philosophical foundation that guides decisions in ambiguous situations. <code>mind/USER.md</code> holds your personal info. Enable proactive engagement so the assistant reaches out when it has something to share.</p>
 
         <div class="code-block">
           <div class="code-block-header">
             <span class="code-block-lang">markdown</span>
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
-          <pre><span class="cmt"># mind/SOUL.md</span>
+          <pre><span class="cmt"># mind/IDENTITY.md — personality, tone, behavior</span>
 
-<span class="str">You are my daily companion. Keep responses concise and conversational.</span>
-<span class="str">I'm a software engineer who reads a lot. I care about privacy and open source.</span>
+<span class="str">Direct, concise, no filler. Mirror the user's register and language.</span>
 <span class="str">When I ask about something technical, be precise. Otherwise be casual.</span>
-<span class="str">Remember my preferences without me having to repeat them.</span></pre>
+<span class="str">Short questions get short answers. Detailed requests get detailed responses.</span></pre>
+        </div>
+
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">markdown</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt"># mind/SOUL.md — core values, philosophical foundation</span>
+
+<span class="str">Be genuine — don't perform helpfulness, actually care.</span>
+<span class="str">Have opinions — suggest better ways, disagree when warranted.</span>
+<span class="str">Be honest over comfortable — don't sugarcoat, don't hedge into mush.</span>
+<span class="str">Stay grounded — no existential monologues, no "as an AI" disclaimers.</span></pre>
         </div>
 
         <h3>In Practice</h3>
