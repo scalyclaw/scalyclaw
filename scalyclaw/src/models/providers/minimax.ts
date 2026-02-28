@@ -10,7 +10,7 @@ export function createMiniMaxProvider(apiKey: string, baseUrl?: string): ModelPr
   return {
     id: 'minimax',
 
-    async chat({ model, systemPrompt, messages, tools, maxTokens, temperature, reasoningEnabled: _reasoningEnabled }): Promise<ModelResponse> {
+    async chat({ model, systemPrompt, messages, tools, maxTokens, temperature, reasoningEnabled: _reasoningEnabled, signal }): Promise<ModelResponse> {
       const openaiMessages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
         { role: 'system', content: systemPrompt },
         ...messages.map((m): OpenAI.Chat.Completions.ChatCompletionMessageParam => {
@@ -52,7 +52,7 @@ export function createMiniMaxProvider(apiKey: string, baseUrl?: string): ModelPr
         tools: openaiTools,
         max_tokens: maxTokens ?? 8192,
         temperature: temperature ?? 0.7,
-      });
+      }, { signal });
       log('debug', 'MiniMax API response', { model, durationMs: Date.now() - startTime, finishReason: response.choices[0]?.finish_reason, promptTokens: response.usage?.prompt_tokens, completionTokens: response.usage?.completion_tokens });
 
       const choice = response.choices[0];

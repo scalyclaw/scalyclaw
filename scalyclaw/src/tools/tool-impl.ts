@@ -22,7 +22,7 @@ import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
 import { TOOL_NAMES_SET } from './tools.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
-import { requestJobCancel } from '@scalyclaw/shared/queue/cancel.js';
+import { requestJobCancel, trackChannelJob, untrackChannelJob } from '@scalyclaw/shared/queue/cancel.js';
 
 export type { ToolContext } from './tool-registry.js';
 
@@ -326,6 +326,9 @@ async function enqueueAndWait(
     return JSON.stringify({ error: `Failed to retrieve job ${jobId}` });
   }
 
+  // Track this job so /stop can cancel it via cancelAllChannelJobs()
+  await trackChannelJob(ctx.channelId, jobId);
+
   const events = getQueueEvents(queueKey);
 
   // Race the BullMQ wait against the AbortSignal so cancellation is responsive
@@ -355,6 +358,8 @@ async function enqueueAndWait(
     // On abort or timeout, cancel the worker-side job so it doesn't run forever
     await requestJobCancel(jobId).catch(() => {});
     throw err;
+  } finally {
+    await untrackChannelJob(ctx.channelId, jobId);
   }
 
   // Bridge worker files to node workspace if annotated

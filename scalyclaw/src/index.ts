@@ -3,7 +3,7 @@ import { PATHS } from './core/paths.js';
 import { getRedis, getSubscriber } from '@scalyclaw/shared/core/redis.js';
 import { log, initLogFile } from '@scalyclaw/shared/core/logger.js';
 import { bootstrap } from './core/bootstrap.js';
-import { enqueueJob, closeQueue, getQueueName, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
+import { enqueueJob, closeQueue, getQueue, getQueueName, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
 import { processMessageQueueJob } from './processors/message-processor.js';
 import { processSystemQueueJob } from './processors/system-processor.js';
 import { processAgentJob } from './processors/agent-processor.js';
@@ -392,6 +392,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     const redis = getRedis();
     await redis.set('scalyclaw:cancel', '1', 'EX', 30);
     await cancelAllChannelJobs(channelId).catch(() => {});
+    await drainWaitingJobs(channelId).catch(() => {});
     await sendToChannel(channelId, 'Got it, stopping.');
     return;
   }
@@ -488,6 +489,27 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     } catch {
       // Can't send error response either
     }
+  }
+}
+
+// ─── Drain waiting jobs for a channel ───
+
+async function drainWaitingJobs(channelId: string): Promise<void> {
+  const q = getQueue('messages');
+  let removed = 0;
+
+  for (const state of ['waiting', 'prioritized'] as const) {
+    const jobs = await q.getJobs(state);
+    for (const job of jobs) {
+      if (job.data?.channelId === channelId) {
+        await job.remove().catch(() => {});
+        removed++;
+      }
+    }
+  }
+
+  if (removed > 0) {
+    log('info', 'Drained waiting jobs on /stop', { channelId, removed });
   }
 }
 

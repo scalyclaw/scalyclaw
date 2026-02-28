@@ -149,6 +149,10 @@ async function processMessage(
       result: response,
     });
   } catch (err) {
+    if (ac.signal.aborted) {
+      log('info', 'Message processing aborted by /stop', { channelId });
+      return;
+    }
     log('error', 'Message processing failed', { channelId, error: String(err), stack: (err as Error).stack });
     await publishProgress(redis, channelId, {
       jobId,
@@ -173,6 +177,8 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
       message: msg,
     });
   };
+
+  const ac = new AbortController();
 
   startAllTypingLoops();
   try {
@@ -204,8 +210,6 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
     }
 
     storeMessage(channelId, 'user', text);
-
-    const ac = new AbortController();
 
     const response = await runOrchestrator({
       channelId,
@@ -252,6 +256,10 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
       result: response,
     });
   } catch (err) {
+    if (ac.signal.aborted) {
+      log('info', 'Command processing aborted by /stop', { channelId });
+      return;
+    }
     log('error', 'Command processing failed', { channelId, error: String(err), stack: (err as Error).stack });
     await publishProgress(redis, channelId, {
       jobId: job.id!,
