@@ -179,7 +179,7 @@ export async function rotateAllSecrets(): Promise<void> {
   }
 
   // 3. Set recovery key (old derived key — scrypt output, not the password)
-  await redis.set(RECOVERY_KEY, currentKey.toString('hex'), 'EX', 3600);
+  await redis.set(RECOVERY_KEY, currentKey.toString('hex'), 'EX', 300);
 
   // 4. Rotate password file → new key
   const { newKey } = rotatePassword();

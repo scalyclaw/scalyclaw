@@ -61,9 +61,8 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
     }
   });
 
-  // GET /api/files — serve any file from the worker's home directory (PATHS.base).
-  // The node can access any file in the worker's home (workspace, skills, logs, database, etc.).
-  // Paths are relative to PATHS.base (e.g. "workspace/output.mp4", "skills/youtube/out.mp4", "logs/worker.log").
+  // GET /api/files — serve files from workspace/ and skills/ only.
+  // Paths are relative to PATHS.base (e.g. "workspace/output.mp4", "skills/youtube/out.mp4").
   server.get<{ Querystring: { path?: string } }>('/api/files', async (request, reply) => {
     const relPath = request.query.path;
     if (!relPath) {
@@ -76,9 +75,12 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
     }
 
     const resolved = resolve(PATHS.base, relPath);
-    const baseRoot = resolve(PATHS.base);
-    if (!resolved.startsWith(baseRoot + '/') && resolved !== baseRoot) {
-      reply.status(403).send({ error: 'Path traversal blocked' });
+    const workspaceRoot = resolve(PATHS.workspace);
+    const skillsRoot = resolve(PATHS.skills);
+    const inWorkspace = resolved.startsWith(workspaceRoot + '/') || resolved === workspaceRoot;
+    const inSkills = resolved.startsWith(skillsRoot + '/') || resolved === skillsRoot;
+    if (!inWorkspace && !inSkills) {
+      reply.status(403).send({ error: 'Access restricted to workspace and skills directories' });
       return;
     }
 

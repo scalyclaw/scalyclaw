@@ -3,53 +3,23 @@ import { log } from '../core/logger.js';
 import { publishCancelSignal } from './cancel-signal.js';
 
 const CANCEL_PREFIX = 'scalyclaw:cancel:';
-const PID_PREFIX = 'scalyclaw:pid:';
 const CHANNEL_JOBS_PREFIX = 'scalyclaw:jobs:';
 const TTL_SECONDS = 600; // 10 min
 
 // ─── Cancel Signal ───
 
-/** Request cancellation of a job — sets cancel key + kills registered PID */
+/** Request cancellation of a job — sets cancel key + publishes instant signal */
 export async function requestJobCancel(jobId: string): Promise<void> {
   const redis = getRedis();
   await redis.set(`${CANCEL_PREFIX}${jobId}`, '1', 'EX', TTL_SECONDS);
-
-  // Kill registered PID if any
-  const pidStr = await redis.get(`${PID_PREFIX}${jobId}`);
-  if (pidStr) {
-    const pid = Number(pidStr);
-    try {
-      process.kill(pid, 'SIGTERM');
-      // SIGKILL after 3s if still alive
-      setTimeout(() => {
-        try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
-      }, 3000).unref();
-    } catch {
-      // Process already dead
-    }
-  }
-
-  log('info', 'Job cancel requested', { jobId, pid: pidStr });
+  await publishCancelSignal([jobId]);
+  log('info', 'Job cancel requested', { jobId });
 }
 
 /** Check if a job has been cancelled */
 export async function isJobCancelled(jobId: string): Promise<boolean> {
   const redis = getRedis();
   return (await redis.exists(`${CANCEL_PREFIX}${jobId}`)) === 1;
-}
-
-// ─── PID Tracking ───
-
-/** Register the PID handling a job (for kill on cancel) */
-export async function registerJobProcess(jobId: string, pid: number): Promise<void> {
-  const redis = getRedis();
-  await redis.set(`${PID_PREFIX}${jobId}`, String(pid), 'EX', TTL_SECONDS);
-}
-
-/** Unregister the PID after job completes */
-export async function unregisterJobProcess(jobId: string): Promise<void> {
-  const redis = getRedis();
-  await redis.del(`${PID_PREFIX}${jobId}`);
 }
 
 // ─── Channel → Jobs Tracking ───
@@ -78,8 +48,6 @@ export async function cancelAllChannelJobs(channelId: string): Promise<number> {
   }
   if (jobIds.length > 0) {
     await redis.del(`${CHANNEL_JOBS_PREFIX}${channelId}`);
-    // Batch-publish cancel signal for instant cross-process abort
-    await publishCancelSignal(jobIds);
   }
   return count;
 }

@@ -19,8 +19,9 @@ export function registerVaultRoutes(server: FastifyInstance): void {
     return { stored: true, name };
   });
 
-  // GET /api/vault/:name — get a secret value
-  server.get<{ Params: { name: string } }>('/api/vault/:name', async (request, reply) => {
+  // POST /api/vault/:name/reveal — reveal a secret value (POST to avoid leaking in logs/history)
+  server.post<{ Params: { name: string }; Body: { confirm: boolean } }>('/api/vault/:name/reveal', async (request, reply) => {
+    if (!request.body?.confirm) return reply.status(400).send({ error: 'Body must include { "confirm": true }' });
     const value = await resolveSecret(request.params.name);
     if (value === null) return reply.status(404).send({ error: 'Secret not found' });
     return { name: request.params.name, value };

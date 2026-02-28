@@ -138,7 +138,8 @@ export const deleteMemory = (id: string) =>
 
 // Vault
 export const getSecrets = () => request<{ secrets: string[] }>('/api/vault');
-export const getSecret = (name: string) => request<{ name: string; value: string }>(`/api/vault/${name}`);
+export const getSecret = (name: string) =>
+  request<{ name: string; value: string }>(`/api/vault/${name}/reveal`, { method: 'POST', body: JSON.stringify({ confirm: true }) });
 export const setSecret = (name: string, value: string) =>
   request<void>('/api/vault', { method: 'POST', body: JSON.stringify({ name, value }) });
 export const deleteSecret = (name: string) =>
