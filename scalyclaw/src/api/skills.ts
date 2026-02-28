@@ -9,6 +9,31 @@ import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { runSkillGuard } from '../guards/guard.js';
 import { enqueueJob, getQueue, getQueueEvents } from '@scalyclaw/shared/queue/queue.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { getAllSecrets } from '../core/vault.js';
+
+/** Extract secret-name references ($VAR / ${VAR}) from text */
+function extractSecretRefs(text: string): Set<string> {
+  const refs = new Set<string>();
+  for (const m of text.matchAll(/\$\{([A-Z_][A-Z0-9_]*)\}/g)) refs.add(m[1]);
+  for (const m of text.matchAll(/\$([A-Z_][A-Z0-9_]*)\b/g)) refs.add(m[1]);
+  return refs;
+}
+
+/** Resolve vault secrets referenced by a skill's markdown + input */
+async function resolveSkillSecrets(skillMarkdown: string, input?: string): Promise<Record<string, string>> {
+  const allSecrets = await getAllSecrets();
+  if (Object.keys(allSecrets).length === 0) return {};
+
+  const refs = extractSecretRefs(skillMarkdown);
+  if (input) for (const r of extractSecretRefs(input)) refs.add(r);
+  if (refs.size === 0) return {};
+
+  const scoped: Record<string, string> = {};
+  for (const name of refs) {
+    if (name in allSecrets) scoped[name] = allSecrets[name];
+  }
+  return scoped;
+}
 
 export function registerSkillsRoutes(server: FastifyInstance): void {
   // GET /api/skills — list all loaded skills
@@ -118,12 +143,14 @@ export function registerSkillsRoutes(server: FastifyInstance): void {
       const timeout = timeoutMs ?? 300_000;
 
       try {
+        const secrets = await resolveSkillSecrets(skill.markdown, input);
         const jobId = await enqueueJob({
           name: 'skill-execution',
           data: {
             skillId: skill.id,
             input: input ?? '',
             timeoutMs: timeout,
+            ...(Object.keys(secrets).length > 0 ? { secrets } : {}),
           },
           opts: { attempts: 1 },
         });

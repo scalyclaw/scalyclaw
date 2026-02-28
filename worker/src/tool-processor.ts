@@ -280,8 +280,13 @@ async function handleInvokeSkill(input: Record<string, unknown>, signal?: AbortS
 // ─── Skill execution (direct queue job) ───
 
 async function processSkillExecution(job: Job<SkillExecutionData>): Promise<string> {
-  const { skillId, input, timeoutMs } = job.data;
+  const { skillId, input, timeoutMs, secrets, _workspaceFiles } = job.data;
   log('info', 'Executing skill on worker', { jobId: job.id, skillId });
+
+  // Pre-fetch workspace files if provided
+  if (_workspaceFiles && _workspaceFiles.length > 0) {
+    await prefetchWorkspaceFiles(_workspaceFiles);
+  }
 
   const skill = await getOrFetchSkill(skillId, workerNodeUrl, workerNodeToken);
   if (!skill?.scriptPath || !skill.scriptLanguage) {
@@ -303,6 +308,7 @@ async function processSkillExecution(job: Job<SkillExecutionData>): Promise<stri
     skillDir,
     workspacePath: PATHS.workspace,
     timeoutMs,
+    secrets,
   });
 
   log('info', 'Skill execution complete', { jobId: job.id, skillId, exitCode: result.exitCode });

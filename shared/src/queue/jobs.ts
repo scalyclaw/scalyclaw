@@ -42,6 +42,8 @@ export interface SkillExecutionData {
   skillId: string;
   input: string;
   timeoutMs: number;
+  secrets?: Record<string, string>;
+  _workspaceFiles?: string[];
 }
 
 export interface ToolExecutionData {

@@ -4,6 +4,7 @@ import { homedir } from 'node:os';
 
 export interface WorkerSetupConfig {
   homeDir: string;
+  advertiseHost?: string;
   gateway: {
     host: string;
     port: number;

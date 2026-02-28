@@ -16,6 +16,7 @@ export interface ProcessInfo {
   version: string;
   concurrency: number | null;
   authToken?: string | null;
+  tls?: boolean;
 }
 
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;

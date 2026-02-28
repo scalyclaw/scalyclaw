@@ -464,6 +464,14 @@ async function runWorkerSetup(name: string): Promise<void> {
   });
   if (p.isCancel(nodeToken)) { p.cancel('Setup cancelled.'); process.exit(0); }
 
+  // Advertise host (for remote workers)
+  const advertiseHost = await p.text({
+    message: 'Advertise host/IP (leave empty for auto)',
+    placeholder: 'e.g. 10.0.1.5 or worker1.example.com',
+    initialValue: '',
+  });
+  if (p.isCancel(advertiseHost)) { p.cancel('Setup cancelled.'); process.exit(0); }
+
   // Concurrency
   const concurrency = await p.text({
     message: 'Tool execution concurrency',
@@ -475,6 +483,7 @@ async function runWorkerSetup(name: string): Promise<void> {
   // Write config
   writeWorkerSetupConfig({
     homeDir,
+    ...(advertiseHost ? { advertiseHost } : {}),
     gateway: {
       host: gatewayGroup.host,
       port: Number(gatewayGroup.port),

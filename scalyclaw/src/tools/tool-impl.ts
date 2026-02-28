@@ -403,6 +403,7 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
   let workerHost: string;
   let workerPort: number;
   let workerToken: string | null;
+  let workerTls: boolean;
   try {
     const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
     const redis = getRedis();
@@ -411,16 +412,17 @@ async function downloadWorkerFiles(rawResult: string): Promise<string> {
       log('warn', 'Worker process not found in registry', { processId: workerProcId });
       return rawResult;
     }
-    const procInfo = JSON.parse(procData) as { host: string; port: number; authToken?: string | null };
+    const procInfo = JSON.parse(procData) as { host: string; port: number; authToken?: string | null; tls?: boolean };
     workerHost = procInfo.host;
     workerPort = procInfo.port;
     workerToken = procInfo.authToken ?? null;
+    workerTls = procInfo.tls ?? false;
   } catch (err) {
     log('warn', 'Failed to look up worker process', { processId: workerProcId, error: String(err) });
     return rawResult;
   }
 
-  const protocol = 'http';
+  const protocol = workerTls ? 'https' : 'http';
   const baseUrl = `${protocol}://${workerHost}:${workerPort}`;
 
   // Download each file (entries are { src, dest } objects)

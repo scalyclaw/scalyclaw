@@ -16,7 +16,7 @@ async function main(): Promise<void> {
   const { redis, config, redisConfig } = await bootstrapWorker();
 
   // ── Pass node connection info + worker identity to tool processor ──
-  const advertiseHost = config.gateway.host === '0.0.0.0' ? hostname() : config.gateway.host;
+  const advertiseHost = config.advertiseHost ?? (config.gateway.host === '0.0.0.0' ? hostname() : config.gateway.host);
   const workerProcId = processId('worker', advertiseHost, config.gateway.port);
   setWorkerConfig(config.node.url, config.node.token, workerProcId);
 
@@ -70,6 +70,7 @@ async function main(): Promise<void> {
     version,
     concurrency,
     authToken: config.gateway.authToken,
+    tls: config.gateway.tls,
   });
 
   // ── Graceful shutdown ──
