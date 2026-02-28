@@ -546,6 +546,26 @@ async function dispatchTool(toolName: string, payload: Record<string, unknown>, 
 // LLM-FACING TOOL HANDLERS (the 3 submission methods)
 // ═══════════════════════════════════════════════════════════════════
 
+/** Validate required payload fields per tool type. Returns error string or null if valid. */
+function validateJobPayload(toolName: string, payload: Record<string, unknown>): string | null {
+  switch (toolName) {
+    case 'execute_skill':
+      if (!payload.skillId) return 'Missing required field: skillId. Use { skillId: "<skill-id>", input: "<json>" }.';
+      break;
+    case 'execute_code':
+      if (!payload.code) return 'Missing required field: code. Use { language: "python"|"javascript"|"bash", code: "<code>" }.';
+      break;
+    case 'execute_command':
+      if (!payload.command) return 'Missing required field: command. Use { command: "<shell command>" }.';
+      break;
+    case 'delegate_agent':
+      if (!payload.agentId) return 'Missing required field: agentId. Use { agentId: "<agent-id>", task: "..." }.';
+      if (!payload.task) return 'Missing required field: task. Use { agentId: "<agent-id>", task: "..." }.';
+      break;
+  }
+  return null;
+}
+
 async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
   const toolName = input.toolName as string;
   const payload = (input.payload as Record<string, unknown>) ?? {};
@@ -556,6 +576,10 @@ async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext)
     log('warn', `Job tool "${toolName}" blocked — not in allowed set`, { channelId: ctx.channelId });
     return JSON.stringify({ error: `Tool "${toolName}" is not available to this agent.` });
   }
+
+  // Early payload validation — catch missing required fields before enqueueing
+  const payloadError = validateJobPayload(toolName, payload);
+  if (payloadError) return JSON.stringify({ error: payloadError });
 
   // Server-side skill enforcement for scoped agents
   if (toolName === 'execute_skill' && ctx.allowedSkillIds) {
@@ -589,6 +613,9 @@ async function handleSubmitParallelJobs(input: Record<string, unknown>, ctx: Too
   log('debug', 'submit_parallel_jobs', { count: jobs.length, channelId: ctx.channelId });
   const results = await Promise.all(
     jobs.map(async (j, i) => {
+      // Early payload validation before enqueueing
+      const payloadError = validateJobPayload(j.toolName, j.payload ?? {});
+      if (payloadError) return { index: i, toolName: j.toolName, error: payloadError };
       try {
         const result = await dispatchTool(j.toolName, j.payload ?? {}, ctx);
         return { index: i, toolName: j.toolName, result };
