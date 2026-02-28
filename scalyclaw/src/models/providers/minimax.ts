@@ -70,9 +70,22 @@ export function createMiniMaxProvider(apiKey: string, baseUrl?: string): ModelPr
         }
       }
 
-      const stopReason = choice.finish_reason === 'tool_calls' ? 'tool_use'
-        : choice.finish_reason === 'length' ? 'max_tokens'
-        : 'end_turn';
+      let stopReason: ModelResponse['stopReason'];
+      if (choice.finish_reason === 'tool_calls' || toolCalls.length > 0) {
+        stopReason = 'tool_use';
+      } else if (choice.finish_reason === 'length') {
+        stopReason = 'max_tokens';
+      } else {
+        stopReason = 'end_turn';
+      }
+
+      if (toolCalls.length > 0 && choice.finish_reason !== 'tool_calls') {
+        log('warn', 'MiniMax finish_reason/tool_calls mismatch', {
+          finishReason: choice.finish_reason,
+          toolCallCount: toolCalls.length,
+          toolNames: toolCalls.map(tc => tc.name),
+        });
+      }
 
       return {
         content,

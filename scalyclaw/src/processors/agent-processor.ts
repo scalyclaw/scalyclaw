@@ -186,7 +186,7 @@ async function runAgentLoop(
       }
 
       // No tool calls — done
-      if (response.stopReason !== 'tool_use' || response.toolCalls.length === 0) {
+      if (response.toolCalls.length === 0) {
         break;
       }
 
