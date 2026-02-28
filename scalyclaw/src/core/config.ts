@@ -137,11 +137,6 @@ export interface ScalyClawConfig {
       end: number;
       timezone: string;
     };
-    triggers: {
-      undeliveredResults: boolean;
-      firedScheduledItems: boolean;
-      unansweredMessages: boolean;
-    };
   };
   channels: Record<string, Record<string, unknown>>;
   skills: { id: string; enabled: boolean }[];
@@ -180,7 +175,6 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
     cooldownSeconds: 14400,
     maxPerDay: 3,
     quietHours: { enabled: true, start: 22, end: 8, timezone: 'UTC' },
-    triggers: { undeliveredResults: true, firedScheduledItems: true, unansweredMessages: true },
   },
   guards: {
     message: {

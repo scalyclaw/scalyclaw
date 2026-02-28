@@ -54,13 +54,11 @@ export function registerProactiveRoutes(server: FastifyInstance): void {
     for (const result of results) {
       storeMessage(result.channelId, 'assistant', result.message, {
         source: 'proactive',
-        triggerType: result.triggerType,
       });
       await sendToChannel(result.channelId, result.message);
       delivered.push(result);
       log('info', 'Proactive message sent (manual trigger)', {
         channelId: result.channelId,
-        triggerType: result.triggerType,
       });
     }
 
@@ -68,7 +66,6 @@ export function registerProactiveRoutes(server: FastifyInstance): void {
       triggered: delivered.length,
       results: delivered.map(r => ({
         channelId: r.channelId,
-        triggerType: r.triggerType,
         messagePreview: r.message.substring(0, 100),
       })),
     };

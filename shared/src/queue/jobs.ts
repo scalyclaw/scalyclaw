@@ -88,7 +88,6 @@ export interface ScheduledFireData {
 export interface ProactiveFireData {
   channelId: string;
   message: string;
-  triggerType: string;
 }
 
 export interface VaultKeyRotationData {

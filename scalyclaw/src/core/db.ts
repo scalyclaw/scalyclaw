@@ -151,11 +151,21 @@ export function getRecentMessages(limit: number = 50): Message[] {
   const messages = d.prepare(
     `SELECT * FROM messages
      WHERE (metadata IS NULL OR json_extract(metadata, '$.blocked') IS NOT 1)
-       AND (metadata IS NULL OR json_extract(metadata, '$.source') NOT IN ('reminder', 'recurring', 'proactive'))
+       AND (metadata IS NULL OR json_extract(metadata, '$.source') NOT IN ('reminder', 'recurring'))
      ORDER BY id DESC LIMIT ?`
   ).all(limit).reverse() as Message[];
   log('debug', 'Retrieved recent messages', { requested: limit, returned: messages.length });
   return messages;
+}
+
+export function getChannelMessages(channelId: string, limit: number = 10): Message[] {
+  const d = getDb();
+  return d.prepare(
+    `SELECT * FROM messages
+     WHERE channel = ?
+       AND (metadata IS NULL OR json_extract(metadata, '$.blocked') IS NOT 1)
+     ORDER BY id DESC LIMIT ?`
+  ).all(channelId, limit).reverse() as Message[];
 }
 
 export function clearMessages(): void {

@@ -31,14 +31,9 @@ interface EngagementConfig {
     end: number;
     timezone: string;
   };
-  triggers: {
-    undeliveredResults: boolean;
-    firedScheduledItems: boolean;
-    unansweredMessages: boolean;
-  };
 }
 
-type EngagementTab = 'general' | 'quiet-hours' | 'triggers';
+type EngagementTab = 'general' | 'quiet-hours';
 
 function ModelSelect({
   value,
@@ -163,9 +158,6 @@ export default function Engagement() {
               <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-emerald-500" />
             )}
           </TabsTrigger>
-          <TabsTrigger value="triggers">
-            Triggers
-          </TabsTrigger>
         </TabsList>
 
         {/* General */}
@@ -275,48 +267,6 @@ export default function Engagement() {
                 </Field>
               </div>
             )}
-          </div>
-        </TabsContent>
-
-        {/* Triggers */}
-        <TabsContent value="triggers" className="mt-4">
-          <div className="space-y-6">
-            <p className="text-sm text-muted-foreground">
-              Choose which conditions trigger engagement messages.
-            </p>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm">Undelivered Results</Label>
-                  <p className="text-xs text-muted-foreground">Worker tasks completed after user's last message.</p>
-                </div>
-                <Switch
-                  checked={engagement.triggers.undeliveredResults}
-                  onCheckedChange={(v) => config.update((c) => { c.triggers.undeliveredResults = v; })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm">Fired Scheduled Items</Label>
-                  <p className="text-xs text-muted-foreground">Reminders/recurring that fired while user was idle.</p>
-                </div>
-                <Switch
-                  checked={engagement.triggers.firedScheduledItems}
-                  onCheckedChange={(v) => config.update((c) => { c.triggers.firedScheduledItems = v; })}
-                />
-              </div>
-              <div className="flex items-center justify-between">
-                <div>
-                  <Label className="text-sm">Unanswered Messages</Label>
-                  <p className="text-xs text-muted-foreground">Last message is from user with no assistant response.</p>
-                </div>
-                <Switch
-                  checked={engagement.triggers.unansweredMessages}
-                  onCheckedChange={(v) => config.update((c) => { c.triggers.unansweredMessages = v; })}
-                />
-              </div>
-            </div>
           </div>
         </TabsContent>
       </Tabs>

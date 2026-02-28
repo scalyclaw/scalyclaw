@@ -120,19 +120,18 @@ async function processVaultKeyRotation(): Promise<void> {
 // ─── Proactive Fire (from proactive-worker via system queue) ───
 
 async function processProactiveFire(job: Job<ProactiveFireData>): Promise<void> {
-  const { channelId, message, triggerType } = job.data;
+  const { channelId, message } = job.data;
   const redis = getRedis();
 
-  log('info', 'Processing proactive-fire', { jobId: job.id, channelId, triggerType });
+  log('info', 'Processing proactive-fire', { jobId: job.id, channelId });
 
   storeMessage(channelId, 'assistant', message, {
     source: 'proactive',
-    triggerType,
   });
   await publishProgress(redis, channelId, {
     jobId: job.id!,
     type: 'complete',
     result: message,
   });
-  log('info', 'Proactive message sent', { channelId, triggerType });
+  log('info', 'Proactive message sent', { channelId });
 }

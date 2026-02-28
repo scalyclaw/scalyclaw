@@ -1,24 +1,21 @@
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getConfigRef, type ScalyClawConfig } from '../core/config.js';
-import { recordUsage } from '../core/db.js';
+import { getChannelMessages, recordUsage, type Message } from '../core/db.js';
+import { PATHS } from '../core/paths.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { selectModel, parseModelId } from '../models/provider.js';
 import { getProvider } from '../models/registry.js';
-import { PROACTIVE_SYSTEM_PROMPT } from '../prompt/proactive.js';
+import { buildProactivePrompt } from '../prompt/proactive.js';
 
 const ACTIVITY_PREFIX = 'scalyclaw:activity:';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
-export interface ProactiveTrigger {
-  type: 'undelivered_result' | 'fired_scheduled' | 'unanswered_message';
-  summary: string;
-}
-
 export interface ProactiveResult {
   channelId: string;
   message: string;
-  triggerType: ProactiveTrigger['type'];
 }
 
 // ─── Channel Activity Tracking ──────────────────────────────────────
@@ -27,6 +24,32 @@ export interface ProactiveResult {
 export async function recordChannelActivity(channelId: string): Promise<void> {
   const redis = getRedis();
   await redis.set(`${ACTIVITY_PREFIX}${channelId}`, String(Date.now()));
+}
+
+// ─── Context Gathering ──────────────────────────────────────────────
+
+interface ChannelContext {
+  messages: Message[];
+  pendingResults: Message[];
+}
+
+function gatherChannelContext(channelId: string, lastActiveTs: number): ChannelContext {
+  const messages = getChannelMessages(channelId, 10);
+
+  // Pending results = assistant messages with scheduled sources created after lastActiveTs
+  const lastActiveIso = new Date(lastActiveTs).toISOString().replace('T', ' ').slice(0, 19);
+  const pendingResults = messages.filter(m => {
+    if (m.role !== 'assistant' || !m.metadata) return false;
+    try {
+      const meta = JSON.parse(m.metadata);
+      if (!['task', 'recurrent-task', 'reminder', 'recurrent-reminder'].includes(meta.source)) return false;
+      return m.created_at > lastActiveIso;
+    } catch {
+      return false;
+    }
+  });
+
+  return { messages, pendingResults };
 }
 
 // ─── Main entry point ───────────────────────────────────────────────
@@ -70,6 +93,14 @@ export async function processProactiveEngagement(): Promise<ProactiveResult[]> {
     }
   }
 
+  // Load identity once for all channels
+  let identity = '';
+  try {
+    identity = await readFile(join(PATHS.mind, 'IDENTITY.md'), 'utf-8');
+  } catch {
+    log('debug', 'Proactive: IDENTITY.md not found — using empty identity');
+  }
+
   const results: ProactiveResult[] = [];
 
   for (const ch of idleChannels) {
@@ -83,17 +114,17 @@ export async function processProactiveEngagement(): Promise<ProactiveResult[]> {
     const dailyCount = await redis.get(dailyKey);
     if (dailyCount && Number(dailyCount) >= proactive.maxPerDay) continue;
 
-    // Find triggers (Redis-based)
-    const triggers = await findTriggers(ch.channel, proactive.triggers);
-    if (triggers.length === 0) continue;
+    // Gather context from DB
+    const context = gatherChannelContext(ch.channel, ch.lastActive);
 
-    // Pick the first trigger and generate message via LLM
-    const trigger = triggers[0];
+    // Skip channels with no conversation history
+    if (context.messages.length === 0) continue;
+
     try {
-      const message = await generateProactiveMessage(trigger, config);
+      const message = await generateProactiveMessage(context, identity, config);
       if (!message) continue;
 
-      results.push({ channelId: ch.channel, message, triggerType: trigger.type });
+      results.push({ channelId: ch.channel, message });
 
       // Set cooldown
       await redis.setex(cooldownKey, proactive.cooldownSeconds, '1');
@@ -113,58 +144,11 @@ export async function processProactiveEngagement(): Promise<ProactiveResult[]> {
   return results;
 }
 
-// ─── Trigger detection (Redis-based) ────────────────────────────────
-
-async function findTriggers(
-  channelId: string,
-  triggerConfig: ScalyClawConfig['proactive']['triggers'],
-): Promise<ProactiveTrigger[]> {
-  const redis = getRedis();
-  const triggers: ProactiveTrigger[] = [];
-
-  // Check for undelivered results (tracked in Redis set)
-  if (triggerConfig.undeliveredResults) {
-    const undeliveredKey = `scalyclaw:undelivered:${channelId}`;
-    const count = await redis.scard(undeliveredKey);
-    if (count > 0) {
-      triggers.push({
-        type: 'undelivered_result',
-        summary: `${count} completed task result(s) since your last message.`,
-      });
-    }
-  }
-
-  // Check for fired scheduled items (tracked in Redis set)
-  if (triggerConfig.firedScheduledItems) {
-    const firedKey = `scalyclaw:fired:${channelId}`;
-    const count = await redis.scard(firedKey);
-    if (count > 0) {
-      triggers.push({
-        type: 'fired_scheduled',
-        summary: `${count} scheduled item(s) fired since your last message.`,
-      });
-    }
-  }
-
-  // Check for unanswered message (tracked in Redis flag)
-  if (triggerConfig.unansweredMessages) {
-    const unansweredKey = `scalyclaw:unanswered:${channelId}`;
-    const val = await redis.get(unansweredKey);
-    if (val === '1') {
-      triggers.push({
-        type: 'unanswered_message',
-        summary: 'Your last message did not receive a response.',
-      });
-    }
-  }
-
-  return triggers;
-}
-
 // ─── LLM message generation ────────────────────────────────────────
 
 async function generateProactiveMessage(
-  trigger: ProactiveTrigger,
+  context: ChannelContext,
+  identity: string,
   config: Readonly<ScalyClawConfig>,
 ): Promise<string | null> {
   const modelId = config.proactive.model || selectModel(config.orchestrator.models);
@@ -176,14 +160,17 @@ async function generateProactiveMessage(
   const { provider: providerId, model } = parseModelId(modelId);
   const provider = getProvider(providerId);
 
-  const systemPrompt = PROACTIVE_SYSTEM_PROMPT;
-
-  const userPrompt = `Trigger: ${trigger.type}\nDetails: ${trigger.summary}\n\nGenerate a brief follow-up message.`;
+  const { system, user } = buildProactivePrompt({
+    identity,
+    messages: context.messages,
+    pendingResults: context.pendingResults,
+    currentTime: new Date().toISOString(),
+  });
 
   const response = await provider.chat({
     model,
-    systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+    systemPrompt: system,
+    messages: [{ role: 'user', content: user }],
     maxTokens: 256,
     temperature: 0.7,
   });
@@ -197,7 +184,11 @@ async function generateProactiveMessage(
   });
 
   const text = response.content.trim();
-  return text || null;
+
+  // LLM can return [SKIP] to indicate nothing meaningful to say
+  if (!text || text.includes('[SKIP]')) return null;
+
+  return text;
 }
 
 // ─── Quiet hours ────────────────────────────────────────────────────

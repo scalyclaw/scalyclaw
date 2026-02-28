@@ -19,7 +19,6 @@ export async function processProactiveJob(job: Job<ProactiveCheckData>): Promise
         data: {
           channelId: result.channelId,
           message: result.message,
-          triggerType: result.triggerType,
         },
         opts: {
           attempts: 2,
@@ -29,7 +28,6 @@ export async function processProactiveJob(job: Job<ProactiveCheckData>): Promise
 
       log('info', 'Proactive message → proactive-fire enqueued', {
         channelId: result.channelId,
-        triggerType: result.triggerType,
       });
     } catch (err) {
       log('error', 'Failed to enqueue proactive-fire', {
