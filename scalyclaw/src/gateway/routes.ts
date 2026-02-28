@@ -19,6 +19,7 @@ import { registerMcpRoutes } from '../api/mcp.js';
 import { registerUsageRoutes } from '../api/usage.js';
 import { registerBudgetRoutes } from '../api/budget.js';
 import { registerProactiveRoutes } from '../api/proactive.js';
+import { registerWorkerFilesRoutes } from '../api/worker-files.js';
 
 export function registerRoutes(server: FastifyInstance): void {
   registerSystemRoutes(server);
@@ -41,4 +42,5 @@ export function registerRoutes(server: FastifyInstance): void {
   registerUsageRoutes(server);
   registerBudgetRoutes(server);
   registerProactiveRoutes(server);
+  registerWorkerFilesRoutes(server);
 }

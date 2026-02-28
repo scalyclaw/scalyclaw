@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq';
-import { join } from 'node:path';
+import { join, dirname, resolve } from 'node:path';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
 import { isJobCancelled } from '@scalyclaw/shared/queue/cancel.js';
@@ -20,6 +21,42 @@ export function setWorkerConfig(nodeUrl: string, nodeToken: string, processId: s
   workerNodeUrl = nodeUrl;
   workerNodeToken = nodeToken;
   workerProcessId = processId;
+}
+
+// ─── Pre-fetch workspace files from node ───
+
+const PREFETCH_TIMEOUT_MS = 15_000;
+
+async function prefetchWorkspaceFiles(files: string[]): Promise<void> {
+  if (!workerNodeUrl) return;
+  for (const rel of files) {
+    try {
+      const url = `${workerNodeUrl}/api/worker/workspace?path=${encodeURIComponent(rel)}`;
+      const headers: Record<string, string> = {};
+      if (workerNodeToken) headers['Authorization'] = `Bearer ${workerNodeToken}`;
+
+      const res = await fetch(url, {
+        headers,
+        signal: AbortSignal.timeout(PREFETCH_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        log('warn', `Failed to prefetch workspace file: ${rel}`, { status: res.status });
+        continue;
+      }
+
+      const destPath = resolve(PATHS.workspace, rel);
+      if (!destPath.startsWith(resolve(PATHS.workspace) + '/')) {
+        log('warn', `Workspace file path traversal blocked: ${rel}`);
+        continue;
+      }
+      await mkdir(dirname(destPath), { recursive: true });
+      const buffer = Buffer.from(await res.arrayBuffer());
+      await writeFile(destPath, buffer);
+      log('info', `Prefetched workspace file: ${rel}`);
+    } catch (err) {
+      log('warn', `Failed to prefetch workspace file: ${rel}`, { error: String(err) });
+    }
+  }
 }
 
 // ─── Annotate worker results with file paths for transfer ───
@@ -96,18 +133,19 @@ function annotateWorkerResult(resultJson: string): string {
   return JSON.stringify(parsed);
 }
 
-/** Build a { src, dest } entry from an absolute path matching workspace or skills prefix */
+/** Build a { src, dest } entry from an absolute path matching workspace or skills prefix.
+ *  src is base-relative (e.g. "workspace/file.txt" or "skills/youtube/output.mp4")
+ *  so the node can fetch via the worker's /api/files endpoint which resolves against PATHS.base. */
 function makeFileEntry(absPath: string, workspacePrefix: string, skillsPrefix: string): WorkerFileEntry | null {
   if (absPath.startsWith(workspacePrefix)) {
     const rel = absPath.slice(workspacePrefix.length);
-    return { src: rel, dest: rel };
+    return { src: 'workspace/' + rel, dest: rel };
   }
   if (absPath.startsWith(skillsPrefix)) {
     const relFromSkills = absPath.slice(skillsPrefix.length); // e.g. "youtube-skill/output.mp4"
     const slashIdx = relFromSkills.indexOf('/');
-    // Strip skillId prefix for dest, keep full path for src
     const dest = slashIdx >= 0 ? relFromSkills.slice(slashIdx + 1) : relFromSkills;
-    return { src: '_skills/' + relFromSkills, dest };
+    return { src: 'skills/' + relFromSkills, dest };
   }
   return null;
 }
@@ -171,6 +209,12 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
       }
     } catch { /* Redis unavailable — keep going */ }
   }, 2_000);
+
+  // Pre-fetch workspace files referenced in job data
+  const workspaceFiles = (input._workspaceFiles as string[]) ?? [];
+  if (workspaceFiles.length > 0) {
+    await prefetchWorkspaceFiles(workspaceFiles);
+  }
 
   const start = Date.now();
   try {

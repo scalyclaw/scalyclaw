@@ -61,40 +61,38 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
     }
   });
 
-  // GET /api/files — serve a workspace or skill-dir file by relative path
-  // Paths prefixed with _skills/ are resolved against PATHS.skills; others against PATHS.workspace
+  // GET /api/files — serve any file from the worker's home directory (PATHS.base).
+  // The node can access any file in the worker's home (workspace, skills, logs, database, etc.).
+  // Paths are relative to PATHS.base (e.g. "workspace/output.mp4", "skills/youtube/out.mp4", "logs/worker.log").
   server.get<{ Querystring: { path?: string } }>('/api/files', async (request, reply) => {
     const relPath = request.query.path;
     if (!relPath) {
       reply.status(400).send({ error: 'Missing query parameter: path' });
       return;
     }
+    if (relPath.includes('\0')) {
+      reply.status(400).send({ error: 'Invalid path' });
+      return;
+    }
 
-    // Route _skills/ paths to PATHS.skills, everything else to PATHS.workspace
-    let resolved: string;
-    if (relPath.startsWith('_skills/')) {
-      const skillRelPath = relPath.slice('_skills/'.length);
-      resolved = resolve(PATHS.skills, skillRelPath);
-      if (!resolved.startsWith(resolve(PATHS.skills) + '/')) {
-        reply.status(403).send({ error: 'Path traversal blocked' });
-        return;
-      }
-    } else {
-      resolved = resolve(PATHS.workspace, relPath);
-      if (!resolved.startsWith(resolve(PATHS.workspace) + '/') && resolved !== resolve(PATHS.workspace)) {
-        reply.status(403).send({ error: 'Path traversal blocked' });
-        return;
-      }
+    const resolved = resolve(PATHS.base, relPath);
+    const baseRoot = resolve(PATHS.base);
+    if (!resolved.startsWith(baseRoot + '/') && resolved !== baseRoot) {
+      reply.status(403).send({ error: 'Path traversal blocked' });
+      return;
     }
 
     try {
-      await stat(resolved);
+      const st = await stat(resolved);
+      if (!st.isFile()) {
+        reply.status(400).send({ error: 'Not a file' });
+        return;
+      }
     } catch {
       reply.status(404).send({ error: 'File not found' });
       return;
     }
 
-    // Content-Type by extension
     const MIME: Record<string, string> = {
       '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.ogg': 'audio/ogg', '.flac': 'audio/flac',
       '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
@@ -105,7 +103,6 @@ export async function initWorkerServer(config: WorkerSetupConfig): Promise<Fasti
     const ext = extname(resolved).toLowerCase();
     const contentType = MIME[ext] || 'application/octet-stream';
 
-    // RFC 5987 encoding for Content-Disposition (handles spaces, unicode, parentheses)
     const filename = basename(resolved);
     const encodedFilename = encodeURIComponent(filename).replace(/['()]/g, escape);
     reply.header('Content-Type', contentType);

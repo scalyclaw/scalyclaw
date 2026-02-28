@@ -81,6 +81,59 @@ async function resolveNeededSecrets(
   return scoped;
 }
 
+// ─── Workspace file reference scanning ───
+
+/** Extract workspace-relative file paths referenced as workspace/... in text. */
+function extractWorkspaceRefs(text: string): string[] {
+  const refs = new Set<string>();
+  const regex = /workspace\/[^\s"'`\n\r)}\]]+/g;
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    const rel = match[0].slice('workspace/'.length);
+    if (rel && !rel.includes('..') && !rel.includes('\0')) {
+      refs.add(rel);
+    }
+  }
+  return [...refs];
+}
+
+/**
+ * Scan a tool payload for workspace file references and return only those
+ * that actually exist on the node's workspace.
+ */
+async function resolveWorkspaceFiles(
+  toolName: string,
+  payload: Record<string, unknown>,
+): Promise<string[]> {
+  let text = '';
+  if (toolName === 'execute_skill') {
+    const inp = payload.input as string;
+    if (inp) text = inp;
+  } else if (toolName === 'execute_code') {
+    const code = payload.code as string;
+    if (code) text = code;
+  } else if (toolName === 'execute_command') {
+    const cmd = (payload.command ?? payload.code ?? payload.script) as string;
+    if (cmd) text = cmd;
+  }
+  if (!text) return [];
+
+  const candidates = extractWorkspaceRefs(text);
+  if (candidates.length === 0) return [];
+
+  // Only include files that actually exist on the node
+  const existing: string[] = [];
+  for (const rel of candidates) {
+    const full = resolve(PATHS.workspace, rel);
+    if (!full.startsWith(resolve(PATHS.workspace) + '/')) continue;
+    try {
+      const st = await stat(full);
+      if (st.isFile()) existing.push(rel);
+    } catch { /* doesn't exist — skip */ }
+  }
+  return existing;
+}
+
 // ═══════════════════════════════════════════════════════════════════
 // SHARED HELPERS
 // ═══════════════════════════════════════════════════════════════════
@@ -230,7 +283,13 @@ async function enqueueAndWait(
     const config = getConfigRef();
     const denied = config.guards.commandShield?.enabled ? config.guards.commandShield.denied : [];
     const secrets = await resolveNeededSecrets(toolName, payload);
-    payload = { ...payload, _secrets: secrets, _deniedCommands: denied };
+    const workspaceFiles = await resolveWorkspaceFiles(toolName, payload);
+    payload = {
+      ...payload,
+      _secrets: secrets,
+      _deniedCommands: denied,
+      ...(workspaceFiles.length > 0 ? { _workspaceFiles: workspaceFiles } : {}),
+    };
   }
 
   const toolCallId = randomUUID();
