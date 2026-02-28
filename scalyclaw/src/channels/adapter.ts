@@ -46,6 +46,8 @@ export const SLASH_COMMANDS: Array<{ command: string; description: string }> = [
   { command: 'usage', description: 'Token usage and budget' },
   { command: 'clear', description: 'Clear session' },
   { command: 'update', description: 'Update ScalyClaw' },
+  { command: 'restart', description: 'Restart ScalyClaw' },
+  { command: 'shutdown', description: 'Shut down ScalyClaw' },
 ];
 
 // ─── Channel reply address persistence ───
