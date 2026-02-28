@@ -351,7 +351,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
   // ─── Rate limiting ───
   const allowed = await checkRateLimit(channelId);
   if (!allowed) {
-    log('warn', 'Rate limit exceeded', { channelId });
+    log('info', 'Rate limit exceeded, message dropped', { channelId });
     await sendToChannel(channelId, 'You\'re sending messages faster than I can keep up. Give me a moment.');
     return;
   }
@@ -364,6 +364,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
     if (awaitingRaw) {
       await redis.del(awaitingKey);
       const lower = trimmed.toLowerCase();
+      log('info', 'Update confirmation intercepted', { channelId, response: lower });
       if (lower === 'yes' || lower === 'y' || lower === 'confirm') {
         try {
           const { repoDir, scriptPath } = JSON.parse(awaitingRaw);
@@ -393,6 +394,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
 
   // ─── Stop detection ───
   if (trimmed === '/stop') {
+    log('info', 'Command handled: /stop', { channelId });
     const redis = getRedis();
     await redis.set('scalyclaw:cancel', '1', 'EX', 30);
     await cancelAllChannelJobs(channelId).catch(() => {});
@@ -403,6 +405,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
 
   // ─── /restart — restart the system ───
   if (trimmed === '/restart') {
+    log('info', 'Command handled: /restart', { channelId });
     const scriptPath = join(PATHS.base, 'scalyclaw.sh');
     if (!existsSync(scriptPath)) {
       await sendToChannel(channelId, 'Restart not available — management script not found.');
@@ -429,6 +432,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
 
   // ─── /shutdown — shut down the system ───
   if (trimmed === '/shutdown') {
+    log('info', 'Command handled: /shutdown', { channelId });
     const scriptPath = join(PATHS.base, 'scalyclaw.sh');
     if (!existsSync(scriptPath)) {
       await sendToChannel(channelId, 'Shutdown not available — management script not found.');
@@ -465,6 +469,7 @@ async function handleIncomingMessage(message: NormalizedMessage): Promise<void> 
 
   // ─── /update — check for updates and ask for confirmation ───
   if (trimmed === '/update') {
+    log('info', 'Command handled: /update', { channelId });
     const repoDir = join(PATHS.base, 'repo');
     const scriptPath = join(repoDir, 'website', 'install.sh');
 

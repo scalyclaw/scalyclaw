@@ -51,6 +51,7 @@ export class TelegramChannel implements ChannelAdapter {
   private config: TelegramConfig;
   private handler: MessageHandler | null = null;
   private lastChatId: string | null = null;
+  private shuttingDown = false;
 
   constructor(config: TelegramConfig) {
     this.config = config;
@@ -60,6 +61,7 @@ export class TelegramChannel implements ChannelAdapter {
   async connect(): Promise<void> {
     // Fresh instance — avoids stale state from previous lifecycle
     this.bot = new Telegraf(this.config.botToken);
+    this.shuttingDown = false;
 
     // Restore persisted reply address from Redis
     try {
@@ -181,7 +183,12 @@ export class TelegramChannel implements ChannelAdapter {
     try {
       // bot.launch() never resolves (blocks for bot lifetime) — fire and forget
       this.bot.launch().catch(err => {
-        log('error', 'Telegram bot crashed', { error: String(err) });
+        // Telegraf throws "Attempted to assign to readonly property" on its
+        // internal AbortController when stop() races with the polling loop.
+        // Suppress errors during expected shutdowns.
+        if (!this.shuttingDown) {
+          log('error', 'Telegram bot crashed', { error: String(err) });
+        }
       });
     } catch (err) {
       log('error', `Telegram bot launch failed (attempt ${attempt}/3)`, { error: String(err) });
@@ -196,6 +203,7 @@ export class TelegramChannel implements ChannelAdapter {
   }
 
   async disconnect(): Promise<void> {
+    this.shuttingDown = true;
     try {
       this.bot.stop('shutdown');
     } catch {

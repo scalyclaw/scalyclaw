@@ -41,6 +41,7 @@ export interface ScalyClawConfig {
   orchestrator: {
     id: string;
     maxIterations: number;
+    maxInputTokens: number;
     models: { model: string; weight: number; priority: number }[];
     skills: string[];
     agents: { id: string; enabled: boolean; maxIterations: number; models: { model: string; weight: number; priority: number }[]; skills: string[]; tools: string[]; mcpServers: string[] }[];
@@ -146,7 +147,7 @@ export interface ScalyClawConfig {
 // ─── Defaults ───────────────────────────────────────────────────────
 
 export const CONFIG_DEFAULTS: ScalyClawConfig = {
-  orchestrator: { id: 'default', maxIterations: 50, models: [], skills: [], agents: [] },
+  orchestrator: { id: 'default', maxIterations: 50, maxInputTokens: 150_000, models: [], skills: [], agents: [] },
   gateway: {
     host: '127.0.0.1',
     port: 3000,

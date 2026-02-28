@@ -28,6 +28,7 @@ export interface OrchestratorInput {
 export async function runOrchestrator(input: OrchestratorInput): Promise<string> {
   const config = getConfigRef();
   const maxIterations = config.orchestrator.maxIterations;
+  const maxInputTokens = config.orchestrator.maxInputTokens;
 
   // Budget enforcement
   const budgetStatus = checkBudget();
@@ -144,6 +145,20 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
     // No tool calls — done
     if (response.stopReason !== 'tool_use' || response.toolCalls.length === 0) {
+      break;
+    }
+
+    // Guard against runaway token usage (e.g. self-repair loops)
+    if (totalInputTokens > maxInputTokens) {
+      log('warn', 'Orchestrator hit token limit', {
+        channelId: input.channelId,
+        round,
+        totalInputTokens,
+        maxInputTokens,
+      });
+      if (!finalContent) {
+        finalContent = 'I used too many resources processing this. Let me know if you\'d like me to try a different approach.';
+      }
       break;
     }
 
