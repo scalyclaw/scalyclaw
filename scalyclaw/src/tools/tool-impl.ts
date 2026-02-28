@@ -536,9 +536,9 @@ async function dispatchTool(toolName: string, payload: Record<string, unknown>, 
           error: `Budget limit exceeded — daily: $${budgetStatus.currentDayCost.toFixed(2)}/$${budgetStatus.dailyLimit}, monthly: $${budgetStatus.currentMonthCost.toFixed(2)}/$${budgetStatus.monthlyLimit}.`,
         });
       }
-      return await enqueueAndWait('agents', toolName, payload, ctx, 300_000);
+      return await enqueueAndWait('agents', toolName, payload, ctx, 18_000_000); // 5 hours
     }
-    return await enqueueAndWait(queueKey, toolName, payload, ctx, 300_000);
+    return await enqueueAndWait(queueKey, toolName, payload, ctx, 18_000_000); // 5 hours
   }
   if (toolName.startsWith('mcp_')) {
     const { callMcpTool } = await import('../mcp/mcp-manager.js');

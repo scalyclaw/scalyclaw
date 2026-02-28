@@ -10,7 +10,7 @@ import type { Redis } from 'ioredis';
 // ─── Default queue config (worker doesn't load full config from Redis) ───
 
 const QUEUE_DEFAULTS: QueueConfig = {
-  lockDuration: 120_000,
+  lockDuration: 18_300_000, // 5h + 5min margin
   stalledInterval: 30_000,
   limiter: { max: 10, duration: 1000 },
   removeOnComplete: { age: 86400, count: 1000 },

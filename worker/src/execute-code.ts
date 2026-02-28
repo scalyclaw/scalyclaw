@@ -50,7 +50,7 @@ export async function executeCode(input: Record<string, unknown>, signal?: Abort
       cmd: lang.cmd,
       args: lang.args(tmpFile),
       cwd: process.env.HOME ?? PATHS.workspace,
-      timeoutMs: 30_000,
+      timeoutMs: 18_000_000, // 5 hours
       workspacePath: PATHS.workspace,
       extraEnv: secrets,
       label: 'execute_code',

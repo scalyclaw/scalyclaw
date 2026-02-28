@@ -140,7 +140,7 @@ export function registerSkillsRoutes(server: FastifyInstance): void {
       }
 
       const { input, timeoutMs } = request.body ?? {};
-      const timeout = timeoutMs ?? 300_000;
+      const timeout = timeoutMs ?? 18_000_000; // 5 hours default
 
       try {
         const secrets = await resolveSkillSecrets(skill.markdown, input);

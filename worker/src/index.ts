@@ -36,7 +36,7 @@ async function main(): Promise<void> {
 
   const toolsWorker = new Worker(getQueueName('tools'), processToolJob, {
     connection: redis.duplicate() as never,
-    lockDuration: 120_000,
+    lockDuration: 18_300_000, // 5h + 5min margin
     stalledInterval: 30_000,
     concurrency,
   });

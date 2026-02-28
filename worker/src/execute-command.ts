@@ -39,7 +39,7 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
       cmd: 'bash',
       args: [tmpFile],
       cwd: process.env.HOME ?? PATHS.workspace,
-      timeoutMs: 30_000,
+      timeoutMs: 18_000_000, // 5 hours
       input: stdinInput,
       workspacePath: PATHS.workspace,
       extraEnv: secrets,
