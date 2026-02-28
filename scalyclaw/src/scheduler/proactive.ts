@@ -23,7 +23,7 @@ export interface ProactiveResult {
 /** Record channel activity (called after each user message) */
 export async function recordChannelActivity(channelId: string): Promise<void> {
   const redis = getRedis();
-  await redis.set(`${ACTIVITY_PREFIX}${channelId}`, String(Date.now()));
+  await redis.set(`${ACTIVITY_PREFIX}${channelId}`, String(Date.now()), 'EX', 604800);
 }
 
 // ─── Context Gathering ──────────────────────────────────────────────

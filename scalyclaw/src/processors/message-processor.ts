@@ -28,31 +28,9 @@ export async function processMessageQueueJob(job: Job): Promise<void> {
   }
 }
 
-// ─── Message processor ───
+// ─── Shared orchestrator pipeline ───
 
-async function processMessageJob(job: Job<MessageProcessingData>): Promise<void> {
-  const { channelId, text, attachments } = job.data;
-
-  let fullText = text;
-  if (attachments && attachments.length > 0) {
-    const attachmentLines = attachments.map(
-      (a: AttachmentData) => `[Attachment: ${a.type} — ${a.fileName} at ${a.filePath}${a.mimeType ? ` (${a.mimeType})` : ''}]`
-    ).join('\n');
-    fullText = fullText ? `${fullText}\n\n${attachmentLines}` : attachmentLines;
-  }
-
-  log('info', 'Processing message job', { jobId: job.id, channelId, textLength: fullText.length, attachments: attachments?.length ?? 0 });
-
-  await recordChannelActivity(channelId).catch(() => {});
-  startAllTypingLoops();
-  try {
-    await processMessage(channelId, fullText, job.id!);
-  } finally {
-    stopAllTypingLoops();
-  }
-}
-
-async function processMessage(
+async function runOrchestratorPipeline(
   channelId: string,
   text: string,
   jobId: string,
@@ -152,10 +130,10 @@ async function processMessage(
     });
   } catch (err) {
     if (ac.signal.aborted) {
-      log('info', 'Message processing aborted by /stop', { channelId });
+      log('info', 'Processing aborted by /stop', { channelId });
       return;
     }
-    log('error', 'Message processing failed', { channelId, error: String(err), stack: (err as Error).stack });
+    log('error', 'Processing failed', { channelId, error: String(err), stack: (err as Error).stack });
     await publishProgress(redis, channelId, {
       jobId,
       type: 'error',
@@ -166,113 +144,40 @@ async function processMessage(
   }
 }
 
+// ─── Message processor ───
+
+async function processMessageJob(job: Job<MessageProcessingData>): Promise<void> {
+  const { channelId, text, attachments } = job.data;
+
+  let fullText = text;
+  if (attachments && attachments.length > 0) {
+    const attachmentLines = attachments.map(
+      (a: AttachmentData) => `[Attachment: ${a.type} — ${a.fileName} at ${a.filePath}${a.mimeType ? ` (${a.mimeType})` : ''}]`
+    ).join('\n');
+    fullText = fullText ? `${fullText}\n\n${attachmentLines}` : attachmentLines;
+  }
+
+  log('info', 'Processing message job', { jobId: job.id, channelId, textLength: fullText.length, attachments: attachments?.length ?? 0 });
+
+  await recordChannelActivity(channelId).catch(() => {});
+  startAllTypingLoops();
+  try {
+    await runOrchestratorPipeline(channelId, fullText, job.id!);
+  } finally {
+    stopAllTypingLoops();
+  }
+}
+
 // ─── Command processor ───
 
 async function processCommandJob(job: Job<CommandData>): Promise<void> {
   const { channelId, text } = job.data;
-  const redis = getRedis();
-
   log('info', 'Processing command job', { jobId: job.id, channelId, text });
-
-  const sendToChannel = async (chId: string, msg: string): Promise<void> => {
-    await publishProgress(redis, chId, {
-      jobId: job.id!,
-      type: 'progress',
-      message: msg,
-    });
-  };
-
-  const ac = new AbortController();
-  registerAbort(job.id!, ac);
 
   startAllTypingLoops();
   try {
-    // Run message guard before storing
-    const guardResult = await runMessageGuard(text);
-    if (!guardResult.passed) {
-      log('warn', 'Command blocked by guard', {
-        channelId,
-        layer: guardResult.failedLayer,
-        reason: guardResult.reason,
-        durationMs: guardResult.durationMs,
-      });
-      storeMessage(channelId, 'user', text, { blocked: true, reason: guardResult.reason });
-      const rejection = `I can't process that message. ${guardResult.reason}`;
-      storeMessage(channelId, 'assistant', rejection);
-      await publishProgress(redis, channelId, {
-        jobId: job.id!,
-        type: 'complete',
-        result: rejection,
-      });
-      return;
-    }
-
-    // Check cancel flag
-    const cancelled = await redis.get('scalyclaw:cancel');
-    if (cancelled) {
-      await redis.del('scalyclaw:cancel');
-      return;
-    }
-
-    storeMessage(channelId, 'user', text);
-
-    const response = await runOrchestrator({
-      channelId,
-      text,
-      sendToChannel,
-      signal: ac.signal,
-      shouldStop: async (): Promise<StopReason> => {
-        const flag = await redis.get('scalyclaw:cancel');
-        if (flag) {
-          await redis.del('scalyclaw:cancel');
-          ac.abort();
-          return 'cancelled';
-        }
-        return 'continue';
-      },
-    });
-
-    if (response.length > 0) {
-      const responseGuard = await runResponseEchoGuard(response);
-      if (!responseGuard.passed) {
-        log('warn', 'Response blocked by echo guard', {
-          channelId,
-          reason: responseGuard.reason,
-          durationMs: responseGuard.durationMs,
-        });
-        const safeResponse = 'My response was flagged by the security guard. Please try rephrasing your request.';
-        storeMessage(channelId, 'assistant', safeResponse);
-        await publishProgress(redis, channelId, { jobId: job.id!, type: 'complete', result: safeResponse });
-        return;
-      }
-
-      storeMessage(channelId, 'assistant', response);
-
-      await enqueueJob({
-        name: 'memory-extraction',
-        data: { channelId, texts: [text] },
-        opts: { attempts: 2, backoff: { type: 'fixed', delay: 5000 } },
-      });
-    }
-
-    await publishProgress(redis, channelId, {
-      jobId: job.id!,
-      type: 'complete',
-      result: response,
-    });
-  } catch (err) {
-    if (ac.signal.aborted) {
-      log('info', 'Command processing aborted by /stop', { channelId });
-      return;
-    }
-    log('error', 'Command processing failed', { channelId, error: String(err), stack: (err as Error).stack });
-    await publishProgress(redis, channelId, {
-      jobId: job.id!,
-      type: 'error',
-      error: 'Something went wrong on my end. Try again?',
-    });
+    await runOrchestratorPipeline(channelId, text, job.id!);
   } finally {
-    unregisterAbort(job.id!);
     stopAllTypingLoops();
   }
 }

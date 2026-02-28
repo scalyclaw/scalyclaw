@@ -4,7 +4,7 @@ import { publishCancelSignal } from './cancel-signal.js';
 
 const CANCEL_PREFIX = 'scalyclaw:cancel:';
 const CHANNEL_JOBS_PREFIX = 'scalyclaw:jobs:';
-const TTL_SECONDS = 600; // 10 min
+const TTL_SECONDS = 3600; // 1 hour — jobs can run up to 5h
 
 // ─── Cancel Signal ───
 

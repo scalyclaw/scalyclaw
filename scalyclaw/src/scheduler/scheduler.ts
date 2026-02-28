@@ -28,6 +28,14 @@ async function updateScheduledField(jobId: string, field: string, value: string)
   await redis.hset(`${SCHEDULED_PREFIX}${jobId}`, field, value);
 }
 
+const TERMINAL_TTL_SECONDS = 604800; // 7 days
+
+/** Set a 7-day TTL on a scheduled job hash after it reaches a terminal state */
+async function expireScheduledJob(jobId: string): Promise<void> {
+  const redis = await getRedis();
+  await redis.expire(`${SCHEDULED_PREFIX}${jobId}`, TERMINAL_TTL_SECONDS);
+}
+
 // ─── Create Reminder ───
 
 export async function createReminder(
@@ -318,6 +326,7 @@ export async function completeScheduledJobAdmin(jobId: string): Promise<boolean>
   const data = await getScheduledState(jobId);
   if (!data || data.state !== 'active') return false;
   await updateScheduledField(jobId, 'state', 'completed');
+  await expireScheduledJob(jobId);
   await removeRepeatableJob(jobId, 'scheduler');
   log('info', 'Scheduled job completed (admin)', { jobId });
   return true;
@@ -342,6 +351,7 @@ export async function cancelScheduledJobAdmin(jobId: string): Promise<boolean> {
   if (!data) return false;
 
   await updateScheduledField(jobId, 'state', 'cancelled');
+  await expireScheduledJob(jobId);
 
   // Both reminders and recurring are now on the scheduler queue
   await removeRepeatableJob(jobId, 'scheduler');
@@ -357,6 +367,7 @@ export async function cancelScheduledJob(jobId: string, channelId: string): Prom
   if (!data || data.channelId !== channelId) return false;
 
   await updateScheduledField(jobId, 'state', 'cancelled');
+  await expireScheduledJob(jobId);
 
   // Both reminders and recurring are now on the scheduler queue
   await removeRepeatableJob(jobId, 'scheduler');
@@ -376,6 +387,7 @@ export async function cancelReminder(jobId: string, channelId: string): Promise<
   if (!REMINDER_TYPES.has(data.type)) return { cancelled: false, error: `Job "${jobId}" is a ${data.type}, not a reminder. Use cancel_task instead.` };
 
   await updateScheduledField(jobId, 'state', 'cancelled');
+  await expireScheduledJob(jobId);
   await removeRepeatableJob(jobId, 'scheduler');
   log('info', 'Reminder cancelled', { jobId, channelId, type: data.type });
   return { cancelled: true };
@@ -387,6 +399,7 @@ export async function cancelTask(jobId: string, channelId: string): Promise<{ ca
   if (!TASK_TYPES.has(data.type)) return { cancelled: false, error: `Job "${jobId}" is a ${data.type}, not a task. Use cancel_reminder instead.` };
 
   await updateScheduledField(jobId, 'state', 'cancelled');
+  await expireScheduledJob(jobId);
   await removeRepeatableJob(jobId, 'scheduler');
   log('info', 'Task cancelled', { jobId, channelId, type: data.type });
   return { cancelled: true };
@@ -403,11 +416,13 @@ export async function isScheduledJobActive(jobId: string): Promise<boolean> {
 /** Mark a scheduled job as completed (used by schedule-worker for reminders) */
 export async function markScheduledCompleted(jobId: string): Promise<void> {
   await updateScheduledField(jobId, 'state', 'completed');
+  await expireScheduledJob(jobId);
 }
 
 /** Mark a scheduled job as failed */
 export async function markScheduledFailed(jobId: string): Promise<void> {
   await updateScheduledField(jobId, 'state', 'failed');
+  await expireScheduledJob(jobId);
 }
 
 /** Update next_run for a recurring job */

@@ -64,21 +64,3 @@ export async function subscribeToProgress(
 
   log('info', 'Subscribed to progress:* channels');
 }
-
-/** Fetch buffered responses for a channel (for WS reconnect) */
-export async function getBufferedResponses(redis: Redis, channelId: string): Promise<ProgressEvent[]> {
-  const pattern = `${RESPONSE_KEY_PREFIX}${channelId}:*`;
-  const keys = await redis.keys(pattern);
-  if (keys.length === 0) return [];
-
-  const values = await redis.mget(...keys);
-  const events: ProgressEvent[] = [];
-  for (const raw of values) {
-    if (raw) {
-      try {
-        events.push(JSON.parse(raw) as ProgressEvent);
-      } catch { /* skip malformed */ }
-    }
-  }
-  return events;
-}

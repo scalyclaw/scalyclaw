@@ -211,6 +211,7 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
       }
     } catch { /* Redis unavailable — keep going */ }
   }, 2_000);
+  cancelPoll.unref();
 
   // Pre-fetch workspace files referenced in job data
   const workspaceFiles = (input._workspaceFiles as string[]) ?? [];
@@ -289,6 +290,15 @@ async function processSkillExecution(job: Job<SkillExecutionData>): Promise<stri
 
   const ac = new AbortController();
   registerAbort(jobId, ac);
+  const cancelPoll = setInterval(async () => {
+    try {
+      if (await isJobCancelled(jobId)) {
+        ac.abort();
+        clearInterval(cancelPoll);
+      }
+    } catch { /* Redis unavailable — keep going */ }
+  }, 2_000);
+  cancelPoll.unref();
 
   try {
     // Pre-fetch workspace files if provided
@@ -323,6 +333,7 @@ async function processSkillExecution(job: Job<SkillExecutionData>): Promise<stri
     log('info', 'Skill execution complete', { jobId, skillId, exitCode: result.exitCode });
     return annotateWorkerResult(JSON.stringify(result));
   } finally {
+    clearInterval(cancelPoll);
     unregisterAbort(jobId);
   }
 }
