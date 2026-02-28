@@ -22,6 +22,7 @@ import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
 import { TOOL_NAMES_SET } from './tools.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
+import { invalidatePromptCache } from '../prompt/builder.js';
 import { requestJobCancel, trackChannelJob, untrackChannelJob } from '@scalyclaw/shared/queue/cancel.js';
 
 export type { ToolContext } from './tool-registry.js';
@@ -140,14 +141,18 @@ async function resolveWorkspaceFiles(
 
 /** Reload skills/agents if any path touches their directories */
 async function fileReloadIfNeeded(...paths: string[]): Promise<void> {
+  let reloaded = false;
   if (paths.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
     await loadSkills();
+    reloaded = true;
     await publishSkillReload().catch(e => log('warn', 'Skill reload failed', { error: String(e) }));
   }
   if (paths.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
     await loadAllAgents();
+    reloaded = true;
     await publishAgentReload().catch(e => log('warn', 'Agent reload failed', { error: String(e) }));
   }
+  if (reloaded) invalidatePromptCache();
 }
 
 /** Validate agentId → find in config → mutate → save → publish */
