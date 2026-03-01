@@ -240,7 +240,7 @@ ${systemPrompt}`;
   // Update config (clone to avoid mutating cache if save fails)
   const config = getConfig();
   const idx = config.orchestrator.agents.findIndex(a => a.id === agentId);
-  const entry = { id: agentId, enabled: config.orchestrator.agents[idx]?.enabled ?? true, maxIterations, models, skills, tools, mcpServers };
+  const entry = { id: agentId, enabled: config.orchestrator.agents[idx]?.enabled ?? true, maxIterations, models, skills: skills ?? [], tools, mcpServers };
   if (idx >= 0) {
     config.orchestrator.agents[idx] = entry;
   } else {

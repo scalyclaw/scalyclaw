@@ -86,7 +86,7 @@ export function registerAgentsRoutes(server: FastifyInstance): void {
       if (entry) {
         entry.enabled = enabled;
       } else {
-        config.orchestrator.agents.push({ id, enabled, maxIterations: agent.maxIterations, models: agent.models, skills: agent.skills, tools: agent.tools, mcpServers: agent.mcpServers });
+        config.orchestrator.agents.push({ id, enabled, maxIterations: agent.maxIterations, models: agent.models, skills: agent.skills ?? [], tools: agent.tools, mcpServers: agent.mcpServers });
       }
       await saveConfig(config);
       await publishAgentReload();
@@ -112,7 +112,7 @@ export function registerAgentsRoutes(server: FastifyInstance): void {
       name: body.name ?? existing.name,
       description: body.description ?? existing.description,
       systemPrompt: body.systemPrompt ?? existing.systemPrompt,
-      skills: body.skills ?? existing.skills,
+      skills: body.skills ?? existing.skills ?? undefined,
     });
     if (!guardResult.passed) {
       return reply.status(403).send({ error: `Agent update blocked by security guard: ${guardResult.reason}` });
