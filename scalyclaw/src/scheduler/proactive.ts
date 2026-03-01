@@ -151,7 +151,9 @@ async function generateProactiveMessage(
   identity: string,
   config: Readonly<ScalyClawConfig>,
 ): Promise<string | null> {
-  const modelId = config.proactive.model || selectModel(config.orchestrator.models);
+  const modelId = config.proactive.model
+    || selectModel(config.orchestrator.models)
+    || selectModel(config.models.models.filter(m => m.enabled).map(m => ({ model: m.id, weight: m.weight, priority: m.priority })));
   if (!modelId) {
     log('warn', 'No model available for proactive message generation');
     return null;
