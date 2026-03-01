@@ -16,7 +16,7 @@
       <div class="docs-content">
 
         <h1>Use Cases</h1>
-        <p>40 real-world scenarios showing ScalyClaw in action. Each walks through a concrete goal, the setup where relevant, and what the experience looks like. Every tool name, parameter, and flow described here matches the actual implementation — no theoretical features.</p>
+        <p>50 real-world scenarios showing ScalyClaw in action. Each walks through a concrete goal, the setup where relevant, and what the experience looks like. Every tool name, parameter, and flow described here matches the actual implementation — no theoretical features.</p>
 
         <!-- ─────────────────────────────────────────────── -->
         <h2 id="personal">1. Cross-Channel Personal Assistant</h2>
@@ -2024,6 +2024,497 @@
 <span class="cmt">→ submit_job: { toolName: "schedule_recurrent_task",
     payload: { task: "Check AAPL price. Alert if above $220 or below $190.",
     cron: "*/30 9-16 * * 1-5", timezone: "America/New_York" } }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="onboarding">41. Employee Onboarding Automation</h2>
+
+        <p>Automate the first-week experience for new hires. ScalyClaw walks them through setup checklists, answers policy questions from stored documentation, schedules intro meetings, and tracks completion — all from the channel they're most comfortable with.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores onboarding checklists and company policies in memory — answers questions grounded in real docs</li>
+          <li>Schedules daily check-in reminders for the first week with progress tracking</li>
+          <li>Creates accounts and provisions access by delegating to an onboarding agent with MCP integrations</li>
+          <li>Tracks which steps are complete and proactively nudges on overdue items</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">New hire starting Monday — Alex Torres, backend engineer.
+           Set up onboarding.</span>
+
+<span class="cmt">→ memory_store: { type: "event",
+    content: "Onboarding: Alex Torres, backend engineer, starts Monday",
+    tags: ["onboarding", "person:alex-torres"] }
+→ submit_job: { toolName: "schedule_recurrent_task",
+    payload: { task: "Check onboarding progress for Alex Torres. Review completed
+           steps in memory. Nudge on any overdue items.",
+    cron: "0 10 * * 1-5", timezone: "America/New_York" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Onboarding set up for Alex Torres. I'll check progress every
+           weekday at 10 AM. Here's the checklist:
+           ☐ GitHub org invite
+           ☐ Slack workspace access
+           ☐ 1Password vault access
+           ☐ Dev environment setup guide sent
+           ☐ Intro meetings scheduled (manager, team, buddy)
+           ☐ First PR submitted</span>
+
+<span class="cmt">— Monday morning, proactive check —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Alex Torres onboarding — Day 1 update:
+           ✓ GitHub invite accepted
+           ✓ Slack active
+           ☐ 1Password — invite pending (sent yesterday)
+           ☐ Dev environment — not started
+           Want me to resend the 1Password invite?</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="changelog">42. Automated Changelog &amp; Release Notes</h2>
+
+        <p>Generate changelogs from your Git history via MCP. ScalyClaw reads commits, groups them by type (feature, fix, refactor), drafts release notes in your preferred format, and stores each release in memory for future reference.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Reads Git commit history between tags via GitHub MCP server</li>
+          <li>Delegates to a writer agent that categorizes commits and drafts release notes</li>
+          <li>Writes changelog files to the workspace and sends them via <code>send_file</code></li>
+          <li>Stores release summaries in memory — ask "what shipped in v2.3?" months later</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Generate release notes for v2.4 — compare against v2.3 tag.</span>
+
+<span class="cmt">→ submit_job: { toolName: "delegate_agent",
+    payload: { agentId: "writer-agent",
+    task: "Read all commits between tags v2.3 and v2.4 via GitHub MCP.
+           Group by: Features, Fixes, Refactors, Breaking Changes.
+           Write a CHANGELOG entry in Keep a Changelog format.
+           Save to workspace/CHANGELOG-v2.4.md." } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Release notes for v2.4:
+
+           ## [2.4.0] — 2026-03-02
+           ### Added
+           - Dark mode across all dashboard pages (#312)
+           - Webhook retry with exponential backoff (#318)
+           ### Fixed
+           - Memory search returning stale results after TTL expiry (#305)
+           - Signal adapter dropping attachments over 10 MB (#311)
+           ### Changed
+           - Model selection now uses weighted-random within priority groups
+
+           Saved to workspace/CHANGELOG-v2.4.md.</span>
+
+<span class="cmt">→ memory_store: { type: "fact",
+    content: "Release v2.4: dark mode, webhook retry, memory fix, signal fix, model selection change",
+    tags: ["release:v2.4"] }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="competitive-intel">43. Competitive Intelligence Tracker</h2>
+
+        <p>Monitor competitors by scheduling recurring tasks that check websites, press releases, and social media via skills and MCP. ScalyClaw stores findings in memory, detects changes over time, and sends you a weekly digest.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Scheduled tasks scrape competitor pricing pages, feature lists, and job postings via <code>execute_code</code></li>
+          <li>Stores snapshots in memory with tags — detects changes by comparing current vs. previous entries</li>
+          <li>Weekly digest summarizes new features, pricing changes, and hiring signals</li>
+          <li>Proactive alerts for significant changes (new product launch, major price drop)</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Every Monday at 8 AM, check competitor pricing pages for Acme Corp
+           and Initech. Compare against last week's snapshot and alert me on
+           any changes.</span>
+
+<span class="cmt">→ submit_job: { toolName: "schedule_recurrent_task",
+    payload: { task: "1. Scrape pricing pages for Acme Corp and Initech via execute_code.
+           2. Search memory for last week's snapshots tagged 'competitor:pricing'.
+           3. Compare current vs previous. If anything changed, alert via send_message.
+           4. Store current snapshot in memory with tag 'competitor:pricing'.",
+    cron: "0 8 * * 1", timezone: "America/New_York" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Scheduled. Every Monday at 8 AM I'll check both competitors and
+           alert you on any pricing changes.</span>
+
+<span class="cmt">— Following Monday —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Competitive pricing update:
+           Acme Corp — no changes.
+           Initech — Pro plan increased from $49/mo to $59/mo (+20%).
+           Enterprise plan now includes SSO (previously add-on at $200/mo).
+           This is the first price increase since October.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="habit-tracker">44. Habit Tracker &amp; Accountability Partner</h2>
+
+        <p>Build a personal habit tracking system entirely through conversation. ScalyClaw stores your habits and daily check-ins in memory, sends reminders at your preferred times, tracks streaks, and gives you weekly progress reports.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores habit definitions and daily completions in memory with date-tagged entries</li>
+          <li>Scheduled daily reminders via <code>schedule_recurrent_reminder</code> — plain text, no LLM cost</li>
+          <li>Weekly progress reports via <code>schedule_recurrent_task</code> — searches memory, calculates streaks and completion rates</li>
+          <li>Proactive follow-ups in the evening if you haven't checked in</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Track these daily habits: 30 min exercise, read 20 pages,
+           no sugar. Remind me at 7 AM and give me a weekly report on Sundays.</span>
+
+<span class="cmt">→ memory_store: { type: "fact",
+    content: "Habits: 1) 30 min exercise, 2) read 20 pages, 3) no sugar",
+    tags: ["habit:definition"], confidence: 3 }
+→ submit_job: { toolName: "schedule_recurrent_reminder",
+    payload: { task: "Daily habit check-in: exercise, reading, no sugar",
+    cron: "0 7 * * *", timezone: "America/New_York" } }
+→ submit_job: { toolName: "schedule_recurrent_task",
+    payload: { task: "Search memory for habit check-ins from the past 7 days.
+           Calculate completion rate and current streak for each habit.
+           Send a weekly progress report.",
+    cron: "0 10 * * 0", timezone: "America/New_York" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Tracking 3 habits. Daily reminder at 7 AM, weekly report on
+           Sundays at 10 AM.</span>
+
+<span class="cmt">— Evening check-in —</span>
+
+<span class="fn">You:</span>       <span class="str">Done: exercise ✓, reading ✓, sugar — had a cookie.</span>
+
+<span class="cmt">→ memory_store: { type: "event",
+    content: "Habit check-in 2026-03-02: exercise ✓, reading ✓, no sugar ✗",
+    tags: ["habit:checkin", "date:2026-03-02"] }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Logged. 2/3 today. Exercise streak: 12 days. Reading: 8 days.
+           No sugar streak reset to 0 (was 5 days).</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="seo-audit">45. SEO Audit &amp; Content Optimization</h2>
+
+        <p>Run technical SEO audits on your website using code execution and MCP. ScalyClaw crawls pages, checks meta tags, measures load times, identifies broken links, and suggests improvements — all from a scheduled task or on-demand conversation.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Crawls pages via <code>execute_code</code> (Python with requests/BeautifulSoup) to check meta tags, headings, alt text</li>
+          <li>Detects broken links, missing canonical tags, and duplicate titles</li>
+          <li>Scheduled weekly audits store results in memory for trend tracking</li>
+          <li>Delegates deep content analysis to a specialized SEO agent</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Run an SEO audit on https://mysite.com — check the top 20 pages.</span>
+
+<span class="cmt">→ submit_job: { toolName: "execute_code",
+    payload: { language: "python",
+    code: "import requests, json\nfrom bs4 import BeautifulSoup\n
+           # crawl sitemap, check meta titles, descriptions, h1 tags,
+           # canonical URLs, broken links for top 20 pages\n
+           print(json.dumps(results))" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">SEO audit for mysite.com — 20 pages scanned:
+
+           Issues found:
+           🔴 3 pages missing meta description
+           🔴 /blog/old-post — returns 404 (linked from 5 pages)
+           🟡 7 pages have duplicate title tags
+           🟡 /pricing — no canonical tag, indexed twice
+           🟢 All images have alt text
+           🟢 Average load time: 1.2s (good)
+
+           Want me to schedule this as a weekly check?</span>
+
+<span class="fn">You:</span>       <span class="str">Yes, every Sunday at midnight.</span>
+
+<span class="cmt">→ submit_job: { toolName: "schedule_recurrent_task",
+    payload: { task: "Run SEO audit on mysite.com top 20 pages.
+           Compare results against last week's audit in memory.
+           Alert on new issues or regressions.",
+    cron: "0 0 * * 0" } }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="project-management">46. Lightweight Project Management</h2>
+
+        <p>Track projects, milestones, and blockers through conversation. ScalyClaw stores project state in memory, schedules milestone reminders, and gives you on-demand status reports — a project manager you can talk to from any channel.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores project milestones, blockers, and status updates in memory with typed tags</li>
+          <li>Scheduled weekly project digests — searches memory, calculates progress, flags overdue items</li>
+          <li>Cross-channel updates — report progress from Telegram, get a summary on Discord</li>
+          <li>Integrates with GitHub MCP for issue tracking and PR status</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">New project: "API v3 Migration". Milestones:
+           1. Schema design — due March 10
+           2. Endpoint implementation — due March 20
+           3. Integration tests — due March 25
+           4. Production deploy — due March 31</span>
+
+<span class="cmt">→ memory_store: { type: "fact",
+    content: "Project: API v3 Migration. 4 milestones. Schema design (Mar 10),
+    endpoint impl (Mar 20), integration tests (Mar 25), deploy (Mar 31)",
+    tags: ["project:api-v3", "milestone"], confidence: 3 }
+→ submit_job: { toolName: "schedule_reminder",
+    payload: { message: "API v3 milestone due today: Schema design",
+    at: "2026-03-10T09:00:00Z" } }
+→ submit_job: { toolName: "schedule_reminder",
+    payload: { message: "API v3 milestone due today: Endpoint implementation",
+    at: "2026-03-20T09:00:00Z" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Project tracked. Reminders set for each milestone due date.</span>
+
+<span class="cmt">— A week later —</span>
+
+<span class="fn">You:</span>       <span class="str">Schema design is done. Mark it complete.</span>
+
+<span class="cmt">→ memory_store: { type: "event",
+    content: "API v3: Schema design milestone completed — 2026-03-08 (2 days early)",
+    tags: ["project:api-v3", "milestone:complete"] }</span>
+
+<span class="fn">You:</span>       <span class="str">Project status for API v3?</span>
+
+<span class="cmt">→ memory_search: { query: "API v3 migration project milestones" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">API v3 Migration — 25% complete (1/4 milestones)
+           ✓ Schema design — completed Mar 8 (2 days early)
+           ◯ Endpoint implementation — due Mar 20 (12 days)
+           ◯ Integration tests — due Mar 25
+           ◯ Production deploy — due Mar 31
+           On track. No blockers recorded.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="media-processing">47. Media Processing &amp; Conversion Pipeline</h2>
+
+        <p>Send images, audio, video, or documents to ScalyClaw and have them processed on workers. Resize images, convert formats, extract audio from video, generate thumbnails, or compress files — all triggered by sending a file to any channel.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Processes media files via <code>execute_code</code> (Python with Pillow, ffmpeg, etc.) on workers</li>
+          <li>Creates reusable media processing skills — register once, invoke by name</li>
+          <li>Batch processing via <code>submit_parallel_jobs</code> — convert multiple files concurrently</li>
+          <li>Results sent back via <code>send_file</code> to whichever channel you're using</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="cmt">[sends presentation-recording.mp4]</span>
+           <span class="str">Extract the audio as MP3 and generate a thumbnail from the
+           first frame.</span>
+
+<span class="cmt">→ submit_parallel_jobs: { jobs: [
+    { toolName: "execute_code",
+      payload: { language: "bash",
+      code: "ffmpeg -i /workspace/presentation-recording.mp4 -q:a 2
+             /workspace/presentation-audio.mp3" } },
+    { toolName: "execute_code",
+      payload: { language: "bash",
+      code: "ffmpeg -i /workspace/presentation-recording.mp4 -frames:v 1
+             /workspace/presentation-thumb.jpg" } }
+  ] }
+→ send_file: { path: "presentation-audio.mp3", caption: "Audio extracted" }
+→ send_file: { path: "presentation-thumb.jpg", caption: "First frame thumbnail" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Here's the audio (MP3, 42 MB) and the thumbnail.</span>
+           <span class="cmt">[sends presentation-audio.mp3]</span>
+           <span class="cmt">[sends presentation-thumb.jpg]</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="migration-assistant">48. Infrastructure Migration Assistant</h2>
+
+        <p>Plan and execute cloud migrations with ScalyClaw as your co-pilot. It inventories current infrastructure via <code>execute_command</code>, stores the migration plan in memory, tracks progress across phases, and runs validation checks after each step.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Runs infrastructure discovery commands and stores inventory in memory</li>
+          <li>Delegates migration planning to a specialized agent with access to MCP and file tools</li>
+          <li>Tracks migration phases in memory — "pre-migration", "in-progress", "validation", "complete"</li>
+          <li>Scheduled validation checks after each migration step to confirm success</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">We're moving the user service from Docker Compose to Kubernetes.
+           First, inventory the current setup.</span>
+
+<span class="cmt">→ submit_parallel_jobs: { jobs: [
+    { toolName: "execute_command",
+      payload: { command: "docker compose ps --format json" } },
+    { toolName: "execute_command",
+      payload: { command: "docker compose config --format json" } }
+  ] }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Current setup:
+           3 services: user-api (Node 20), user-db (Postgres 16), redis (7.2)
+           Volumes: user-db-data (persistent), redis-data (ephemeral)
+           Ports: 3000 (api), 5432 (db), 6379 (redis)
+           Env vars: 14 total, 4 secrets (DB_PASSWORD, JWT_SECRET, etc.)
+
+           Ready to generate the Kubernetes manifests?</span>
+
+<span class="cmt">→ memory_store: { type: "fact",
+    content: "User service infra: 3 containers (Node API, Postgres 16, Redis 7.2),
+    14 env vars, 4 secrets, persistent DB volume",
+    tags: ["migration:user-service", "phase:inventory"] }</span>
+
+<span class="fn">You:</span>       <span class="str">Yes, generate the K8s manifests and store the secrets in our vault.</span>
+
+<span class="cmt">→ submit_job: { toolName: "delegate_agent",
+    payload: { agentId: "devops-agent",
+    task: "Generate Kubernetes manifests for the user service based on the
+           Docker Compose inventory in memory. Create: Deployment, Service,
+           ConfigMap, and PersistentVolumeClaim. Write to workspace/k8s/.
+           Store DB_PASSWORD and JWT_SECRET in vault." } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">K8s manifests written to workspace/k8s/:
+           - deployment.yaml (3 containers, resource limits set)
+           - service.yaml (ClusterIP, port 3000)
+           - configmap.yaml (10 non-secret env vars)
+           - pvc.yaml (10Gi for Postgres data)
+           Secrets stored in vault: DB_PASSWORD, JWT_SECRET, API_KEY, REDIS_PASSWORD.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="personal-journal">49. Personal Journal &amp; Reflection</h2>
+
+        <p>Use ScalyClaw as a private digital journal. Log thoughts, reflections, and daily entries from any channel — the memory system preserves everything with semantic search so you can revisit entries by topic, date, or mood months later.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores journal entries in memory with date tags, mood tags, and topic categorization</li>
+          <li>Scheduled evening prompts via <code>schedule_recurrent_reminder</code> — consistent journaling habit</li>
+          <li>Semantic search across all entries — "when did I feel most productive?" finds relevant entries</li>
+          <li>Monthly reflection reports via scheduled tasks — patterns, recurring themes, mood trends</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Evening reminder on Signal —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Evening journal prompt: How was your day?</span>
+
+<span class="fn">You:</span>       <span class="str">Good day. Finally shipped the auth refactor after 3 weeks.
+           Team demo went well — got positive feedback from the VP.
+           Feeling relieved and motivated. Tomorrow: start on the
+           billing module.</span>
+
+<span class="cmt">→ memory_store: { type: "event",
+    content: "Journal: Shipped auth refactor (3 weeks). Team demo — positive VP feedback.
+    Feeling relieved and motivated. Next: billing module.",
+    tags: ["journal", "date:2026-03-02", "mood:positive", "topic:work"],
+    source: "user-stated", confidence: 3 }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Nice — 3 weeks of work shipped and recognized. Logged.</span>
+
+<span class="cmt">— 2 months later —</span>
+
+<span class="fn">You:</span>       <span class="str">What were my best days in March?</span>
+
+<span class="cmt">→ memory_search: { query: "positive productive good day March 2026",
+    tags: ["journal", "mood:positive"] }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Your best March days:
+           • Mar 2 — Shipped auth refactor, positive VP feedback
+           • Mar 14 — Closed 3 enterprise deals, team dinner
+           • Mar 22 — Billing module v1 deployed, zero bugs in staging
+           Common thread: shipping milestones with team recognition.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="multi-step-approval">50. Multi-Step Approval Workflows</h2>
+
+        <p>Build approval workflows that span channels and time. ScalyClaw tracks requests, schedules follow-ups, escalates when approvals stall, and notifies all parties when decisions are made — using memory for state tracking and scheduled tasks for time-based escalation.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores approval requests in memory with status tags: pending, approved, rejected, escalated</li>
+          <li>Schedules follow-up reminders if approvals are not received within a deadline</li>
+          <li>Escalation via <code>schedule_task</code> — if no response in 48 hours, alert the escalation contact</li>
+          <li>Cross-channel notifications — request on Slack, approve from Telegram, result posted to both</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">I need budget approval for $15,000 for the new staging cluster.
+           If I don't get a response by Thursday, escalate to the CTO.</span>
+
+<span class="cmt">→ memory_store: { type: "event",
+    content: "Budget approval request: $15,000 for new staging cluster.
+    Status: pending. Escalation: CTO if no response by Thursday.",
+    tags: ["approval", "status:pending", "budget"], confidence: 3 }
+→ submit_job: { toolName: "schedule_task",
+    payload: { task: "Check memory for staging cluster budget approval (tag: approval, status:pending).
+           If still pending, update status to 'escalated' and alert via send_message
+           that escalation to CTO is needed.",
+    at: "2026-03-06T09:00:00Z" } }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Budget request logged — $15,000 for staging cluster.
+           If no response by Thursday 9 AM, I'll escalate to the CTO.</span>
+
+<span class="cmt">— Wednesday, response from Telegram —</span>
+
+<span class="fn">You:</span>       <span class="str">Budget approved for the staging cluster. VP signed off.</span>
+
+<span class="cmt">→ memory_update: { id: "mem_xyz789",
+    content: "Budget approval: $15,000 for staging cluster — APPROVED by VP, Mar 5",
+    tags: ["approval", "status:approved", "budget"] }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Approved — I've updated the record and cancelled the Thursday
+           escalation. Want me to start provisioning the cluster?</span></pre>
         </div>
 
         <nav class="docs-page-nav">
