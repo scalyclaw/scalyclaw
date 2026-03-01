@@ -286,77 +286,129 @@ function trimToContextBudget(messages: ChatMessage[], maxChars: number): void {
   }
 }
 
-// ─── Friendly tool-call descriptions for auto-progress ───
-
-const TOOL_LABELS: Record<string, string> = {
-  // Memory
-  memory_search:  'Searching memory',
-  memory_store:   'Saving to memory',
-  memory_recall:  'Recalling memories',
-  memory_update:  'Updating memory',
-  memory_delete:  'Removing a memory',
-  // Messaging
-  send_message:   'Sending a message',
-  send_file:      'Sending a file',
-  // Agents
-  delegate_agent: 'Delegating to an agent',
-  list_agents:    'Checking agents',
-  create_agent:   'Creating an agent',
-  update_agent:   'Updating an agent',
-  delete_agent:   'Removing an agent',
-  set_agent_tools: 'Setting agent tools',
-  set_agent_mcps:  'Setting agent MCPs',
-  // Scheduling
-  schedule_reminder:            'Setting a reminder',
-  schedule_recurrent_reminder:  'Setting up a recurrent reminder',
-  schedule_task:                'Scheduling a task',
-  schedule_recurrent_task:      'Setting up a recurrent task',
-  list_reminders:               'Listing reminders',
-  list_tasks:                   'Listing tasks',
-  cancel_reminder:              'Cancelling a reminder',
-  cancel_task:                  'Cancelling a task',
-  // Usage
-  get_usage:                    'Checking usage',
-  // Vault
-  vault_store:  'Storing a secret',
-  vault_check:  'Checking the vault',
-  vault_delete: 'Removing a secret',
-  vault_list:   'Listing secrets',
-  // Skills
-  execute_skill:  'Running a skill',
-  list_skills:    'Checking skills',
-  // Commands
-  execute_command: 'Running a command',
-  execute_code:    'Running code',
-  // Files
-  read_file:       'Reading a file',
-  write_file:      'Writing a file',
-  patch_file:      'Editing a file',
-  // Config / system
-  get_config:     'Checking config',
-  update_config:  'Updating config',
-  list_queues:    'Checking queues',
-  compact_context:'Compacting context',
-};
+// ─── Context-aware tool-call descriptions for auto-progress ───
 
 import type { ToolCall } from '../models/provider.js';
+
+/** Extract a context-aware description from a single tool call */
+function describeToolCall(name: string, input: Record<string, unknown> | undefined): string {
+  // Unwrap submit_job payload
+  let payload = input;
+  if (name === 'submit_job' && input) {
+    name = (input.toolName as string) || name;
+    payload = (input.payload as Record<string, unknown>) ?? input;
+  }
+
+  const p = payload ?? {};
+
+  switch (name) {
+    // Skills — include skill name
+    case 'execute_skill': {
+      const id = p.skillId as string;
+      return id ? `Running ${id}` : 'Running a skill';
+    }
+    // Agents — include agent name and task hint
+    case 'delegate_agent': {
+      const id = p.agentId as string;
+      return id ? `Asking ${id}` : 'Delegating to an agent';
+    }
+    case 'create_agent': {
+      const n = (p.name as string) || (p.id as string);
+      return n ? `Creating agent "${n}"` : 'Creating an agent';
+    }
+    // Memory — include query/subject
+    case 'memory_search': {
+      const q = p.query as string;
+      return q ? `Searching memory for "${q}"` : 'Searching memory';
+    }
+    case 'memory_store': {
+      const s = p.subject as string;
+      return s ? `Remembering "${s}"` : 'Saving to memory';
+    }
+    // Commands
+    case 'execute_command': {
+      const cmd = p.command as string;
+      if (cmd) {
+        const short = cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd;
+        return `Running \`${short}\``;
+      }
+      return 'Running a command';
+    }
+    case 'execute_code': {
+      const lang = p.language as string;
+      return lang ? `Running ${lang} code` : 'Running code';
+    }
+    // Scheduling — include what's being scheduled
+    case 'schedule_reminder':
+    case 'schedule_task': {
+      const msg = (p.message as string) || (p.task as string);
+      if (msg) {
+        const short = msg.length > 40 ? msg.slice(0, 40) + '...' : msg;
+        return `Scheduling "${short}"`;
+      }
+      return name === 'schedule_reminder' ? 'Setting a reminder' : 'Scheduling a task';
+    }
+    case 'schedule_recurrent_reminder':
+    case 'schedule_recurrent_task':
+      return 'Setting up a recurring schedule';
+    // Files — include path
+    case 'file_read':
+    case 'file_write':
+    case 'file_edit': {
+      const path = p.path as string;
+      if (path) {
+        const short = path.length > 30 ? '...' + path.slice(-30) : path;
+        return `${name === 'file_read' ? 'Reading' : name === 'file_write' ? 'Writing' : 'Editing'} ${short}`;
+      }
+      return name === 'file_read' ? 'Reading a file' : name === 'file_write' ? 'Writing a file' : 'Editing a file';
+    }
+    case 'send_file': {
+      const path = p.path as string;
+      if (path) {
+        const fileName = path.split('/').pop() || path;
+        return `Sending ${fileName}`;
+      }
+      return 'Sending a file';
+    }
+    // System info — include section
+    case 'system_info': {
+      const section = p.section as string;
+      return section ? `Checking ${section}` : 'Checking system info';
+    }
+    // Simple labels for everything else
+    case 'send_message':    return '';  // Don't narrate send_message (it IS user-facing)
+    case 'list_reminders':  return 'Checking your reminders';
+    case 'list_tasks':      return 'Checking your tasks';
+    case 'cancel_reminder': return 'Cancelling a reminder';
+    case 'cancel_task':     return 'Cancelling a task';
+    case 'memory_recall':   return 'Recalling memories';
+    case 'memory_update':   return 'Updating a memory';
+    case 'memory_delete':   return 'Removing a memory';
+    case 'vault_store':     return 'Storing a secret';
+    case 'vault_list':      return 'Checking the vault';
+    case 'register_skill':  return 'Registering a skill';
+    case 'compact_context': return 'Freeing up context space';
+    default:                return '';
+  }
+}
 
 /** Build a friendly one-liner from a list of tool calls */
 function describeToolCalls(toolCalls: ToolCall[]): string {
   const labels: string[] = [];
   for (const tc of toolCalls) {
-    let name = tc.name;
-    // Unwrap submit_job / submit_parallel_jobs
-    if (name === 'submit_job' && tc.input) {
-      name = (tc.input.toolName as string) || name;
-    } else if (name === 'submit_parallel_jobs' && tc.input) {
-      const jobs = tc.input.jobs as Array<{ toolName?: string }> | undefined;
+    // Unwrap submit_parallel_jobs into individual descriptions
+    if (tc.name === 'submit_parallel_jobs' && tc.input) {
+      const jobs = tc.input.jobs as Array<{ toolName?: string; payload?: Record<string, unknown> }> | undefined;
       if (jobs) {
-        for (const j of jobs) labels.push(TOOL_LABELS[j.toolName || ''] || j.toolName || 'working');
+        for (const j of jobs) {
+          const desc = describeToolCall(j.toolName || '', j.payload);
+          if (desc) labels.push(desc);
+        }
       }
       continue;
     }
-    labels.push(TOOL_LABELS[name] || name);
+    const desc = describeToolCall(tc.name, tc.input as Record<string, unknown>);
+    if (desc) labels.push(desc);
   }
   if (labels.length === 0) return '';
   const unique = [...new Set(labels)];
