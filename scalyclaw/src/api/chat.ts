@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
-import { getRecentMessages } from '../core/db.js';
+import { getAllRecentMessages } from '../core/db.js';
 import type { ProgressEvent } from '../queue/progress.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { PROGRESS_CHANNEL_PATTERN, PROGRESS_CHANNEL_PREFIX, PROGRESS_BUFFER_KEY_PREFIX, CHAT_RESPONSE_TIMEOUT_MS } from '../const/constants.js';
@@ -87,7 +87,7 @@ export function registerChatRoutes(server: FastifyInstance): void {
   // GET /api/messages — recent message history (unified across all channels)
   server.get<{ Querystring: { limit?: string } }>('/api/messages', async (request) => {
     const limit = Math.min(Number(request.query.limit) || 50, 200);
-    const messages = getRecentMessages(limit);
+    const messages = getAllRecentMessages(limit);
     return { messages };
   });
 

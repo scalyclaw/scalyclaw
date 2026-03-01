@@ -1,5 +1,5 @@
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO, MAX_TOOL_RESULT_CHARS } from '../const/constants.js';
+import { DEFAULT_CONTEXT_WINDOW } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import type { ChatMessage } from '../models/provider.js';
@@ -8,15 +8,16 @@ import { ASSISTANT_TOOLS } from '../tools/tools.js';
 import { getMcpTools } from '../mcp/mcp-manager.js';
 import { handleToolCall, type ToolContext } from './tool-handlers.js';
 import { buildSystemPrompt } from '../prompt/builder.js';
-import { getRecentMessages, recordUsage } from '../core/db.js';
+import { recordUsage } from '../core/db.js';
 import { getProvider } from '../models/registry.js';
 import { searchMemory } from '../memory/memory.js';
+import { initContext, calibrate, ensureBudget, truncateToolResult } from './context.js';
 
 export type StopReason = 'continue' | 'cancelled' | 'budget';
 
 export interface OrchestratorInput {
   channelId: string;
-  /** Used for logging only — the user message is already stored in DB and loaded via getRecentMessages */
+  /** Used for logging only — the user message is already stored in DB and loaded via getChannelMessages */
   text: string;
   sendToChannel: (channelId: string, text: string) => Promise<void>;
   onRoundComplete?: () => Promise<void>;
@@ -64,16 +65,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     log('debug', 'Auto-recall injected memories', { count: memories.length, topScore: memories[0].score });
   }
 
-  // Load unified conversation history (sync SQLite call)
-  const recentMessages = getRecentMessages(50);
-  log('debug', 'Loaded conversation history', { channelId: input.channelId, messageCount: recentMessages.length });
-
-  const messages: ChatMessage[] = recentMessages.map(m => ({
-    role: m.role as ChatMessage['role'],
-    content: m.content,
-  }));
-
-  // Select model
+  // Select model (need contextWindow for initContext)
   const modelId = selectModel(config.orchestrator.models)
     ?? selectModel(config.models.models.filter(m => m.enabled).map(m => ({ model: m.id, weight: m.weight, priority: m.priority })));
   if (!modelId) {
@@ -81,12 +73,20 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
   }
   const { provider: providerId, model } = parseModelId(modelId);
   const provider = getProvider(providerId);
+  const modelConfig = config.models.models.find(m => m.id === modelId);
   log('debug', 'Model selected', { providerId, model, modelId });
 
-  // Trim old messages if context is too large (model-aware budget)
-  const modelConfig = config.models.models.find(m => m.id === modelId);
-  const maxContextChars = (modelConfig?.contextWindow ?? DEFAULT_CONTEXT_WINDOW) * CHARS_PER_TOKEN_RATIO;
-  trimToContextBudget(messages, maxContextChars);
+  const mcpTools = getMcpTools();
+  const allTools = mcpTools.length > 0 ? [...ASSISTANT_TOOLS, ...mcpTools] : ASSISTANT_TOOLS;
+
+  // Load channel-scoped messages + build context budget
+  const { messages, budget } = initContext({
+    channelId: input.channelId,
+    systemPrompt,
+    tools: allTools,
+    contextWindow: modelConfig?.contextWindow ?? DEFAULT_CONTEXT_WINDOW,
+  });
+  log('debug', 'Loaded conversation history', { channelId: input.channelId, messageCount: messages.length });
 
   const toolCtx: ToolContext = {
     channelId: input.channelId,
@@ -95,9 +95,6 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     messages,
     modelId,
   };
-
-  const mcpTools = getMcpTools();
-  const allTools = mcpTools.length > 0 ? [...ASSISTANT_TOOLS, ...mcpTools] : ASSISTANT_TOOLS;
 
   // LLM tool loop
   let finalContent = '';
@@ -114,9 +111,15 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     }
 
     round++;
+
+    // Ensure messages fit within context budget before each LLM call
+    await ensureBudget(messages, budget);
+
     log('debug', `--- LLM round ${round} ---`, {
       messagesInContext: messages.length,
       toolsAvailable: allTools.length,
+      messageTokens: budget.messageTokens,
+      messageBudget: budget.messageBudget,
     });
 
     const response = await provider.chat({
@@ -132,6 +135,11 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
     totalInputTokens += response.usage?.inputTokens ?? 0;
     totalOutputTokens += response.usage?.outputTokens ?? 0;
+
+    // Calibrate after round 1 using real token counts
+    if (round === 1 && response.usage?.inputTokens) {
+      calibrate(budget, response.usage.inputTokens, messages, systemPrompt, allTools);
+    }
 
     log('debug', `LLM round ${round} response`, {
       stopReason: response.stopReason,
@@ -193,11 +201,9 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       })
     );
 
-    // Add all tool results to conversation (truncate oversized results to prevent context blowup)
+    // Add all tool results to conversation (dynamically truncate based on remaining budget)
     for (const { toolCall, result } of toolResults) {
-      const content = result.length > MAX_TOOL_RESULT_CHARS
-        ? result.slice(0, MAX_TOOL_RESULT_CHARS) + `\n...(truncated from ${result.length} chars)`
-        : result;
+      const content = truncateToolResult(result, budget);
       messages.push({
         role: 'tool',
         content,
@@ -246,54 +252,6 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
   });
 
   return finalContent;
-}
-
-/** Estimate character size of a message including tool_calls JSON */
-function messageChars(m: ChatMessage): number {
-  let chars = m.content.length;
-  if (m.tool_calls && m.tool_calls.length > 0) {
-    chars += JSON.stringify(m.tool_calls).length;
-  }
-  return chars;
-}
-
-/**
- * Remove oldest messages until total content fits within the character budget.
- * Preserves tool-call/tool-result groups: an assistant message with tool_calls
- * is always removed together with its following tool-result messages.
- */
-function trimToContextBudget(messages: ChatMessage[], maxChars: number): void {
-  let totalChars = messages.reduce((sum, m) => sum + messageChars(m), 0);
-  if (totalChars <= maxChars || messages.length <= 1) return;
-
-  let removeCount = 0;
-  let removedChars = 0;
-
-  while (removeCount < messages.length - 1 && totalChars - removedChars > maxChars) {
-    const msg = messages[removeCount];
-    removedChars += messageChars(msg);
-    removeCount++;
-
-    // If we just removed an assistant message with tool_calls,
-    // also remove all following tool-result messages to keep pairs intact
-    if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-      while (removeCount < messages.length - 1 && messages[removeCount].role === 'tool') {
-        removedChars += messageChars(messages[removeCount]);
-        removeCount++;
-      }
-    }
-  }
-
-  // Safety: never leave orphaned tool results at the start
-  while (removeCount < messages.length && messages[removeCount].role === 'tool') {
-    removedChars += messageChars(messages[removeCount]);
-    removeCount++;
-  }
-
-  if (removeCount > 0) {
-    messages.splice(0, removeCount);
-    log('debug', 'Trimmed conversation context', { removedMessages: removeCount, removedChars });
-  }
 }
 
 // ─── Context-aware tool-call descriptions for auto-progress ───

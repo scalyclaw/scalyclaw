@@ -81,9 +81,23 @@ export const FILE_CACHE_MAX_AGE_S = 3600;
 /** Default model context window size (tokens). */
 export const DEFAULT_CONTEXT_WINDOW = 128_000;
 
-/** Approximate characters per token (heuristic). */
-export const CHARS_PER_TOKEN_RATIO = 3.5;
+/** Default approximate characters per token (initial heuristic, calibrated after round 1). */
+export const DEFAULT_CHARS_PER_TOKEN = 3.5;
 
-/** Max characters for a single tool result in conversation context.
- *  Prevents a single large result (e.g. skill stdout) from blowing up the context window. */
-export const MAX_TOOL_RESULT_CHARS = 8_000;
+/** Tokens reserved for output generation + overhead. */
+export const SAFETY_MARGIN_TOKENS = 2_000;
+
+/** Auto-compact when message tokens exceed this fraction of the message budget. */
+export const COMPACTION_THRESHOLD = 0.75;
+
+/** After compaction, keep approximately this fraction of the message budget as recent messages. */
+export const COMPACTION_KEEP_RATIO = 0.5;
+
+/** Floor for dynamic tool result truncation (chars). */
+export const MIN_TOOL_RESULT_CHARS = 2_000;
+
+/** Ceiling for dynamic tool result truncation (chars). */
+export const MAX_TOOL_RESULT_CHARS = 20_000;
+
+/** A single tool result can consume at most this fraction of the remaining budget (in chars). */
+export const TOOL_RESULT_BUDGET_FRACTION = 0.25;

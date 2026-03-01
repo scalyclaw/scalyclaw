@@ -1,5 +1,6 @@
 import type { Job } from 'bullmq';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { DEFAULT_CONTEXT_WINDOW } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import { loadAgent } from '../agents/agent-loader.js';
@@ -13,6 +14,7 @@ import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-s
 import { recordUsage } from '../core/db.js';
 import { sendToChannel } from '../channels/manager.js';
 import type { AgentTaskData } from '@scalyclaw/shared/queue/jobs.js';
+import { buildBudget, ensureBudget, calibrate, truncateToolResult } from '../orchestrator/context.js';
 
 export interface AgentResult {
   response: string;
@@ -128,6 +130,14 @@ async function runAgentLoop(
     'submit_job', 'submit_parallel_jobs', 'get_job', 'list_active_jobs', 'stop_job',
   ]);
 
+  // Lookup model config once (before the loop)
+  const modelConfig = config.models.models.find(m => m.id === modelId);
+  const contextWindow = modelConfig?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
+
+  // Build context budget for this agent
+  const agentToolDefs = agentTools.length > 0 ? agentTools : undefined;
+  const budget = buildBudget(agent.systemPrompt, agentToolDefs, contextWindow, messages);
+
   const toolCtx: ToolContext = {
     channelId,
     sendToChannel: async (chId: string, text: string) => {
@@ -164,14 +174,21 @@ async function runAgentLoop(
         }
       }
 
-      const modelConfig = config.models.models.find(m => m.id === modelId);
-      log('debug', `Agent "${agentId}" LLM round ${round}`, { messageCount: messages.length, tools: agentTools.length });
+      // Ensure messages fit within context budget before each LLM call
+      await ensureBudget(messages, budget);
+
+      log('debug', `Agent "${agentId}" LLM round ${round}`, {
+        messageCount: messages.length,
+        tools: agentTools.length,
+        messageTokens: budget.messageTokens,
+        messageBudget: budget.messageBudget,
+      });
 
       const response = await provider.chat({
         model,
         systemPrompt: agent.systemPrompt,
         messages,
-        tools: agentTools.length > 0 ? agentTools : undefined,
+        tools: agentToolDefs,
         maxTokens: modelConfig?.maxTokens ?? 8192,
         temperature: modelConfig?.temperature ?? 0.7,
         reasoningEnabled: modelConfig?.reasoningEnabled,
@@ -181,12 +198,27 @@ async function runAgentLoop(
       totalInputTokens += response.usage?.inputTokens ?? 0;
       totalOutputTokens += response.usage?.outputTokens ?? 0;
 
+      // Calibrate after round 1
+      if (round === 1 && response.usage?.inputTokens) {
+        calibrate(budget, response.usage.inputTokens, messages, agent.systemPrompt, agentToolDefs);
+      }
+
       if (response.content) {
         finalContent = response.content;
       }
 
       // No tool calls — done
       if (response.toolCalls.length === 0) {
+        break;
+      }
+
+      // Guard against runaway token usage
+      if (totalInputTokens > config.orchestrator.maxInputTokens) {
+        log('warn', `Agent "${agentId}" hit cumulative token limit`, {
+          round,
+          totalInputTokens,
+          maxInputTokens: config.orchestrator.maxInputTokens,
+        });
         break;
       }
 
@@ -206,7 +238,8 @@ async function runAgentLoop(
       );
 
       for (const { id, result } of toolResults) {
-        messages.push({ role: 'tool', content: result, tool_call_id: id });
+        const content = truncateToolResult(result, budget);
+        messages.push({ role: 'tool', content, tool_call_id: id });
       }
     }
 

@@ -6,7 +6,7 @@ import { storeMemory, searchMemory, recallMemory, deleteMemory, updateMemory } f
 import { createReminder, createRecurrentReminder, createTask, createRecurrentTask, listReminders, listTasks, cancelReminder, cancelTask, cancelScheduledJobAdmin, deleteScheduledJob } from '../scheduler/scheduler.js';
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, removeRepeatableJob, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
 import { EXECUTION_TIMEOUT_MS, PROCESS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
-import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constants.js';
+import { DEFAULT_CONTEXT_WINDOW, DEFAULT_CHARS_PER_TOKEN } from '../const/constants.js';
 import { getAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
@@ -24,7 +24,7 @@ import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
 import { TOOL_NAMES_SET, AGENT_ELIGIBLE_TOOL_NAMES } from './tools.js';
 import { getConnectionStatuses } from '../mcp/mcp-manager.js';
-import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
+import { buildBudget, ensureBudget, estimateMessagesTokens } from '../orchestrator/context.js';
 import { invalidatePromptCache } from '../prompt/builder.js';
 import { requestJobCancel, trackChannelJob, untrackChannelJob } from '@scalyclaw/shared/queue/cancel.js';
 
@@ -1471,139 +1471,43 @@ async function handleCompactContext(input: Record<string, unknown>, ctx: ToolCon
     return JSON.stringify({ compacted: false, reason: 'Nothing to compact' });
   }
 
-  // Look up model config for context window
   const config = getConfigRef();
   const modelEntry = modelId
     ? config.models.models.find(m => m.id === modelId)
     : undefined;
   const contextWindow = modelEntry?.contextWindow ?? DEFAULT_CONTEXT_WINDOW;
 
-  // Estimate current token usage (chars / CHARS_PER_TOKEN_RATIO heuristic)
-  const estimateChars = (msgs: typeof messages) =>
-    msgs.reduce((sum, m) => {
-      let chars = m.content.length;
-      if (m.tool_calls) chars += JSON.stringify(m.tool_calls).length;
-      return sum + chars;
-    }, 0);
-
-  const totalChars = estimateChars(messages);
-  const estimatedTokensBefore = Math.round(totalChars / CHARS_PER_TOKEN_RATIO);
-
-  // Check threshold — only compact if over 90% of context window (unless forced)
+  // Build a budget and delegate to context module
+  const budget = buildBudget('', undefined, contextWindow, messages);
+  const estimatedTokensBefore = budget.messageTokens;
   const force = input.force === true;
-  if (estimatedTokensBefore < contextWindow * 0.9 && !force) {
+
+  const result = await ensureBudget(messages, budget, { force });
+
+  const estimatedTokensAfter = estimateMessagesTokens(messages, DEFAULT_CHARS_PER_TOKEN);
+
+  if (!result.compacted && !result.trimmed) {
     return JSON.stringify({
       compacted: false,
       reason: 'Context usage below threshold',
       estimatedTokens: estimatedTokensBefore,
       contextWindow,
-      usage: `${Math.round((estimatedTokensBefore / contextWindow) * 100)}%`,
+      usage: `${Math.round((estimatedTokensBefore / budget.messageBudget) * 100)}%`,
     });
   }
 
-  // Identify message groups for compaction.
-  // A group is either:
-  //   - a standalone user/assistant message (no tool_calls)
-  //   - an assistant message with tool_calls + all following tool results
-  const groups: { startIdx: number; endIdx: number }[] = [];
-  let i = 0;
-  while (i < messages.length) {
-    const msg = messages[i];
-    if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
-      // Collect the assistant msg + subsequent tool results
-      const start = i;
-      i++;
-      while (i < messages.length && messages[i].role === 'tool') i++;
-      groups.push({ startIdx: start, endIdx: i - 1 });
-    } else {
-      groups.push({ startIdx: i, endIdx: i });
-      i++;
-    }
-  }
-
-  // Keep the last few groups (target: keep ~50% of context after compaction).
-  // Walk backwards, accumulating chars, until we hit 50% budget.
-  const targetKeepChars = contextWindow * CHARS_PER_TOKEN_RATIO * 0.5;
-  let keepChars = 0;
-  let keepFromGroup = groups.length;
-  for (let g = groups.length - 1; g >= 0; g--) {
-    let groupChars = 0;
-    for (let j = groups[g].startIdx; j <= groups[g].endIdx; j++) {
-      groupChars += messages[j].content.length;
-      if (messages[j].tool_calls) groupChars += JSON.stringify(messages[j].tool_calls).length;
-    }
-    if (keepChars + groupChars > targetKeepChars && keepFromGroup < groups.length) break;
-    keepChars += groupChars;
-    keepFromGroup = g;
-  }
-
-  // Nothing to compact if we'd keep everything
-  if (keepFromGroup === 0) {
-    return JSON.stringify({ compacted: false, reason: 'All messages within budget' });
-  }
-
-  // Collect compaction candidates (all messages before keepFromGroup)
-  const compactEndIdx = groups[keepFromGroup].startIdx;
-  const candidateMessages = messages.slice(0, compactEndIdx);
-
-  if (candidateMessages.length === 0) {
-    return JSON.stringify({ compacted: false, reason: 'No messages eligible for compaction' });
-  }
-
-  // Format candidates for summarization
-  const formatted = candidateMessages.map(m => {
-    let line = `[${m.role}]: ${m.content}`;
-    if (m.tool_calls) line += `\n[tool_calls]: ${JSON.stringify(m.tool_calls)}`;
-    if (m.tool_call_id) line = `[tool result for ${m.tool_call_id}]: ${m.content}`;
-    return line;
-  }).join('\n\n');
-
-  // Summarize via LLM call — use auto model selection
-  const { parseModelId, selectModel } = await import('../models/provider.js');
-  const { getProvider } = await import('../models/registry.js');
-
-  const summaryModelId = selectModel(config.orchestrator.models)
-    ?? selectModel(config.models.models.filter(m => m.enabled).map(m => ({ model: m.id, weight: m.weight, priority: m.priority })));
-  if (!summaryModelId) {
-    return JSON.stringify({ compacted: false, reason: 'No model available for summarization' });
-  }
-
-  const { provider: providerId, model } = parseModelId(summaryModelId);
-  const provider = getProvider(providerId);
-
-  const summaryResponse = await provider.chat({
-    model,
-    systemPrompt: COMPACT_CONTEXT_PROMPT,
-    messages: [{ role: 'user', content: formatted }],
-    maxTokens: 2048,
-    temperature: 0.2,
-  });
-
-  const summary = summaryResponse.content;
-
-  // Replace in-place
-  const messagesBefore = messages.length;
-  messages.splice(0, compactEndIdx);
-  messages.unshift({
-    role: 'user',
-    content: `[Previous conversation summary]\n\n${summary}`,
-  });
-  const messagesAfter = messages.length;
-
-  const totalCharsAfter = estimateChars(messages);
-  const estimatedTokensAfter = Math.round(totalCharsAfter / CHARS_PER_TOKEN_RATIO);
-
   log('info', 'compact_context completed', {
-    messagesBefore,
-    messagesAfter,
+    messagesBefore: result.messagesBefore,
+    messagesAfter: messages.length,
     estimatedTokensBefore,
     estimatedTokensAfter,
   });
 
   return JSON.stringify({
-    compacted: true,
-    messagesBefore,
-    messagesAfter,
+    compacted: result.compacted,
+    trimmed: result.trimmed,
+    messagesBefore: result.messagesBefore,
+    messagesAfter: messages.length,
     estimatedTokensBefore,
     estimatedTokensAfter,
   });
