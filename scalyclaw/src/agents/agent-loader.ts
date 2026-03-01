@@ -10,6 +10,7 @@ export interface AgentDefinition {
   id: string;
   name: string;
   description: string;
+  enabled: boolean;
   maxIterations: number;
   models: { model: string; weight: number; priority: number }[];
   skills: string[];
@@ -35,6 +36,7 @@ export async function loadAllAgents(): Promise<Map<string, AgentDefinition>> {
     id: 'skill-creator-agent',
     name: 'Skill Creator',
     description: 'Builtin agent that creates new skills. Knows skill structure, languages, conventions, and testing workflow.',
+    enabled: true,
     maxIterations: 25,
     models: modelEntry,
     skills: [],
@@ -90,10 +92,18 @@ async function loadAgentFromDir(agentId: string): Promise<void> {
     const config = getConfigRef();
     const agentConfig = config.orchestrator.agents.find(a => a.id === agentId);
 
+    // Skip disabled agents
+    const enabled = agentConfig?.enabled ?? true;
+    if (!enabled) {
+      log('info', `Skipping disabled agent: ${agentId}`);
+      return;
+    }
+
     loadedAgents.set(agentId, {
       id: agentId,
       name,
       description,
+      enabled,
       maxIterations: agentConfig?.maxIterations ?? 25,
       models: agentConfig?.models ?? config.orchestrator.models,
       skills: agentConfig?.skills ?? [],
@@ -178,6 +188,7 @@ ${systemPrompt}`;
     id: agentId,
     name,
     description,
+    enabled: true,
     maxIterations: agentMaxIterations,
     models: agentModels,
     skills: agentSkills,
@@ -238,7 +249,7 @@ ${systemPrompt}`;
   await saveConfig(config);
 
   // Update in memory
-  loadedAgents.set(agentId, { id: agentId, name, description, maxIterations, models, skills, tools, mcpServers, systemPrompt: markdown });
+  loadedAgents.set(agentId, { id: agentId, name, description, enabled: current.enabled, maxIterations, models, skills, tools, mcpServers, systemPrompt: markdown });
 
   log('info', `Agent updated: ${agentId}`);
   return true;

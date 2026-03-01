@@ -10,7 +10,7 @@ import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constant
 import { getAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
-import { runSkillGuard, runCommandShield } from '../guards/guard.js';
+import { runSkillGuard, runAgentGuard, runCommandShield } from '../guards/guard.js';
 import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
@@ -22,7 +22,8 @@ import { listProcesses } from '@scalyclaw/shared/core/registry.js';
 import { checkBudget, buildModelPricing } from '../core/budget.js';
 import { getUsageStats, getCostStats } from '../core/db.js';
 import { registerTool, executeTool, type ToolContext } from './tool-registry.js';
-import { TOOL_NAMES_SET } from './tools.js';
+import { TOOL_NAMES_SET, AGENT_ELIGIBLE_TOOL_NAMES } from './tools.js';
+import { getConnectionStatuses } from '../mcp/mcp-manager.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
 import { invalidatePromptCache } from '../prompt/builder.js';
 import { requestJobCancel, trackChannelJob, untrackChannelJob } from '@scalyclaw/shared/queue/cancel.js';
@@ -586,7 +587,7 @@ async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext)
   if (payloadError) return JSON.stringify({ error: payloadError });
 
   // Server-side skill enforcement for scoped agents
-  if (toolName === 'execute_skill' && ctx.allowedSkillIds) {
+  if (toolName === 'execute_skill' && ctx.allowedSkillIds !== undefined) {
     const skillId = payload.skillId as string;
     if (!ctx.allowedSkillIds.includes(skillId)) {
       return JSON.stringify({ error: `Skill "${skillId}" is not available to this agent.` });
@@ -873,6 +874,38 @@ async function handleCreateAgent(input: Record<string, unknown>): Promise<string
   if (!id.endsWith('-agent')) id = `${id}-agent`;
 
   log('debug', 'create_agent', { id, name, modelId, skills, tools, mcpServers, maxIterations });
+
+  // Run agent guard before creation
+  const guardResult = await runAgentGuard(id, { name, description, systemPrompt, skills });
+  if (!guardResult.passed) {
+    return JSON.stringify({ error: `Agent guard blocked: ${guardResult.reason}` });
+  }
+
+  // Validate tool references
+  if (tools) {
+    const eligibleSet = new Set(AGENT_ELIGIBLE_TOOL_NAMES);
+    const unknown = tools.filter(t => !eligibleSet.has(t));
+    if (unknown.length > 0) {
+      return JSON.stringify({ error: `Unknown tools: ${unknown.join(', ')}. Available: ${AGENT_ELIGIBLE_TOOL_NAMES.join(', ')}` });
+    }
+  }
+
+  // Validate skill references
+  if (skills) {
+    const unknown = skills.filter(s => !getSkill(s));
+    if (unknown.length > 0) {
+      return JSON.stringify({ error: `Unknown skills: ${unknown.join(', ')}. Register them first with register_skill.` });
+    }
+  }
+
+  // Validate MCP server references
+  if (mcpServers) {
+    const connectedIds = new Set(getConnectionStatuses().map(s => s.id));
+    const unknown = mcpServers.filter(s => !connectedIds.has(s));
+    if (unknown.length > 0) {
+      return JSON.stringify({ error: `Unknown MCP servers: ${unknown.join(', ')}. Available: ${[...connectedIds].join(', ') || 'none'}` });
+    }
+  }
 
   const models = modelId
     ? [{ model: modelId, weight: 1, priority: 1 }]

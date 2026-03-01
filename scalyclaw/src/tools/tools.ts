@@ -221,10 +221,6 @@ export const TOOL_NAMES_SET = new Set([
   'list_processes', 'list_queues', 'list_jobs',
   'pause_queue', 'resume_queue', 'clean_queue',
   'delete_job',
-  // Legacy file tool names (registered for backward compat with agents that reference them)
-  'read_file', 'read_file_lines', 'write_file', 'patch_file', 'append_file',
-  'diff_files', 'file_info', 'copy_file', 'copy_folder',
-  'delete_file', 'delete_folder', 'rename_file', 'rename_folder',
 ]);
 
 /** Orchestrator gets consolidated tool set */
@@ -242,7 +238,7 @@ export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: stri
 
   const skillNote = allowedSkillIds.length > 0
     ? ` (allowed: ${allowedSkillIds.join(', ')})`
-    : '';
+    : ' (none allowed)';
 
   const result: ToolDefinition[] = [...directTools];
 
