@@ -13,6 +13,22 @@ import type {
   MemoryExtractionData, ProactiveCheckData, VaultKeyRotationData,
 } from '@scalyclaw/shared/queue/jobs.js';
 
+// ─── Global lock for scheduled tasks (prevents concurrent orchestrator runs) ───
+
+const TASK_LOCK_KEY = 'scalyclaw:lock:scheduled-task';
+const TASK_LOCK_TTL = 300; // 5 minutes
+
+async function acquireTaskLock(): Promise<boolean> {
+  const redis = getRedis();
+  const result = await redis.set(TASK_LOCK_KEY, Date.now().toString(), 'EX', TASK_LOCK_TTL, 'NX');
+  return result === 'OK';
+}
+
+async function releaseTaskLock(): Promise<void> {
+  const redis = getRedis();
+  await redis.del(TASK_LOCK_KEY);
+}
+
 // ─── Internal queue job dispatcher ───
 
 export async function processInternalJob(job: Job): Promise<void> {
@@ -151,6 +167,12 @@ async function processTask(job: Job<TaskData>): Promise<void> {
     return;
   }
 
+  const locked = await acquireTaskLock();
+  if (!locked) {
+    log('info', 'Task skipped — another scheduled task is running', { jobId: job.id, scheduledJobId });
+    return;
+  }
+
   const targetChannel = channelId || 'system';
   startAllTypingLoops();
 
@@ -197,6 +219,7 @@ async function processTask(job: Job<TaskData>): Promise<void> {
     }
     throw err;
   } finally {
+    await releaseTaskLock();
     stopAllTypingLoops();
   }
 }
@@ -211,6 +234,12 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
   const active = await isScheduledJobActive(scheduledJobId);
   if (!active) {
     log('info', 'Recurrent task no longer active, skipping', { jobId: job.id, scheduledJobId });
+    return;
+  }
+
+  const locked = await acquireTaskLock();
+  if (!locked) {
+    log('info', 'Recurrent task skipped — another scheduled task is running', { jobId: job.id, scheduledJobId });
     return;
   }
 
@@ -261,6 +290,7 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
     }
     throw err;
   } finally {
+    await releaseTaskLock();
     stopAllTypingLoops();
   }
 }

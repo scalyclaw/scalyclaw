@@ -8,6 +8,7 @@ export interface ToolContext {
   modelId?: string;           // current model ID (for compact_context)
   allowedSkillIds?: string[]; // when set, only these skills can be invoked
   allowedToolNames?: Set<string>; // when set, only these tools can be executed
+  sentFiles?: Set<string>;    // tracks files already sent in this session (dedup)
 }
 
 export type ToolHandler = (input: Record<string, unknown>, ctx: ToolContext) => Promise<string> | string;

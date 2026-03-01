@@ -15,7 +15,7 @@ import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
 import { PATHS } from '../core/paths.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import type { ToolExecutionData } from '@scalyclaw/shared/queue/jobs.js';
 import { getConfig, getConfigRef, saveConfig, updateConfig, publishConfigReload, redactConfig, type ScalyClawConfig } from '../core/config.js';
 import { listProcesses } from '@scalyclaw/shared/core/registry.js';
@@ -551,6 +551,11 @@ async function dispatchTool(toolName: string, payload: Record<string, unknown>, 
 // LLM-FACING TOOL HANDLERS (the 3 submission methods)
 // ═══════════════════════════════════════════════════════════════════
 
+/** Strip leading/trailing whitespace and quotes from tool names (LLMs sometimes emit them). */
+function normalizeToolName(name: string): string {
+  return name.replace(/^[\s"']+|[\s"']+$/g, '');
+}
+
 /** Validate required payload fields per tool type. Returns error string or null if valid. */
 function validateJobPayload(toolName: string, payload: Record<string, unknown>): string | null {
   switch (toolName) {
@@ -572,7 +577,7 @@ function validateJobPayload(toolName: string, payload: Record<string, unknown>):
 }
 
 async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext): Promise<string> {
-  const toolName = input.toolName as string;
+  const toolName = normalizeToolName(input.toolName as string ?? '');
   const payload = (input.payload as Record<string, unknown>) ?? {};
   if (!toolName) return JSON.stringify({ error: 'Missing required field: toolName' });
 
@@ -618,14 +623,16 @@ async function handleSubmitParallelJobs(input: Record<string, unknown>, ctx: Too
   log('debug', 'submit_parallel_jobs', { count: jobs.length, channelId: ctx.channelId });
   const results = await Promise.all(
     jobs.map(async (j, i) => {
+      const toolName = normalizeToolName(j.toolName ?? '');
+      if (!toolName) return { index: i, toolName: j.toolName, error: 'Missing toolName' };
       // Early payload validation before enqueueing
-      const payloadError = validateJobPayload(j.toolName, j.payload ?? {});
-      if (payloadError) return { index: i, toolName: j.toolName, error: payloadError };
+      const payloadError = validateJobPayload(toolName, j.payload ?? {});
+      if (payloadError) return { index: i, toolName, error: payloadError };
       try {
-        const result = await dispatchTool(j.toolName, j.payload ?? {}, ctx);
-        return { index: i, toolName: j.toolName, result };
+        const result = await dispatchTool(toolName, j.payload ?? {}, ctx);
+        return { index: i, toolName, result };
       } catch (err) {
-        return { index: i, toolName: j.toolName, error: String(err) };
+        return { index: i, toolName, error: String(err) };
       }
     })
   );
@@ -824,7 +831,15 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
 
   try {
     const resolvedPath = resolveFilePath(filePath);
-    await access(resolvedPath);
+    const fileContent = await readFile(resolvedPath);
+
+    // Dedup: skip if this exact file (path + content) was already sent in this session
+    const contentHash = createHash('sha256').update(fileContent).digest('hex');
+    const dedupKey = `${filePath}:${contentHash}`;
+    if (ctx.sentFiles?.has(dedupKey)) {
+      log('debug', 'send_file dedup — identical file already sent', { filePath, channelId: ctx.channelId });
+      return JSON.stringify({ sent: true, path: filePath, note: 'File was already sent' });
+    }
 
     const { getRedis } = await import('@scalyclaw/shared/core/redis.js');
     await publishProgress(getRedis(), ctx.channelId, {
@@ -833,6 +848,7 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
       filePath,
       caption,
     });
+    ctx.sentFiles?.add(dedupKey);
     return JSON.stringify({ sent: true, path: filePath });
   } catch (err) {
     log('error', 'send_file failed', { error: String(err), filePath });

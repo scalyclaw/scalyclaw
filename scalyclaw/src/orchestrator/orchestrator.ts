@@ -94,6 +94,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     signal: input.signal,
     messages,
     modelId,
+    sentFiles: new Set(),
   };
 
   // LLM tool loop

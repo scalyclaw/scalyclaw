@@ -86,6 +86,28 @@ export async function createReminder(
   return jobId;
 }
 
+// ─── Dedup helper ───
+
+/**
+ * Scan active scheduled jobs for an existing schedule with the same type + repeat pattern.
+ * Single-user platform — duplicates always share type + cron/interval regardless of channel.
+ */
+async function findActiveRecurrentSchedule(
+  type: string,
+  cronOrInterval: string,
+): Promise<string | null> {
+  const redis = await getRedis();
+  const keys = await redis.keys(`${SCHEDULED_KEY_PREFIX}*`);
+  for (const key of keys) {
+    const data = await redis.hgetall(key);
+    if (!data || data.state !== 'active') continue;
+    if (data.type === type && data.cron === cronOrInterval) {
+      return key.slice(SCHEDULED_KEY_PREFIX.length);
+    }
+  }
+  return null;
+}
+
 // ─── Create Recurrent Reminder ───
 
 export async function createRecurrentReminder(
@@ -99,6 +121,15 @@ export async function createRecurrentReminder(
     throw new Error('Either cron or intervalMs must be provided');
   }
 
+  const cronOrInterval = cron ?? `every ${intervalMs}ms`;
+
+  // Dedup: return existing schedule if same type + repeat pattern is already active
+  const existing = await findActiveRecurrentSchedule('recurrent-reminder', cronOrInterval);
+  if (existing) {
+    log('info', 'Dedup: recurrent reminder already exists', { existing, cronOrInterval });
+    return existing;
+  }
+
   const jobId = `recurrent-reminder-${randomUUID()}`;
 
   const repeat: { pattern?: string; every?: number; tz?: string } = {};
@@ -108,8 +139,6 @@ export async function createRecurrentReminder(
   } else {
     repeat.every = intervalMs!;
   }
-
-  const cronOrInterval = cron ?? `every ${intervalMs}ms`;
 
   // Track in Redis
   await setScheduledState(jobId, {
@@ -206,6 +235,15 @@ export async function createRecurrentTask(
     throw new Error('Either cron or intervalMs must be provided');
   }
 
+  const cronOrInterval = cron ?? `every ${intervalMs}ms`;
+
+  // Dedup: return existing schedule if same type + repeat pattern is already active
+  const existing = await findActiveRecurrentSchedule('recurrent-task', cronOrInterval);
+  if (existing) {
+    log('info', 'Dedup: recurrent task already exists', { existing, cronOrInterval });
+    return existing;
+  }
+
   const jobId = `recurrent-task-${randomUUID()}`;
 
   const repeat: { pattern?: string; every?: number; tz?: string } = {};
@@ -215,8 +253,6 @@ export async function createRecurrentTask(
   } else {
     repeat.every = intervalMs!;
   }
-
-  const cronOrInterval = cron ?? `every ${intervalMs}ms`;
 
   // Track in Redis
   await setScheduledState(jobId, {
