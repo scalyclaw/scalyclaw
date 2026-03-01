@@ -258,7 +258,12 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
 import type { ToolCall } from '../models/provider.js';
 
-/** Extract a context-aware description from a single tool call */
+/** Shorten a string with ellipsis if it exceeds maxLen */
+function shorten(text: string, maxLen: number): string {
+  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
+}
+
+/** Extract a user-friendly description from a single tool call */
 function describeToolCall(name: string, input: Record<string, unknown> | undefined): string {
   // Unwrap submit_job payload
   let payload = input;
@@ -270,97 +275,131 @@ function describeToolCall(name: string, input: Record<string, unknown> | undefin
   const p = payload ?? {};
 
   switch (name) {
-    // Skills — include skill name
+    // Skills
     case 'execute_skill': {
       const id = p.skillId as string;
-      return id ? `Running ${id}` : 'Running a skill';
+      const inp = p.input as string;
+      if (id && inp) return `Running skill "${id}" with: ${shorten(inp, 50)}`;
+      if (id) return `Running skill "${id}"`;
+      return 'Running a skill';
     }
-    // Agents — include agent name and task hint
+    // Agents — show agent name + task excerpt
     case 'delegate_agent': {
       const id = p.agentId as string;
-      return id ? `Asking ${id}` : 'Delegating to an agent';
+      const task = p.task as string;
+      if (id && task) return `Handing off to agent "${id}": ${shorten(task, 60)}`;
+      if (id) return `Handing off to agent "${id}"`;
+      if (task) return `Handing off to an agent: ${shorten(task, 60)}`;
+      return 'Handing off to an agent';
     }
     case 'create_agent': {
       const n = (p.name as string) || (p.id as string);
-      return n ? `Creating agent "${n}"` : 'Creating an agent';
+      return n ? `Setting up a new agent: "${n}"` : 'Setting up a new agent';
     }
-    // Memory — include query/subject
+    // Memory
     case 'memory_search': {
       const q = p.query as string;
-      return q ? `Searching memory for "${q}"` : 'Searching memory';
+      return q ? `Looking up memories about "${shorten(q, 40)}"` : 'Looking up memories';
     }
     case 'memory_store': {
       const s = p.subject as string;
-      return s ? `Remembering "${s}"` : 'Saving to memory';
+      return s ? `Saving to memory: "${shorten(s, 40)}"` : 'Saving something to memory';
+    }
+    case 'memory_recall': {
+      const q = (p.query as string) || (p.id as string);
+      return q ? `Recalling memory: "${shorten(q, 40)}"` : 'Recalling from memory';
+    }
+    case 'memory_update': {
+      const s = (p.subject as string) || (p.id as string);
+      return s ? `Updating memory: "${shorten(s, 40)}"` : 'Updating a memory';
+    }
+    case 'memory_delete': {
+      const id = p.id as string;
+      return id ? `Removing memory "${shorten(id, 30)}"` : 'Removing a memory';
     }
     // Commands
     case 'execute_command': {
       const cmd = p.command as string;
-      if (cmd) {
-        const short = cmd.length > 40 ? cmd.slice(0, 40) + '...' : cmd;
-        return `Running \`${short}\``;
-      }
-      return 'Running a command';
+      return cmd ? `Running command: \`${shorten(cmd, 50)}\`` : 'Running a shell command';
     }
     case 'execute_code': {
       const lang = p.language as string;
-      return lang ? `Running ${lang} code` : 'Running code';
+      return lang ? `Executing ${lang} code` : 'Executing code';
     }
-    // Scheduling — include what's being scheduled
-    case 'schedule_reminder':
+    // Scheduling
+    case 'schedule_reminder': {
+      const msg = p.message as string;
+      return msg ? `Setting a reminder: "${shorten(msg, 50)}"` : 'Setting a reminder for you';
+    }
     case 'schedule_task': {
-      const msg = (p.message as string) || (p.task as string);
-      if (msg) {
-        const short = msg.length > 40 ? msg.slice(0, 40) + '...' : msg;
-        return `Scheduling "${short}"`;
-      }
-      return name === 'schedule_reminder' ? 'Setting a reminder' : 'Scheduling a task';
+      const task = p.task as string;
+      return task ? `Scheduling a task: "${shorten(task, 50)}"` : 'Scheduling a task for later';
     }
-    case 'schedule_recurrent_reminder':
-    case 'schedule_recurrent_task':
-      return 'Setting up a recurring schedule';
-    // Files — include path
-    case 'file_read':
-    case 'file_write':
+    case 'schedule_recurrent_reminder': {
+      const msg = p.message as string;
+      return msg ? `Setting up recurring reminder: "${shorten(msg, 40)}"` : 'Setting up a recurring reminder';
+    }
+    case 'schedule_recurrent_task': {
+      const task = p.task as string;
+      return task ? `Setting up recurring task: "${shorten(task, 40)}"` : 'Setting up a recurring task';
+    }
+    // Files
+    case 'file_read': {
+      const path = p.path as string;
+      return path ? `Reading file: ${shorten(path, 40)}` : 'Reading a file';
+    }
+    case 'file_write': {
+      const path = p.path as string;
+      return path ? `Writing to file: ${shorten(path, 40)}` : 'Writing a file';
+    }
     case 'file_edit': {
       const path = p.path as string;
-      if (path) {
-        const short = path.length > 30 ? '...' + path.slice(-30) : path;
-        return `${name === 'file_read' ? 'Reading' : name === 'file_write' ? 'Writing' : 'Editing'} ${short}`;
-      }
-      return name === 'file_read' ? 'Reading a file' : name === 'file_write' ? 'Writing a file' : 'Editing a file';
+      return path ? `Editing file: ${shorten(path, 40)}` : 'Editing a file';
     }
     case 'send_file': {
       const path = p.path as string;
       if (path) {
         const fileName = path.split('/').pop() || path;
-        return `Sending ${fileName}`;
+        return `Sending file: ${fileName}`;
       }
       return 'Sending a file';
     }
-    // System info — include section
+    // System
     case 'system_info': {
       const section = p.section as string;
-      return section ? `Checking ${section}` : 'Checking system info';
+      return section ? `Checking system info: ${section}` : 'Checking system info';
     }
-    // Simple labels for everything else
-    case 'send_message':    return '';  // Don't narrate send_message (it IS user-facing)
-    case 'list_reminders':  return 'Checking your reminders';
-    case 'list_tasks':      return 'Checking your tasks';
-    case 'cancel_reminder': return 'Cancelling a reminder';
-    case 'cancel_task':     return 'Cancelling a task';
-    case 'memory_recall':   return 'Recalling memories';
-    case 'memory_update':   return 'Updating a memory';
-    case 'memory_delete':   return 'Removing a memory';
-    case 'vault_store':     return 'Storing a secret';
-    case 'vault_list':      return 'Checking the vault';
-    case 'register_skill':  return 'Registering a skill';
-    case 'compact_context': return 'Freeing up context space';
+    // Vault
+    case 'vault_store': {
+      const name = p.name as string;
+      return name ? `Storing secret "${name}" in the vault` : 'Storing a secret in the vault';
+    }
+    case 'vault_list':      return 'Listing vault secrets';
+    // Skills management
+    case 'register_skill': {
+      const id = p.id as string;
+      return id ? `Registering skill "${id}"` : 'Registering a new skill';
+    }
+    // Context
+    case 'compact_context': return 'Compacting conversation to free up context space';
+    // Scheduling lists
+    case 'list_reminders':  return 'Looking up your reminders';
+    case 'list_tasks':      return 'Looking up your scheduled tasks';
+    case 'cancel_reminder': {
+      const id = p.id as string;
+      return id ? `Cancelling reminder "${shorten(id, 30)}"` : 'Cancelling a reminder';
+    }
+    case 'cancel_task': {
+      const id = p.id as string;
+      return id ? `Cancelling task "${shorten(id, 30)}"` : 'Cancelling a task';
+    }
+    // Don't narrate send_message — it IS user-facing output
+    case 'send_message':    return '';
     default:                return '';
   }
 }
 
-/** Build a friendly one-liner from a list of tool calls */
+/** Build a user-friendly status line from a list of tool calls */
 function describeToolCalls(toolCalls: ToolCall[]): string {
   const labels: string[] = [];
   for (const tc of toolCalls) {
@@ -380,7 +419,7 @@ function describeToolCalls(toolCalls: ToolCall[]): string {
   }
   if (labels.length === 0) return '';
   const unique = [...new Set(labels)];
-  if (unique.length === 1) return `${unique[0]}...`;
-  if (unique.length <= 3) return `${unique.join(', ')}...`;
-  return `${unique.slice(0, 2).join(', ')} and ${unique.length - 2} more...`;
+  if (unique.length === 1) return unique[0];
+  if (unique.length <= 3) return unique.join(' · ');
+  return `${unique.slice(0, 2).join(' · ')} (+${unique.length - 2} more)`;
 }
