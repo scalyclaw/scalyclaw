@@ -4,7 +4,7 @@ import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { getRecentMessages } from '../core/db.js';
 import type { ProgressEvent } from '../queue/progress.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { PROGRESS_CHANNEL_PATTERN, PROGRESS_CHANNEL_PREFIX, CHAT_RESPONSE_TIMEOUT_MS } from '../const/constants.js';
+import { PROGRESS_CHANNEL_PATTERN, PROGRESS_CHANNEL_PREFIX, PROGRESS_BUFFER_KEY_PREFIX, CHAT_RESPONSE_TIMEOUT_MS } from '../const/constants.js';
 
 // ─── Shared Redis subscriber for chat API ───
 
@@ -97,5 +97,24 @@ export function registerChatRoutes(server: FastifyInstance): void {
     const db = getDb();
     db.prepare('DELETE FROM messages').run();
     return { cleared: true };
+  });
+
+  // GET /api/buffered-responses — drain buffered progress events for a channel (used by dashboard on WS reconnect)
+  server.get<{ Querystring: { channelId?: string } }>('/api/buffered-responses', async (request) => {
+    const channelId = request.query.channelId ?? 'gateway';
+    const bufferKey = `${PROGRESS_BUFFER_KEY_PREFIX}${channelId}`;
+    const redis = getRedis();
+
+    // Atomically drain the buffer
+    const raw = await redis.lrange(bufferKey, 0, -1);
+    if (raw.length > 0) {
+      await redis.del(bufferKey);
+    }
+
+    const events = raw.map(entry => {
+      try { return JSON.parse(entry); } catch { return null; }
+    }).filter(Boolean);
+
+    return events;
   });
 }

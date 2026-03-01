@@ -40,16 +40,14 @@ interface QueueConfig {
   removeOnFail: { age: number };
 }
 
-const QUEUE_KEYS = ['messages', 'agents', 'tools', 'proactive', 'scheduler', 'system'] as const;
+const QUEUE_KEYS = ['messages', 'agents', 'tools', 'internal'] as const;
 type QueueKey = (typeof QUEUE_KEYS)[number];
 
 const QUEUE_LABELS: Record<QueueKey, string> = {
   messages: 'Messages',
   agents: 'Agents',
   tools: 'Tools',
-  proactive: 'Proactive',
-  scheduler: 'Scheduler',
-  system: 'System',
+  internal: 'Internal',
 };
 
 const STATUSES = ['active', 'waiting', 'completed', 'failed', 'delayed'] as const;

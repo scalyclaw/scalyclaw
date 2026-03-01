@@ -25,7 +25,7 @@ export function buildChannelAdapters(
 ): ChannelAdapter[] {
   const adapters: ChannelAdapter[] = [];
   for (const [id, config] of Object.entries(channels)) {
-    if (!config.enabled) continue;
+    if (config.enabled === false) continue;
     const factory = factories[id];
     if (!factory) {
       log('warn', `Unknown channel type "${id}" — skipping`);
