@@ -16,7 +16,7 @@
       <div class="docs-content">
 
         <h1>Use Cases</h1>
-        <p>20 real-world scenarios showing ScalyClaw in action. Each walks through a concrete goal, the setup where relevant, and what the experience looks like. Every tool name, parameter, and flow described here matches the actual implementation — no theoretical features.</p>
+        <p>40 real-world scenarios showing ScalyClaw in action. Each walks through a concrete goal, the setup where relevant, and what the experience looks like. Every tool name, parameter, and flow described here matches the actual implementation — no theoretical features.</p>
 
         <!-- ─────────────────────────────────────────────── -->
         <h2 id="personal">1. Cross-Channel Personal Assistant</h2>
@@ -1231,6 +1231,798 @@
            Compile a weekly summary organized by topic. Send via send_message.",
     cron: "0 18 * * 5",
     timezone: "Europe/Paris"
+  }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="incident-response">21. Incident Response Coordinator</h2>
+
+        <p>When production breaks at 2 AM, ScalyClaw aggregates alerts, executes runbook commands, and posts status updates — all from your phone via Telegram or Signal. Combine scheduled health checks with proactive engagement so the system notices outages before you do.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Receives alerts from monitoring tools via MCP or webhook and correlates them into a single incident timeline</li>
+          <li>Runs diagnostic commands (<code>execute_command</code>) — check logs, query metrics, test connectivity</li>
+          <li>Executes runbook steps (restart services, scale replicas, flush caches) with command shield protecting dangerous operations</li>
+          <li>Posts status updates to a team Slack/Discord channel while you coordinate from a different channel</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Proactive alert via Telegram at 02:14 —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">API health check failed 3 times in a row. HTTP 503 from
+           api.example.com/health. Last success was 6 minutes ago.</span>
+
+<span class="fn">You:</span>       <span class="str">Check the API pod logs and the database connection.</span>
+
+<span class="cmt">→ execute_command: { command: "kubectl logs deploy/api --tail=50" }
+→ execute_command: { command: "kubectl exec deploy/api -- pg_isready -h db" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Database connection refused — pg_isready reports "no response."
+           Pod logs show repeated "FATAL: connection pool exhausted."
+           The DB pod restarted 8 minutes ago and connections weren't re-established.</span>
+
+<span class="fn">You:</span>       <span class="str">Restart the API deployment and post a status update to #incidents on Slack.</span>
+
+<span class="cmt">→ execute_command: { command: "kubectl rollout restart deploy/api" }
+→ send_message: { channel: "slack", target: "#incidents",
+    message: "API incident — DB connection pool exhausted after DB pod restart.
+              API deployment rolling restart initiated. Monitoring recovery." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Done. API rollout started and Slack updated. I'll check health
+           again in 2 minutes and let you know.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="personal-crm">22. Personal CRM &amp; Relationship Tracker</h2>
+
+        <p>Use ScalyClaw's memory system as a personal CRM. Every mention of a person — their preferences, birthday, last conversation topic — is auto-extracted and stored. Before a meeting, ask ScalyClaw to brief you on everything you know about someone.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Auto-extracts relationship memories from conversations: names, roles, preferences, important dates</li>
+          <li>Schedules follow-up reminders after meetings ("remind me to follow up with Sarah in 2 weeks")</li>
+          <li>Generates pre-meeting briefs by searching memory for everything related to a contact</li>
+          <li>Tracks action items promised to people and reminds you before deadlines</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">I had lunch with David Chen today. He's the CTO at Meridian Labs,
+           they're migrating from AWS to GCP. His birthday is March 15.
+           I promised to send him our Terraform modules by next Friday.</span>
+
+<span class="cmt">→ save_memory: { type: "relationship", content: "David Chen — CTO at Meridian Labs" }
+→ save_memory: { type: "fact", content: "Meridian Labs migrating AWS → GCP" }
+→ save_memory: { type: "event", content: "David Chen birthday: March 15" }
+→ schedule_reminder: { message: "Send David Chen the Terraform modules",
+    at: "next Friday 09:00" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">All noted. I'll remind you next Friday to send the Terraform modules.</span>
+
+<span class="cmt">— Two weeks later —</span>
+
+<span class="fn">You:</span>       <span class="str">I have a call with David Chen in an hour. Brief me.</span>
+
+<span class="cmt">→ search_memory: { query: "David Chen" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">David Chen — CTO at Meridian Labs. You had lunch 2 weeks ago.
+           Key context: they're migrating from AWS to GCP. You sent him
+           your Terraform modules last Friday. His birthday is March 15.
+           No outstanding action items.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="ci-cd">23. CI/CD Pipeline Assistant</h2>
+
+        <p>Connect ScalyClaw to your GitHub workflow via MCP. Monitor builds, trigger deployments, review PRs, and get notified of failures — all through natural conversation from any channel.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Monitors CI/CD pipeline status via GitHub MCP server — notifies on build failures</li>
+          <li>Triggers deployments, rollbacks, and cache clears through conversation</li>
+          <li>Summarizes PR diffs and highlights potential issues before you review</li>
+          <li>Scheduled daily digest of open PRs, failed builds, and stale branches</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">What's the status of the main branch CI?</span>
+
+<span class="cmt">→ mcp_tool: github.list_workflow_runs { owner: "myorg", repo: "api", branch: "main" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Last 3 runs on main:
+           ✓ #482 — passed (12 min ago)
+           ✗ #481 — failed at "integration-tests" (1 hour ago)
+           ✓ #480 — passed (3 hours ago)</span>
+
+<span class="fn">You:</span>       <span class="str">Show me what failed in #481.</span>
+
+<span class="cmt">→ mcp_tool: github.get_workflow_run_logs { run_id: 481 }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">The integration-tests job failed with a timeout on the
+           payment-service health check. The service took 45s to start
+           but the test timeout is 30s. The fix in #482 bumped the
+           timeout to 60s.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="email-triage">24. Email Triage &amp; Drafting</h2>
+
+        <p>Connect an email MCP server and let ScalyClaw scan your inbox, prioritize messages, draft replies, and flag urgent items — then notify you on your preferred channel.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Reads and categorizes unread emails via MCP: urgent, requires reply, FYI, spam</li>
+          <li>Drafts replies in your tone using memory of past conversations with each contact</li>
+          <li>Scheduled morning digest — summarizes overnight emails and highlights action items</li>
+          <li>Proactive alerts for emails matching your priority rules (from specific senders, containing keywords)</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Scheduled morning digest at 08:00 via Telegram —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Morning inbox summary — 12 new emails overnight:
+           🔴 1 urgent: Contract deadline from legal@meridian.com (reply by EOD)
+           🟡 3 need reply: client follow-ups from Sarah, pricing question from Jake,
+              meeting reschedule from ops team
+           🟢 8 FYI: newsletters, CI notifications, Jira updates</span>
+
+<span class="fn">You:</span>       <span class="str">Draft a reply to the contract deadline email. Tell them we'll
+           have the signed version back by 3 PM today.</span>
+
+<span class="cmt">→ mcp_tool: email.get_message { id: "msg_abc123" }
+→ mcp_tool: email.create_draft { to: "legal@meridian.com",
+    subject: "Re: Contract Deadline",
+    body: "Hi team, we've reviewed the contract and will have the signed
+           version back to you by 3 PM today. Best regards, ..." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Draft created. Want me to send it or leave it in drafts for review?</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="financial-tracking">25. Financial Tracking &amp; Expense Reports</h2>
+
+        <p>Log expenses conversationally, track spending by category, and generate periodic reports. ScalyClaw stores financial data in memory and uses code execution for calculations and chart generation.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Logs expenses from any channel — "spent $45 on dinner with client" gets categorized and stored</li>
+          <li>Runs calculations and aggregations via <code>execute_code</code> for reports</li>
+          <li>Scheduled monthly expense reports with category breakdowns</li>
+          <li>Tracks recurring subscriptions and alerts before renewal dates</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Log these: $120 AWS bill, $45 team lunch, $29 Notion subscription.</span>
+
+<span class="cmt">→ save_memory: { type: "fact", content: "Expense: $120 AWS (infrastructure) — 2026-03-02" }
+→ save_memory: { type: "fact", content: "Expense: $45 team lunch (meals) — 2026-03-02" }
+→ save_memory: { type: "fact", content: "Expense: $29 Notion (subscriptions) — 2026-03-02" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Logged 3 expenses totaling $194.</span>
+
+<span class="fn">You:</span>       <span class="str">How much have I spent this month by category?</span>
+
+<span class="cmt">→ search_memory: { query: "expense March 2026" }
+→ execute_code: { language: "js", code: "// aggregate expenses by category..." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">March 2026 spending:
+           Infrastructure: $340 (AWS $120, Hetzner $220)
+           Subscriptions:  $87  (Notion $29, GitHub $12, Figma $46)
+           Meals:          $165 (3 entries)
+           Travel:         $420 (flight + hotel for conference)
+           Total:          $1,012</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="database-ops">26. Database Operations &amp; Reporting</h2>
+
+        <p>Connect a database MCP server (Postgres, MySQL, SQLite) and query your production data conversationally. ScalyClaw translates natural language into SQL, runs it through MCP, and presents results — with the command shield preventing destructive operations.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Translates natural-language questions into SQL via MCP database tools</li>
+          <li>Command shield blocks <code>DROP</code>, <code>TRUNCATE</code>, and other destructive queries</li>
+          <li>Scheduled daily/weekly reports — top customers, revenue trends, error rates</li>
+          <li>Exports query results as CSV files via <code>execute_code</code></li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">How many new users signed up this week vs last week?</span>
+
+<span class="cmt">→ mcp_tool: postgres.query {
+    sql: "SELECT
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '7 days') AS this_week,
+            COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '14 days'
+                         AND created_at < NOW() - INTERVAL '7 days') AS last_week
+          FROM users"
+  }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">This week: 342 signups
+           Last week: 289 signups
+           That's an 18% increase week-over-week.</span>
+
+<span class="fn">You:</span>       <span class="str">Export the top 50 users by revenue as a CSV.</span>
+
+<span class="cmt">→ mcp_tool: postgres.query { sql: "SELECT ... ORDER BY revenue DESC LIMIT 50" }
+→ execute_code: { language: "js", code: "// convert results to CSV and write to file..." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Here's the CSV.</span>  <span class="cmt">[sends top-users-revenue.csv]</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="content-creation">27. Content Creation Pipeline</h2>
+
+        <p>Use ScalyClaw to draft, refine, and schedule content across formats. Write a blog post outline on Discord, refine it on Telegram, then schedule the final version for publishing — all with the same memory context.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Drafts long-form content (blog posts, newsletters, documentation) from brief prompts</li>
+          <li>Remembers your writing style, brand voice, and audience preferences from memory</li>
+          <li>Runs content through multiple refinement passes using agent delegation (editor agent, SEO agent)</li>
+          <li>Exports to files and schedules publishing tasks</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Write a blog post about our migration from REST to GraphQL.
+           Focus on the performance wins and the pain points.</span>
+
+<span class="cmt">→ search_memory: { query: "GraphQL migration REST API" }
+→ delegate_agent: { agent: "writer",
+    task: "Write a 1500-word blog post about migrating from REST to GraphQL.
+           Use these memories for context: [retrieved memories].
+           Tone: technical but accessible. Include code examples." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Here's the draft:
+
+           # From REST to GraphQL: What We Actually Learned
+           ...</span>
+
+<span class="fn">You:</span>       <span class="str">Good. Save it as a markdown file and schedule a reminder to
+           review it Monday morning.</span>
+
+<span class="cmt">→ execute_code: { language: "js", code: "// write draft to workspace/blog-graphql.md" }
+→ schedule_reminder: { message: "Review the GraphQL blog post draft in workspace/",
+    at: "Monday 09:00" }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="meeting-notes">28. Meeting Notes &amp; Action Item Tracker</h2>
+
+        <p>Send ScalyClaw a meeting transcript or audio recording (via channels that support file uploads). It extracts action items, assigns owners, schedules follow-ups, and stores key decisions in memory for future reference.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Processes meeting transcripts to extract decisions, action items, and deadlines</li>
+          <li>Creates scheduled reminders for each action item with the assigned owner</li>
+          <li>Stores key decisions in memory so you can ask "what did we decide about X?" weeks later</li>
+          <li>Generates a formatted summary and sends it to the team channel</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="cmt">[sends meeting-transcript.txt]</span>
+           <span class="str">Extract action items and decisions from this standup transcript.</span>
+
+<span class="cmt">→ delegate_agent: { agent: "analyst",
+    task: "Parse this meeting transcript. Extract: 1) all action items with
+           owners and deadlines, 2) key decisions made, 3) blockers mentioned" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">3 action items:
+           1. @Sarah — deploy auth service v2.1 by Thursday
+           2. @Jake — write migration guide for the new API by Friday
+           3. @You — review security audit report by Wednesday
+
+           2 decisions:
+           • Moving to weekly releases starting April
+           • Deprecating the v1 API on June 1
+
+           1 blocker:
+           • Staging environment is down — ops team investigating</span>
+
+<span class="fn">You:</span>       <span class="str">Schedule reminders for my action item and post the summary to #standup on Slack.</span>
+
+<span class="cmt">→ schedule_reminder: { message: "Review security audit report (due today)", at: "Wednesday 09:00" }
+→ save_memory: { type: "fact", content: "Decision: moving to weekly releases starting April" }
+→ save_memory: { type: "fact", content: "Decision: deprecating v1 API on June 1" }
+→ send_message: { channel: "slack", target: "#standup", message: "📋 Standup Summary..." }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="api-monitoring">29. API Monitoring &amp; Uptime Alerts</h2>
+
+        <p>Schedule recurring health checks against your APIs and services. ScalyClaw runs HTTP probes, tracks response times in memory, and alerts you proactively when something degrades or goes down.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Recurring tasks probe API endpoints every N minutes via <code>execute_code</code></li>
+          <li>Tracks response time trends in memory — alerts when latency spikes above threshold</li>
+          <li>Proactive notification on any channel when a health check fails</li>
+          <li>Generates weekly uptime reports with percentages and incident timeline</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Monitor these endpoints every 5 minutes: api.example.com/health,
+           payments.example.com/status, auth.example.com/ping.
+           Alert me if any returns non-200 or takes longer than 2 seconds.</span>
+
+<span class="cmt">→ schedule_recurrent_task: {
+    task: "Run HTTP health checks against api.example.com/health,
+           payments.example.com/status, auth.example.com/ping.
+           Log response times. Alert if status != 200 or latency > 2000ms.",
+    cron: "*/5 * * * *"
+  }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Monitoring started. I'll check all 3 endpoints every 5 minutes
+           and alert you immediately if anything fails.</span>
+
+<span class="cmt">— 3 hours later, proactive alert —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">⚠️ payments.example.com/status returned 503 (Service Unavailable).
+           Response time: 8.2s (threshold: 2s). Last 3 checks: 503, 503, 200.
+           This started ~10 minutes ago.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="learning">30. Learning &amp; Study Companion</h2>
+
+        <p>Use ScalyClaw as an interactive study partner. It remembers what you've studied, generates practice questions from your notes, tracks your progress, and schedules spaced-repetition reviews.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores study notes and concepts in memory with semantic search for instant recall</li>
+          <li>Generates quizzes and practice problems tailored to your weak areas</li>
+          <li>Schedules spaced-repetition reminders — review concepts at optimal intervals</li>
+          <li>Tracks progress across topics and suggests what to study next</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">I just finished the chapter on B-tree indexes. Key takeaways:
+           balanced tree structure, O(log n) lookups, leaf nodes store data
+           pointers, splits happen when nodes overflow.</span>
+
+<span class="cmt">→ save_memory: { type: "fact", content: "B-tree indexes: balanced tree, O(log n) lookups,
+    leaf nodes hold data pointers, node splits on overflow" }
+→ schedule_reminder: { message: "Spaced repetition: review B-tree indexes", at: "+3 days" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Noted. I'll quiz you on B-trees in 3 days.</span>
+
+<span class="cmt">— 3 days later —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Time for your B-tree review. Quick question:
+           Why do B-trees use node splitting instead of simply
+           extending the node when it gets full?</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="data-pipeline">31. Data Pipeline Orchestration</h2>
+
+        <p>Build ETL pipelines through conversation. ScalyClaw fetches data from APIs, transforms it with code execution, loads results into databases via MCP, and schedules the entire pipeline to run on a cron.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Fetches data from external APIs using skills or <code>execute_code</code></li>
+          <li>Transforms data with Python/JavaScript code execution — clean, aggregate, reshape</li>
+          <li>Loads results into databases via MCP or exports as files</li>
+          <li>Schedules the entire pipeline as a recurring task with error alerting</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Every day at midnight, pull yesterday's sales data from our Shopify
+           API, aggregate by product category, and insert a summary row into
+           the analytics database.</span>
+
+<span class="cmt">→ schedule_recurrent_task: {
+    task: "1. Call the Shopify orders API for yesterday's date range.
+           2. Use execute_code (Python) to aggregate totals by product category.
+           3. Insert summary rows into the analytics.daily_sales table via MCP postgres.
+           4. If any step fails, alert via send_message.",
+    cron: "0 0 * * *",
+    timezone: "UTC"
+  }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Pipeline scheduled. Every midnight UTC I'll pull Shopify sales,
+           aggregate by category, and push to analytics.daily_sales.
+           I'll alert you if anything fails.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="travel">32. Travel Planning &amp; Itinerary Management</h2>
+
+        <p>Plan trips conversationally. ScalyClaw remembers your travel preferences, builds itineraries, handles timezone conversions, and sends reminders for flights, check-ins, and reservations.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Builds detailed itineraries from natural-language input and stores them in memory</li>
+          <li>Remembers your preferences (aisle seat, vegetarian meals, preferred hotel chains)</li>
+          <li>Schedules reminders for check-ins, flights, and reservation confirmations</li>
+          <li>Converts times across timezones for international trips</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">I'm flying to Tokyo on March 20, flight JL5 departing CDG at 11:25.
+           Hotel is Park Hyatt, checking in March 21. Meeting at Sony HQ
+           March 22 at 10:00 JST.</span>
+
+<span class="cmt">→ save_memory: { type: "event", content: "Flight JL5 CDG→NRT March 20, departs 11:25 CET" }
+→ save_memory: { type: "event", content: "Park Hyatt Tokyo check-in March 21" }
+→ save_memory: { type: "event", content: "Sony HQ meeting March 22 10:00 JST" }
+→ schedule_reminder: { message: "Flight JL5 to Tokyo — departs in 3 hours",
+    at: "2026-03-20T08:25:00", timezone: "Europe/Paris" }
+→ schedule_reminder: { message: "Sony HQ meeting in 1 hour",
+    at: "2026-03-22T09:00:00", timezone: "Asia/Tokyo" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Trip logged. I'll remind you 3 hours before the flight and
+           1 hour before the Sony meeting. The meeting is 2:00 AM Paris
+           time — do you want me to adjust your schedule?</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="recruitment">33. Recruitment &amp; Hiring Pipeline</h2>
+
+        <p>Track candidates, schedule interviews, and store evaluation notes. ScalyClaw's memory makes it easy to recall every interaction with a candidate across the entire hiring process.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores candidate profiles, interview notes, and evaluation scores in memory</li>
+          <li>Schedules interview reminders and sends prep briefs before each round</li>
+          <li>Compares candidates side-by-side by searching memory for all stored evaluations</li>
+          <li>Drafts offer letters and rejection emails using templates from skills</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Just finished interviewing Alex Rivera for the senior backend role.
+           Strong system design skills, good cultural fit. Weak on distributed
+           systems. Overall: 7/10. Schedule the panel round for next Tuesday.</span>
+
+<span class="cmt">→ save_memory: { type: "fact", content: "Alex Rivera — senior backend candidate.
+    Round 1: 7/10. Strong system design, good cultural fit, weak distributed systems." }
+→ schedule_reminder: { message: "Alex Rivera panel interview today",
+    at: "next Tuesday 09:00" }</span>
+
+<span class="fn">You:</span>       <span class="str">Compare Alex Rivera with the other backend candidates.</span>
+
+<span class="cmt">→ search_memory: { query: "senior backend candidate interview" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">3 candidates for Senior Backend:
+           • Alex Rivera: 7/10 — strong design, weak distributed systems
+           • Priya Sharma: 8/10 — excellent across the board, 2 weeks notice
+           • Marcus Lee: 6/10 — strong coding, needs mentoring on architecture
+           Priya is the strongest candidate so far.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="inventory">34. Inventory &amp; Stock Management</h2>
+
+        <p>Track inventory levels, set reorder alerts, and generate purchase orders. Ideal for small businesses that need lightweight inventory management without a full ERP system.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Logs stock levels and movements via natural conversation from any channel</li>
+          <li>Scheduled daily stock check with low-inventory alerts</li>
+          <li>Generates purchase orders and supplier communications via skills</li>
+          <li>Tracks cost-per-unit trends in memory for budget planning</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Received shipment: 500 units of SKU-A100 and 200 units of SKU-B250.</span>
+
+<span class="cmt">→ save_memory: { type: "fact", content: "Inventory: +500 SKU-A100, +200 SKU-B250 — 2026-03-02" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Logged. Updated stock: SKU-A100 at 820 units, SKU-B250 at 315 units.</span>
+
+<span class="cmt">— Scheduled morning check —</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Daily stock alert — 2 items below reorder threshold:
+           ⚠️ SKU-C400: 12 units remaining (threshold: 50)
+           ⚠️ SKU-D100: 8 units remaining (threshold: 25)
+           Want me to generate a purchase order for these?</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="legal-docs">35. Legal Document Analysis</h2>
+
+        <p>Upload contracts, NDAs, or terms of service and let ScalyClaw extract key clauses, flag risks, and compare against your standard templates. Memory retains analysis across documents for pattern detection.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Reads uploaded documents (PDF, DOCX) and extracts key terms, dates, and obligations</li>
+          <li>Flags non-standard clauses by comparing against templates stored in memory</li>
+          <li>Delegates deep analysis to a specialized agent with a legal-focused prompt</li>
+          <li>Tracks contract renewal dates and schedules reminders before expiry</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="cmt">[sends vendor-agreement-v3.pdf]</span>
+           <span class="str">Review this vendor agreement. Flag anything unusual compared
+           to our standard vendor template.</span>
+
+<span class="cmt">→ delegate_agent: { agent: "legal-reviewer",
+    task: "Compare this vendor agreement against our standard template.
+           Flag: non-standard liability caps, unusual IP assignment clauses,
+           auto-renewal terms, non-compete restrictions." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">3 flags:
+           🔴 Section 8.2 — Liability cap is $50K (our standard is $500K)
+           🟡 Section 12.1 — Auto-renews for 2 years (our standard is 1 year)
+           🟡 Section 15.3 — Non-compete extends 24 months post-termination
+              (our standard is 12 months)
+           Everything else matches the standard template.</span>
+
+<span class="fn">You:</span>       <span class="str">When does this contract expire?</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Initial term ends December 31, 2026. Auto-renews unless
+           cancelled 90 days prior — that's October 2.</span>
+
+<span class="cmt">→ schedule_reminder: { message: "Vendor agreement auto-renews in 90 days.
+    Cancel by October 2 if not renewing.", at: "2026-09-01" }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="social-media">36. Social Media Content Manager</h2>
+
+        <p>Draft posts, schedule publishing, and track content performance across platforms. ScalyClaw remembers your brand voice and what content performed well to inform future posts.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Drafts platform-specific posts — adapts tone and length for Twitter, LinkedIn, Instagram</li>
+          <li>Schedules posts via skills that call social media APIs</li>
+          <li>Stores content performance metrics in memory for trend analysis</li>
+          <li>Generates weekly content calendars based on your topics and audience preferences</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">We just launched dark mode. Write a Twitter thread and a LinkedIn post
+           announcing it.</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Twitter thread (4 tweets):
+           1/ 🌙 Dark mode is here. Your eyes will thank you.
+           2/ Every page, every component — we didn't just invert colors...
+           ...
+
+           LinkedIn:
+           Excited to announce dark mode across our entire platform.
+           This was our most-requested feature...
+           ...</span>
+
+<span class="fn">You:</span>       <span class="str">Post the Twitter thread now and schedule the LinkedIn post for
+           tomorrow at 9 AM EST.</span>
+
+<span class="cmt">→ invoke_skill: { skill: "twitter-post", params: { thread: [...] } }
+→ schedule_task: { task: "Post the dark mode LinkedIn announcement",
+    at: "tomorrow 09:00", timezone: "America/New_York" }</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="server-admin">37. Server Administration &amp; Maintenance</h2>
+
+        <p>Manage servers from your phone. ScalyClaw runs commands via <code>execute_command</code>, checks disk space, reviews logs, and handles routine maintenance — with the command shield preventing destructive operations.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Runs server diagnostics — disk usage, memory, CPU, active connections</li>
+          <li>Scheduled daily maintenance — log rotation, temp file cleanup, certificate expiry checks</li>
+          <li>Safe command execution — command shield blocks <code>rm -rf</code>, <code>shutdown</code>, and other dangerous patterns</li>
+          <li>Maintains a runbook in memory — remembers past issues and their resolutions</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Check disk space on all servers and flag anything above 80%.</span>
+
+<span class="cmt">→ execute_command: { command: "df -h / /data /var/log | awk '$5+0 > 80'" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">2 volumes above 80%:
+           /var/log — 91% (48G / 53G) — log accumulation
+           /data    — 83% (415G / 500G) — normal growth
+
+           /var/log is critical. Want me to rotate and compress old logs?</span>
+
+<span class="fn">You:</span>       <span class="str">Yes, rotate logs older than 7 days.</span>
+
+<span class="cmt">→ execute_command: { command: "find /var/log -name '*.log' -mtime +7 -exec gzip {} +" }
+→ execute_command: { command: "df -h /var/log" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">/var/log is now at 54% (28G / 53G). Compressed 19 log files.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="multilingual">38. Multi-Language Translation Hub</h2>
+
+        <p>Use ScalyClaw as a real-time translation bridge. Send a message in any language on any channel — the LLM translates it and forwards to the target channel. Useful for multilingual teams or international communication.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Translates messages between languages with context-aware accuracy (LLM-native, not dictionary lookup)</li>
+          <li>Remembers terminology preferences and domain-specific vocabulary</li>
+          <li>Bridges channels — translate a French Telegram message and post the English version to Slack</li>
+          <li>Scheduled translation of documents via <code>execute_code</code> for batch processing</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="cmt">— Telegram, in French —</span>
+
+<span class="fn">You:</span>       <span class="str">Traduis ce message et envoie-le sur #general dans Slack :
+           "La mise en production est prévue pour vendredi.
+           Merci de vérifier vos branches avant jeudi soir."</span>
+
+<span class="cmt">→ send_message: { channel: "slack", target: "#general",
+    message: "Production deployment is scheduled for Friday.
+              Please verify your branches by Thursday evening." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Sent to Slack #general.</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="customer-support">39. Customer Support Knowledge Base</h2>
+
+        <p>Load your product documentation into ScalyClaw's memory and use it as a support assistant. It answers customer questions accurately based on stored knowledge, drafts ticket responses, and escalates when it doesn't know the answer.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores product docs, FAQs, and troubleshooting guides in memory via semantic search</li>
+          <li>Answers questions by searching memory — no hallucination because answers are grounded in stored docs</li>
+          <li>Drafts ticket responses matching your support tone (stored in SOUL.md)</li>
+          <li>Flags questions it cannot answer confidently and escalates to a human</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Customer asks: "How do I reset my API key without losing access
+           to running integrations?"</span>
+
+<span class="cmt">→ search_memory: { query: "API key reset procedure running integrations" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Based on our docs: API keys can be rotated without downtime.
+           The process is:
+           1. Generate a new key in Settings → API Keys
+           2. Update integrations to use the new key
+           3. Revoke the old key only after all integrations are updated
+           The old key remains valid until explicitly revoked, so there's
+           no gap in access.
+
+           Draft response:
+           "Hi! You can safely rotate your API key without disrupting
+           running integrations. Here's how: ..."</span></pre>
+        </div>
+
+        <!-- ─────────────────────────────────────────────── -->
+        <h2 id="portfolio">40. Investment &amp; Portfolio Tracker</h2>
+
+        <p>Track investments, monitor price movements, and get scheduled portfolio reports. ScalyClaw stores your holdings in memory, runs calculations via code execution, and sends alerts when prices hit your targets.</p>
+
+        <h3>What It Does</h3>
+        <ul>
+          <li>Stores portfolio holdings and cost basis in memory</li>
+          <li>Fetches live prices via skills or MCP and calculates P&amp;L via <code>execute_code</code></li>
+          <li>Scheduled daily/weekly portfolio summary with gains, losses, and allocation percentages</li>
+          <li>Price alerts — notifies you when an asset hits a target price</li>
+        </ul>
+
+        <h3>Example Conversation</h3>
+        <div class="code-block">
+          <div class="code-block-header">
+            <span class="code-block-lang">conversation</span>
+            <button class="code-block-copy" aria-label="Copy"></button>
+          </div>
+          <pre><span class="fn">You:</span>       <span class="str">Add to my portfolio: bought 50 shares of AAPL at $198.50
+           and 100 shares of MSFT at $415.20.</span>
+
+<span class="cmt">→ save_memory: { type: "fact", content: "Portfolio: 50 AAPL @ $198.50 (cost $9,925) — 2026-03-02" }
+→ save_memory: { type: "fact", content: "Portfolio: 100 MSFT @ $415.20 (cost $41,520) — 2026-03-02" }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Added. Total invested: $51,445.</span>
+
+<span class="fn">You:</span>       <span class="str">Give me a portfolio summary with current prices.</span>
+
+<span class="cmt">→ search_memory: { query: "portfolio holdings" }
+→ invoke_skill: { skill: "stock-price", params: { symbols: ["AAPL", "MSFT"] } }
+→ execute_code: { language: "js", code: "// calculate P&L, allocation..." }</span>
+
+<span class="fn">ScalyClaw:</span> <span class="str">Portfolio Summary:
+           AAPL — 50 shares @ $198.50 → $205.30 (+$340, +3.4%)
+           MSFT — 100 shares @ $415.20 → $421.80 (+$660, +1.6%)
+           Total value:  $52,445
+           Total gain:   +$1,000 (+1.9%)
+           Allocation:   AAPL 19.5% | MSFT 80.5%</span>
+
+<span class="fn">You:</span>       <span class="str">Alert me if AAPL goes above $220 or below $190.</span>
+
+<span class="cmt">→ schedule_recurrent_task: {
+    task: "Check AAPL price. Alert if above $220 or below $190.",
+    cron: "*/30 9-16 * * 1-5",
+    timezone: "America/New_York"
   }</span></pre>
         </div>
 
