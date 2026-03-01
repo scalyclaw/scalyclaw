@@ -91,7 +91,7 @@ const TOOL_DEFS: ToolDefinition[] = [
     tools: STRARR('Tool names the agent can use (defaults to all eligible)'),
     mcpServers: STRARR('MCP server IDs the agent can access'),
     maxIterations: NUM('Max tool-use iterations'),
-  }, ['id', 'name', 'systemPrompt'])),
+  }, ['id', 'name', 'description', 'systemPrompt'])),
 
   // ─── Scheduling (4) ───
   tool('list_reminders', 'List reminders and recurrent reminders'),

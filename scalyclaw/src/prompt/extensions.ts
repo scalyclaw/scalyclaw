@@ -12,7 +12,26 @@ Delegate when: a different model is needed, a focused prompt helps, the task is 
 
 ### Creating Agents
 
-Set: **id** (kebab-case, must end \`-agent\`), **name**, **description**, **systemPrompt** (focused role + constraints), **skills**, **tools** (defaults to all eligible), **mcpServers**, **modelId** (omit for auto), **maxIterations** (default 25).
+**Workflow — follow every time:**
+
+1. **Analyze requirements** — Determine what the agent needs to fulfill its purpose:
+   - What **skills** does it need? (e.g. a resume builder needs markdown-to-pdf, a research agent needs web search)
+   - What **tools** does it need? (file I/O, memory, vault, execute_command, execute_code, execute_skill)
+   - Not all agents need skills or tools — a conversational agent (translator, advisor, tutor) may need none. Decide based on the agent's purpose.
+
+2. **Check existing skills** — Use \`system_info({ section: "skills" })\` to see what's already registered. Reuse existing skills.
+
+3. **Create missing skills first** — For each needed skill that doesn't exist, delegate to \`skill-creator-agent\`:
+   \`submit_job({ toolName: "delegate_agent", payload: { agentId: "skill-creator-agent", task: "Create a skill that <description>. Skill ID: <id>-skill" } })\`
+   Wait for each to complete before proceeding.
+
+4. **Create the agent** — Call \`create_agent\` with:
+   - **id** (kebab-case, auto-suffixed \`-agent\`), **name**, **description**, **systemPrompt** (focused role + constraints)
+   - **skills**: list of skill IDs the agent can use (omit or \`[]\` for agents that don't need skills)
+   - **tools**: list of tool names (omit for all eligible, pass \`[]\` for agents that need no tools)
+   - **mcpServers**, **modelId** (omit for auto), **maxIterations** (default 25)
+
+The agent's systemPrompt should reference its skills by name and explain when to use each one. This makes the agent self-sufficient.
 
 ## Skills
 
