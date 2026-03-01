@@ -9,9 +9,7 @@ export const QUEUE_NAMES = {
   messages:   'scalyclaw-messages',
   agents:     'scalyclaw-agents',
   tools:      'scalyclaw-tools',
-  proactive:  'scalyclaw-proactive',
-  scheduler:  'scalyclaw-scheduler',
-  system:     'scalyclaw-system',
+  internal:   'scalyclaw-internal',
 } as const;
 
 export type QueueKey = keyof typeof QUEUE_NAMES;

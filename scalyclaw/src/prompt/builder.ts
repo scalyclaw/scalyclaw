@@ -5,14 +5,14 @@ import { PATHS } from '../core/paths.js';
 import { getAllAgents } from '../agents/agent-loader.js';
 import { getAllSkills } from '@scalyclaw/shared/skills/skill-loader.js';
 import { getConnectionStatuses } from '../mcp/mcp-manager.js';
-import { ORCHESTRATOR_SECTION } from './orchestrator.js';
-import { homeSection } from './home.js';
-import { MEMORY_SECTION } from './memory.js';
-import { VAULT_SECTION } from './vault.js';
-import { AGENTS_SECTION } from './agents.js';
-import { SKILLS_SECTION } from './skills.js';
+import { coreInstructionsSection } from './core-instructions.js';
+import { KNOWLEDGE_SECTION } from './knowledge.js';
+import { EXTENSIONS_SECTION } from './extensions.js';
 
 const MIND_FILES = ['IDENTITY.md', 'SOUL.md', 'USER.md'];
+
+const MAX_DYNAMIC_ENTRIES = 20;
+const MAX_DESCRIPTION_LENGTH = 80;
 
 // ─── Prompt Cache ───
 
@@ -38,27 +38,42 @@ export async function buildSystemPrompt(): Promise<string> {
     }
   }
 
-  // 2. Append code-defined system sections
-  parts.push(ORCHESTRATOR_SECTION);
-  parts.push(homeSection(PATHS.base));
-  parts.push(MEMORY_SECTION);
-  parts.push(VAULT_SECTION);
-  parts.push(AGENTS_SECTION);
-  parts.push(SKILLS_SECTION);
+  // 2. Append 3 code-defined system sections
+  parts.push(coreInstructionsSection(PATHS.base));
+  parts.push(KNOWLEDGE_SECTION);
+  parts.push(EXTENSIONS_SECTION);
 
   // 3. Available skills (listed for reference — invoked via submit_job)
   const skills = getAllSkills();
   if (skills.length > 0) {
-    const lines = skills.map(s => `- **${s.id}** — ${s.name}: ${s.description}${s.scriptPath ? ` (${s.scriptLanguage})` : ' (markdown-only)'}`);
-    parts.push(`## Registered Skills — prefer these over native tools\n${lines.join('\n')}\nExecute via \`submit_job({ toolName: "execute_skill", payload: { skillId: "<id>", input: "<json>" } })\`.`);
+    const entries = skills.slice(0, MAX_DYNAMIC_ENTRIES);
+    const lines = entries.map(s => {
+      const desc = s.description.length > MAX_DESCRIPTION_LENGTH
+        ? s.description.slice(0, MAX_DESCRIPTION_LENGTH) + '...'
+        : s.description;
+      return `- **${s.id}** — ${s.name}: ${desc}${s.scriptPath ? ` (${s.scriptLanguage})` : ' (markdown-only)'}`;
+    });
+    const overflow = skills.length > MAX_DYNAMIC_ENTRIES
+      ? `\n(${skills.length - MAX_DYNAMIC_ENTRIES} more — use \`system_info({ section: "skills" })\` for full list)`
+      : '';
+    parts.push(`## Registered Skills — prefer these over native tools\n${lines.join('\n')}${overflow}\nExecute via \`submit_job({ toolName: "execute_skill", payload: { skillId: "<id>", input: "<json>" } })\`.`);
     log('debug', 'Prompt: added skills', { count: skills.length });
   }
 
   // 4. Available agents (delegated via submit_job + delegate_agent)
   const agents = getAllAgents();
   if (agents.length > 0) {
-    const lines = agents.map(a => `- **${a.id}** — ${a.name}: ${a.description} (model: ${a.models[0]?.model ?? 'default'})`);
-    parts.push(`## Registered Agents — delegate when one matches\n${lines.join('\n')}\nDelegate via \`submit_job({ toolName: "delegate_agent", payload: { agentId: "<id>", task: "..." } })\`.`);
+    const entries = agents.slice(0, MAX_DYNAMIC_ENTRIES);
+    const lines = entries.map(a => {
+      const desc = a.description.length > MAX_DESCRIPTION_LENGTH
+        ? a.description.slice(0, MAX_DESCRIPTION_LENGTH) + '...'
+        : a.description;
+      return `- **${a.id}** — ${a.name}: ${desc} (model: ${a.models[0]?.model ?? 'default'})`;
+    });
+    const overflow = agents.length > MAX_DYNAMIC_ENTRIES
+      ? `\n(${agents.length - MAX_DYNAMIC_ENTRIES} more — use \`system_info({ section: "agents" })\` for full list)`
+      : '';
+    parts.push(`## Registered Agents — delegate when one matches\n${lines.join('\n')}${overflow}\nDelegate via \`submit_job({ toolName: "delegate_agent", payload: { agentId: "<id>", task: "..." } })\`.`);
     log('debug', 'Prompt: added agents', { count: agents.length });
   }
 

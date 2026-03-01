@@ -1,7 +1,10 @@
-import { createReloadChannel } from '../core/reload-channel.js';
-import { AGENTS_RELOAD_CHANNEL } from '@scalyclaw/shared/const/constants.js';
+import { loadAllAgents } from './agent-loader.js';
+import { invalidatePromptCache } from '../prompt/builder.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
-const channel = createReloadChannel(AGENTS_RELOAD_CHANNEL);
-
-export const publishAgentReload = channel.publish;
-export const subscribeToAgentReload = channel.subscribe;
+/** Reload agents in-process (no pub/sub needed — agents only run on node). */
+export async function publishAgentReload(): Promise<void> {
+  await loadAllAgents();
+  invalidatePromptCache();
+  log('info', 'Agent reload completed (in-process)');
+}

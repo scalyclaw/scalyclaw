@@ -75,21 +75,6 @@ export interface MemoryExtractionData {
   texts: string[];
 }
 
-/** Fired by schedule-worker when a reminder/recurring/task job fires → system queue */
-export interface ScheduledFireData {
-  channelId: string;
-  type: 'reminder' | 'recurrent-reminder' | 'task' | 'recurrent-task';
-  message: string;
-  task?: string;
-  scheduledJobId: string;
-}
-
-/** Fired by proactive-worker when a proactive message is generated → system queue */
-export interface ProactiveFireData {
-  channelId: string;
-  message: string;
-}
-
 export interface VaultKeyRotationData {
   trigger: 'scheduled';
 }
@@ -106,8 +91,6 @@ export type JobData =
   | CommandData
   | ToolExecutionData
   | MemoryExtractionData
-  | ScheduledFireData
-  | ProactiveFireData
   | VaultKeyRotationData;
 
 export type JobName =
@@ -122,8 +105,6 @@ export type JobName =
   | 'task'
   | 'recurrent-task'
   | 'memory-extraction'
-  | 'scheduled-fire'
-  | 'proactive-fire'
   | 'vault-key-rotation';
 
 // ─── Job → Queue Routing ───
@@ -134,15 +115,13 @@ export const JOB_QUEUE_MAP: Record<JobName, QueueName> = {
   'agent-task':         'scalyclaw-agents',
   'tool-execution':     'scalyclaw-tools',
   'skill-execution':    'scalyclaw-tools',
-  'proactive-check':    'scalyclaw-proactive',
-  'reminder':             'scalyclaw-scheduler',
-  'recurrent-reminder':  'scalyclaw-scheduler',
-  'task':                'scalyclaw-scheduler',
-  'recurrent-task':      'scalyclaw-scheduler',
-  'memory-extraction':  'scalyclaw-system',
-  'scheduled-fire':       'scalyclaw-system',
-  'proactive-fire':       'scalyclaw-system',
-  'vault-key-rotation':   'scalyclaw-system',
+  'proactive-check':    'scalyclaw-internal',
+  'reminder':           'scalyclaw-internal',
+  'recurrent-reminder': 'scalyclaw-internal',
+  'task':               'scalyclaw-internal',
+  'recurrent-task':     'scalyclaw-internal',
+  'memory-extraction':  'scalyclaw-internal',
+  'vault-key-rotation': 'scalyclaw-internal',
 };
 
 // ─── Job Spec ───

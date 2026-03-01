@@ -327,7 +327,7 @@ export async function completeScheduledJobAdmin(jobId: string): Promise<boolean>
   if (!data || data.state !== 'active') return false;
   await updateScheduledField(jobId, 'state', 'completed');
   await expireScheduledJob(jobId);
-  await removeRepeatableJob(jobId, 'scheduler');
+  await removeRepeatableJob(jobId, 'internal');
   log('info', 'Scheduled job completed (admin)', { jobId });
   return true;
 }
@@ -354,7 +354,7 @@ export async function cancelScheduledJobAdmin(jobId: string): Promise<boolean> {
   await expireScheduledJob(jobId);
 
   // Both reminders and recurring are now on the scheduler queue
-  await removeRepeatableJob(jobId, 'scheduler');
+  await removeRepeatableJob(jobId, 'internal');
 
   log('info', 'Scheduled job cancelled (admin)', { jobId });
   return true;
@@ -370,7 +370,7 @@ export async function cancelScheduledJob(jobId: string, channelId: string): Prom
   await expireScheduledJob(jobId);
 
   // Both reminders and recurring are now on the scheduler queue
-  await removeRepeatableJob(jobId, 'scheduler');
+  await removeRepeatableJob(jobId, 'internal');
 
   log('info', 'Scheduled job cancelled', { jobId, channelId });
   return true;
@@ -388,7 +388,7 @@ export async function cancelReminder(jobId: string, channelId: string): Promise<
 
   await updateScheduledField(jobId, 'state', 'cancelled');
   await expireScheduledJob(jobId);
-  await removeRepeatableJob(jobId, 'scheduler');
+  await removeRepeatableJob(jobId, 'internal');
   log('info', 'Reminder cancelled', { jobId, channelId, type: data.type });
   return { cancelled: true };
 }
@@ -400,7 +400,7 @@ export async function cancelTask(jobId: string, channelId: string): Promise<{ ca
 
   await updateScheduledField(jobId, 'state', 'cancelled');
   await expireScheduledJob(jobId);
-  await removeRepeatableJob(jobId, 'scheduler');
+  await removeRepeatableJob(jobId, 'internal');
   log('info', 'Task cancelled', { jobId, channelId, type: data.type });
   return { cancelled: true };
 }
@@ -438,7 +438,7 @@ export async function registerProactiveCheck(): Promise<void> {
   const proactive = config.proactive;
 
   // Always remove the old repeatable first to clear stale cron patterns
-  await removeRepeatableJob('proactive-check', 'proactive');
+  await removeRepeatableJob('proactive-check', 'internal');
 
   if (!proactive.enabled) {
     log('info', 'Proactive check disabled — cron removed');

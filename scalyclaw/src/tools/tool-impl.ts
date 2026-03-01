@@ -7,7 +7,7 @@ import { createReminder, createRecurrentReminder, createTask, createRecurrentTas
 import { enqueueJob, getQueue, getQueueEvents, QUEUE_NAMES, removeRepeatableJob, type QueueKey } from '@scalyclaw/shared/queue/queue.js';
 import { EXECUTION_TIMEOUT_MS, PROCESS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
 import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constants.js';
-import { getAllAgents, loadAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
+import { getAllAgents, createAgent, updateAgent, deleteAgent } from '../agents/agent-loader.js';
 import { readWorkspaceFile, writeWorkspaceFile, readWorkspaceFileLines, appendWorkspaceFile, patchWorkspaceFile, diffWorkspaceFiles, getFileInfo, copyWorkspaceFile, copyWorkspaceFolder, deleteWorkspaceFile, deleteWorkspaceFolder, renameWorkspaceFile, renameWorkspaceFolder, resolveFilePath } from '../core/workspace.js';
 import { getAllSkills, getSkill, loadSkills, deleteSkill } from '@scalyclaw/shared/skills/skill-loader.js';
 import { runSkillGuard, runCommandShield } from '../guards/guard.js';
@@ -143,18 +143,15 @@ async function resolveWorkspaceFiles(
 
 /** Reload skills/agents if any path touches their directories */
 async function fileReloadIfNeeded(...paths: string[]): Promise<void> {
-  let reloaded = false;
   if (paths.some(p => p.startsWith('skills/') || p.startsWith('skills\\'))) {
     await loadSkills();
-    reloaded = true;
     await publishSkillReload().catch(e => log('warn', 'Skill reload failed', { error: String(e) }));
+    invalidatePromptCache();
   }
   if (paths.some(p => p.startsWith('agents/') || p.startsWith('agents\\'))) {
-    await loadAllAgents();
-    reloaded = true;
+    // publishAgentReload() does loadAllAgents() + invalidatePromptCache() in-process
     await publishAgentReload().catch(e => log('warn', 'Agent reload failed', { error: String(e) }));
   }
-  if (reloaded) invalidatePromptCache();
 }
 
 /** Validate agentId → find in config → mutate → save → publish */
@@ -1817,6 +1814,141 @@ registerTool('rename_folder', async (input) => {
   await renameWorkspaceFolder(src, dest);
   await fileReloadIfNeeded(src, dest);
   return JSON.stringify({ renamed: true });
+});
+
+// ─── Merged file tools ───
+registerTool('file_read', async (input) => {
+  const path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing required field: path' });
+  if (input.startLine != null) {
+    const result = await readWorkspaceFileLines(path, input.startLine as number, input.endLine as number | undefined);
+    return JSON.stringify(result);
+  }
+  return JSON.stringify({ content: await readWorkspaceFile(path) });
+});
+registerTool('file_write', async (input) => {
+  let path = input.path as string;
+  if (!path) return JSON.stringify({ error: 'Missing: path' });
+  const content = input.content as string;
+  if (content == null) return JSON.stringify({ error: 'Missing: content' });
+  path = enforcePathSuffix(path);
+  if (input.append === true) {
+    await appendWorkspaceFile(path, content);
+    await fileReloadIfNeeded(path);
+    return JSON.stringify({ appended: true, path });
+  }
+  await writeWorkspaceFile(path, content);
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ written: true, path });
+});
+registerTool('file_edit', async (input) => {
+  let path = input.path as string;
+  const search = input.search as string;
+  const replace = input.replace as string;
+  const all = (input.all as boolean) ?? false;
+  if (!path || search === undefined || replace === undefined) {
+    return JSON.stringify({ error: 'Missing required fields: path, search, replace' });
+  }
+  path = enforcePathSuffix(path);
+  const result = await patchWorkspaceFile(path, search, replace, all);
+  if (!result.matched) return JSON.stringify({ error: 'Search string not found in file', path });
+  await fileReloadIfNeeded(path);
+  return JSON.stringify({ patched: true, count: result.count });
+});
+registerTool('file_ops', async (input) => {
+  const action = input.action as string;
+  if (!action) return JSON.stringify({ error: 'Missing required field: action' });
+  switch (action) {
+    case 'copy_file': {
+      const src = input.src as string;
+      let dest = input.dest as string;
+      if (!src || !dest) return JSON.stringify({ error: 'Missing: src, dest' });
+      dest = enforcePathSuffix(dest);
+      await copyWorkspaceFile(src, dest);
+      await fileReloadIfNeeded(dest);
+      return JSON.stringify({ copied: true });
+    }
+    case 'copy_folder': {
+      const src = input.src as string;
+      let dest = input.dest as string;
+      if (!src || !dest) return JSON.stringify({ error: 'Missing: src, dest' });
+      dest = enforcePathSuffix(dest);
+      const r = await copyWorkspaceFolder(src, dest);
+      await fileReloadIfNeeded(dest);
+      return JSON.stringify({ copied: true, count: r.count });
+    }
+    case 'delete_file': {
+      let path = input.path as string;
+      if (!path) return JSON.stringify({ error: 'Missing: path' });
+      path = enforcePathSuffix(path);
+      await deleteWorkspaceFile(path);
+      await fileReloadIfNeeded(path);
+      return JSON.stringify({ deleted: true });
+    }
+    case 'delete_folder': {
+      let path = input.path as string;
+      if (!path) return JSON.stringify({ error: 'Missing: path' });
+      path = enforcePathSuffix(path);
+      await deleteWorkspaceFolder(path);
+      await fileReloadIfNeeded(path);
+      return JSON.stringify({ deleted: true });
+    }
+    case 'rename_file': {
+      let src = input.src as string;
+      let dest = input.dest as string;
+      if (!src || !dest) return JSON.stringify({ error: 'Missing: src, dest' });
+      src = enforcePathSuffix(src);
+      dest = enforcePathSuffix(dest);
+      await renameWorkspaceFile(src, dest);
+      await fileReloadIfNeeded(src, dest);
+      return JSON.stringify({ renamed: true });
+    }
+    case 'rename_folder': {
+      let src = input.src as string;
+      let dest = input.dest as string;
+      if (!src || !dest) return JSON.stringify({ error: 'Missing: src, dest' });
+      src = enforcePathSuffix(src);
+      dest = enforcePathSuffix(dest);
+      await renameWorkspaceFolder(src, dest);
+      await fileReloadIfNeeded(src, dest);
+      return JSON.stringify({ renamed: true });
+    }
+    case 'diff_files': {
+      const pathA = input.pathA as string ?? input.src as string;
+      const pathB = input.pathB as string ?? input.dest as string;
+      if (!pathA || !pathB) return JSON.stringify({ error: 'Missing: pathA, pathB (or src, dest)' });
+      return JSON.stringify({ diff: await diffWorkspaceFiles(pathA, pathB) });
+    }
+    case 'file_info': {
+      const path = input.path as string;
+      if (!path) return JSON.stringify({ error: 'Missing: path' });
+      return JSON.stringify(await getFileInfo(path));
+    }
+    default:
+      return JSON.stringify({ error: `Unknown action: "${action}". Valid: copy_file, copy_folder, delete_file, delete_folder, rename_file, rename_folder, diff_files, file_info` });
+  }
+});
+
+// ─── System Info (merged read-only query) ───
+registerTool('system_info', async (input) => {
+  const section = input.section as string;
+  if (!section) return JSON.stringify({ error: 'Missing required field: section' });
+  switch (section) {
+    case 'agents': return handleListAgents();
+    case 'skills': return handleListSkills();
+    case 'models': return handleListModels();
+    case 'guards': return handleListGuards();
+    case 'queues': return handleListQueues();
+    case 'processes': {
+      const { getRedis: getRedisFn } = await import('@scalyclaw/shared/core/redis.js');
+      return JSON.stringify({ processes: await listProcesses(getRedisFn()) });
+    }
+    case 'usage': return handleGetUsage();
+    case 'config': return handleGetConfig({});
+    case 'vault': return JSON.stringify({ secrets: await listSecrets() });
+    default:
+      return JSON.stringify({ error: `Unknown section: "${section}". Valid: agents, skills, models, guards, queues, processes, usage, config, vault` });
+  }
 });
 
 // ─── Context ───

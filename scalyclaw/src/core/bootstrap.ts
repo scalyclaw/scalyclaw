@@ -9,9 +9,7 @@ import { initEmbeddings, getEmbeddingDimensions } from '../memory/embeddings.js'
 import { loadSkills } from '@scalyclaw/shared/skills/skill-loader.js';
 import { subscribeToSkillReload } from '../skills/skill-store.js';
 import { loadAllAgents } from '../agents/agent-loader.js';
-import { subscribeToAgentReload } from '../agents/agent-store.js';
-import { connectAll as connectMcpServers, reloadServers as reloadMcpServers } from '../mcp/mcp-manager.js';
-import { subscribeToMcpReload } from '../mcp/mcp-store.js';
+import { connectAll as connectMcpServers } from '../mcp/mcp-manager.js';
 import { invalidatePromptCache } from '../prompt/builder.js';
 import { registerProvider } from '../models/registry.js';
 import { createMiniMaxProvider } from '../models/providers/minimax.js';
@@ -107,18 +105,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
     await loadSkills();
     invalidatePromptCache();
   });
-  subscribeToAgentReload(reloadSubscriber, async () => {
-    log('info', 'Received agents reload notification, reloading from disk');
-    await loadAllAgents();
-    invalidatePromptCache();
-  });
   subscribeToCancelSignal(reloadSubscriber);
-  subscribeToMcpReload(reloadSubscriber, async () => {
-    log('info', 'Received MCP reload notification, refreshing connections');
-    const freshConfig = await loadConfig();
-    await reloadMcpServers(freshConfig.mcpServers ?? {});
-    invalidatePromptCache();
-  });
   // Track channels independently — saveConfig() updates the shared cache before
   // this reload handler fires (same process), so getConfigRef().channels is already
   // stale by the time we read it.  Keep our own snapshot updated only here.

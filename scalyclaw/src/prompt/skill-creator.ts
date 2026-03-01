@@ -1,4 +1,4 @@
-import { SKILLS_SECTION } from './skills.js';
+import { EXTENSIONS_SECTION } from './extensions.js';
 
 export const SKILL_CREATOR_PROMPT = `## How Tools Work
 
@@ -9,9 +9,9 @@ These are called directly — the LLM sees them as regular tool calls.
 
 | Tool | Description |
 |------|-------------|
-| \`write_file\` | Create or overwrite a file (path, content) |
-| \`read_file\` | Read a file's content (path) |
-| \`patch_file\` | Search-and-replace in a file (path, search, replace) |
+| \`file_write\` | Create or overwrite a file (path, content) |
+| \`file_read\` | Read a file's content (path) |
+| \`file_edit\` | Search-and-replace in a file (path, search, replace) |
 | \`register_skill\` | Finalize a skill: load from disk, run guard, register in config, notify workers (id) |
 | \`send_message\` | Send an intermediate message to the user (text) |
 | \`send_file\` | Send a file to the user (path, caption) |
@@ -33,9 +33,9 @@ You also have \`submit_parallel_jobs\` to run multiple job tools in parallel.
 
 Follow this exact sequence to create a skill:
 
-1. **Write SKILL.md** — \`write_file({ path: "skills/{id}/SKILL.md", content: "..." })\`
+1. **Write SKILL.md** — \`file_write({ path: "skills/{id}/SKILL.md", content: "..." })\`
    - Must include \`script\` and \`language\` in frontmatter.
-2. **Write the script** — \`write_file({ path: "skills/{id}/scripts/main.py", content: "..." })\`
+2. **Write the script** — \`file_write({ path: "skills/{id}/scripts/main.py", content: "..." })\`
    - Include dependency files if needed (pyproject.toml, package.json, etc.).
 3. **Register the skill** — \`register_skill({ id: "{id}" })\`
    - Loads from disk, runs the security guard, adds to config, notifies workers.
@@ -44,7 +44,7 @@ Follow this exact sequence to create a skill:
    - **Both \`skillId\` and \`input\` are required** in the payload. \`input\` is a JSON string.
 5. **Fix failures** — If the test fails:
    - Read stderr/stdout from the result.
-   - Use \`read_file\` to inspect the script, then \`patch_file\` or \`write_file\` to fix it.
+   - Use \`file_read\` to inspect the script, then \`file_edit\` or \`file_write\` to fix it.
    - Re-test directly — file changes are auto-reloaded, no need to re-register.
    - After 2-3 retries of the same error, report to the user and stop.
 6. **Report** — Use \`send_message\` to update the user on progress and final results.
@@ -55,4 +55,4 @@ Follow this exact sequence to create a skill:
 - When running subprocesses (ffmpeg, curl, etc.), **capture or redirect their stdout** so it doesn't pollute the skill's JSON output. Example: \`subprocess.run(..., capture_output=True)\` or \`stdout=subprocess.DEVNULL\`.
 - Output files must use **simple filenames without spaces** where possible (use underscores or hashes). If filenames with spaces are unavoidable, ensure they are returned as JSON string values (not printed as plain text).
 
-${SKILLS_SECTION}`;
+${EXTENSIONS_SECTION}`;

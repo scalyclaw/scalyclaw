@@ -5,10 +5,8 @@ import { log, initLogFile } from '@scalyclaw/shared/core/logger.js';
 import { bootstrap } from './core/bootstrap.js';
 import { enqueueJob, closeQueue, getQueue, getQueueName, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
 import { processMessageQueueJob } from './processors/message-processor.js';
-import { processSystemQueueJob } from './processors/system-processor.js';
+import { processInternalJob } from './processors/internal-processor.js';
 import { processAgentJob } from './processors/agent-processor.js';
-import { processScheduleJob } from './processors/schedule-processor.js';
-import { processProactiveJob } from './processors/proactive-processor.js';
 import { cancelAllChannelJobs } from '@scalyclaw/shared/queue/cancel.js';
 import { CHANNEL_JOBS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
 import { randomUUID } from 'node:crypto';
@@ -69,8 +67,8 @@ async function startSystem(): Promise<void> {
   // ── Always write logs to file ──
   initLogFile(PATHS.logs, 'scalyclaw.log');
 
-  // ── BullMQ Workers: 5 queues (messages + system + agents + scheduler + proactive) ──
-  const concurrency = Number(process.env.SCALYCLAW_CONCURRENCY ?? 3);
+  // ── BullMQ Workers: 3 queues (messages + agents + internal) ──
+  const messageConcurrency = Number(process.env.SCALYCLAW_MESSAGE_CONCURRENCY ?? 5);
   const agentConcurrency = Number(process.env.SCALYCLAW_AGENT_CONCURRENCY ?? 3);
   const workerOpts = {
     connection: redis.duplicate() as never,
@@ -81,19 +79,12 @@ async function startSystem(): Promise<void> {
 
   const workers: Worker[] = [];
 
-  // Messages queue — user message processing + commands (concurrency=1: single-user serialization)
+  // Messages queue — user message processing + commands (configurable concurrency for multi-channel)
   const messagesWorker = new Worker(getQueueName('messages'), processMessageQueueJob, {
     ...workerOpts,
-    concurrency: 1,
+    concurrency: messageConcurrency,
   });
   workers.push(messagesWorker);
-
-  // System queue — memory extraction, scheduled-fire, proactive-fire
-  const systemWorker = new Worker(getQueueName('system'), processSystemQueueJob, {
-    ...workerOpts,
-    concurrency: 2,
-  });
-  workers.push(systemWorker);
 
   // Agents queue — agent LLM loops (runs on node for full DB/tool access)
   const agentsWorker = new Worker(getQueueName('agents'), processAgentJob, {
@@ -102,19 +93,12 @@ async function startSystem(): Promise<void> {
   });
   workers.push(agentsWorker);
 
-  // Scheduler queue — reminder/recurring relay (moved from worker — lightweight, no DB needed)
-  const schedulerWorker = new Worker(getQueueName('scheduler'), processScheduleJob, {
+  // Internal queue — reminders, tasks, proactive, memory extraction, vault rotation
+  const internalWorker = new Worker(getQueueName('internal'), processInternalJob, {
     ...workerOpts,
-    concurrency: 2,
+    concurrency: 3,
   });
-  workers.push(schedulerWorker);
-
-  // Proactive queue — proactive engagement check (moved from worker — needs DB for usage recording)
-  const proactiveWorker = new Worker(getQueueName('proactive'), processProactiveJob, {
-    ...workerOpts,
-    concurrency: 1,
-  });
-  workers.push(proactiveWorker);
+  workers.push(internalWorker);
 
   for (const w of workers) {
     w.on('completed', (job) => {
@@ -124,7 +108,7 @@ async function startSystem(): Promise<void> {
       log('error', `Job failed: ${job?.name}`, { jobId: job?.id, queue: w.name, error: String(err) });
     });
   }
-  log('info', `Assistant consumers started (concurrency: ${concurrency}, agent: ${agentConcurrency}, queues: ${workers.length})`);
+  log('info', `Assistant consumers started (messages: ${messageConcurrency}, agent: ${agentConcurrency}, queues: ${workers.length})`);
 
   // ── Gateway + channels ──
   const server = await initGateway();
@@ -221,7 +205,7 @@ async function startSystem(): Promise<void> {
     hostname: hostname(),
     startedAt: new Date().toISOString(),
     version,
-    concurrency,
+    concurrency: messageConcurrency,
   });
 
   log('info', 'ScalyClaw is ready');
@@ -603,7 +587,7 @@ async function drainWaitingJobs(channelId: string): Promise<void> {
 // ─── Vault key rotation registration ───
 
 async function registerVaultKeyRotation(): Promise<void> {
-  await removeRepeatableJob('vault-key-rotation', 'system');
+  await removeRepeatableJob('vault-key-rotation', 'internal');
 
   await enqueueJob({
     name: 'vault-key-rotation',

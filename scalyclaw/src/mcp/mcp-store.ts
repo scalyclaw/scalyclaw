@@ -1,7 +1,12 @@
-import { createReloadChannel } from '../core/reload-channel.js';
-import { MCP_RELOAD_CHANNEL } from '@scalyclaw/shared/const/constants.js';
+import { reloadServers } from './mcp-manager.js';
+import { loadConfig } from '../core/config.js';
+import { invalidatePromptCache } from '../prompt/builder.js';
+import { log } from '@scalyclaw/shared/core/logger.js';
 
-const channel = createReloadChannel(MCP_RELOAD_CHANNEL);
-
-export const publishMcpReload = channel.publish;
-export const subscribeToMcpReload = channel.subscribe;
+/** Reload MCP servers in-process (no pub/sub needed — MCP only runs on node). */
+export async function publishMcpReload(): Promise<void> {
+  const freshConfig = await loadConfig();
+  await reloadServers(freshConfig.mcpServers ?? {});
+  invalidatePromptCache();
+  log('info', 'MCP reload completed (in-process)');
+}

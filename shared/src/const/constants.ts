@@ -8,8 +8,6 @@ export const PROCESS_KEY_PREFIX = 'scalyclaw:proc:';
 
 export const CANCEL_SIGNAL_CHANNEL = 'scalyclaw:cancel:signal';
 export const SKILLS_RELOAD_CHANNEL = 'scalyclaw:skills:reload';
-export const AGENTS_RELOAD_CHANNEL = 'scalyclaw:agents:reload';
-export const MCP_RELOAD_CHANNEL = 'scalyclaw:mcp:reload';
 export const CONFIG_RELOAD_CHANNEL = 'scalyclaw:config:reload';
 
 // ─── Execution ───
