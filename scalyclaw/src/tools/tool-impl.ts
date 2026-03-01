@@ -15,7 +15,7 @@ import { publishSkillReload } from '../skills/skill-store.js';
 import { publishAgentReload } from '../agents/agent-store.js';
 import { publishProgress } from '../queue/progress.js';
 import { PATHS } from '../core/paths.js';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { ToolExecutionData } from '@scalyclaw/shared/queue/jobs.js';
 import { getConfig, getConfigRef, saveConfig, updateConfig, publishConfigReload, redactConfig, type ScalyClawConfig } from '../core/config.js';
 import { listProcesses } from '@scalyclaw/shared/core/registry.js';
@@ -831,11 +831,10 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
 
   try {
     const resolvedPath = resolveFilePath(filePath);
-    const fileContent = await readFile(resolvedPath);
+    const fileStat = await stat(resolvedPath);
 
-    // Dedup: skip if this exact file (path + content) was already sent in this session
-    const contentHash = createHash('sha256').update(fileContent).digest('hex');
-    const dedupKey = `${filePath}:${contentHash}`;
+    // Dedup: skip if this exact file (path + size + mtime) was already sent in this session
+    const dedupKey = `${filePath}:${fileStat.size}:${fileStat.mtimeMs}`;
     if (ctx.sentFiles?.has(dedupKey)) {
       log('debug', 'send_file dedup — identical file already sent', { filePath, channelId: ctx.channelId });
       return JSON.stringify({ sent: true, path: filePath, note: 'File was already sent' });

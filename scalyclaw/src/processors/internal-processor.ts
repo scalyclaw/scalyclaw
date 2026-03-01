@@ -167,12 +167,6 @@ async function processTask(job: Job<TaskData>): Promise<void> {
     return;
   }
 
-  const locked = await acquireTaskLock();
-  if (!locked) {
-    log('info', 'Task skipped — another scheduled task is running', { jobId: job.id, scheduledJobId });
-    return;
-  }
-
   const targetChannel = channelId || 'system';
   startAllTypingLoops();
 
@@ -219,7 +213,6 @@ async function processTask(job: Job<TaskData>): Promise<void> {
     }
     throw err;
   } finally {
-    await releaseTaskLock();
     stopAllTypingLoops();
   }
 }
