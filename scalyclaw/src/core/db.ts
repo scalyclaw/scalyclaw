@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { getLoadablePath } from 'sqlite-vec';
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { SQLITE_BUSY_TIMEOUT_MS } from '../const/constants.js';
+import { SQLITE_BUSY_TIMEOUT_MS, DEFAULT_MESSAGE_LIMIT } from '../const/constants.js';
 
 let db: Database | null = null;
 let vecAvailable = false;
@@ -147,18 +147,17 @@ export function storeMessage(channelId: string, role: string, content: string, m
   return msgId;
 }
 
-export function getChannelMessages(channelId: string, limit: number = 50): Message[] {
+export function getChannelMessages(channelId: string, limit: number = DEFAULT_MESSAGE_LIMIT): Message[] {
   const d = getDb();
   return d.prepare(
     `SELECT * FROM messages
      WHERE channel = ?
        AND (metadata IS NULL OR json_extract(metadata, '$.blocked') IS NOT 1)
-       AND (metadata IS NULL OR json_extract(metadata, '$.source') NOT IN ('reminder', 'recurrent-reminder', 'task', 'recurrent-task', 'proactive'))
      ORDER BY id DESC LIMIT ?`
   ).all(channelId, limit).reverse() as Message[];
 }
 
-export function getAllRecentMessages(limit: number = 50): Message[] {
+export function getAllRecentMessages(limit: number = DEFAULT_MESSAGE_LIMIT): Message[] {
   const d = getDb();
   const messages = d.prepare(
     `SELECT * FROM messages

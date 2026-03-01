@@ -2,6 +2,7 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_CHARS_PER_TOKEN,
+  DEFAULT_MESSAGE_LIMIT,
   SAFETY_MARGIN_TOKENS,
   COMPACTION_THRESHOLD,
   COMPACTION_KEEP_RATIO,
@@ -51,10 +52,19 @@ export interface EnsureBudgetResult {
 /**
  * Load channel-scoped messages and build an initial context budget.
  */
+/** Sources to exclude from orchestrator context (automated messages) */
+const EXCLUDED_SOURCES = new Set(['reminder', 'recurrent-reminder', 'task', 'recurrent-task', 'proactive']);
+
 export function initContext(opts: InitContextOpts): { messages: ChatMessage[]; budget: ContextBudget } {
   const { channelId, systemPrompt, tools, contextWindow = DEFAULT_CONTEXT_WINDOW } = opts;
 
-  const recentMessages = getChannelMessages(channelId, 50);
+  const recentMessages = getChannelMessages(channelId, DEFAULT_MESSAGE_LIMIT).filter(m => {
+    if (!m.metadata) return true;
+    try {
+      const meta = JSON.parse(m.metadata);
+      return !EXCLUDED_SOURCES.has(meta.source);
+    } catch { return true; }
+  });
   log('debug', 'initContext: loaded channel messages', { channelId, count: recentMessages.length });
 
   const messages: ChatMessage[] = recentMessages.map(m => ({
@@ -258,24 +268,6 @@ function groupMessages(messages: ChatMessage[]): { startIdx: number; endIdx: num
 }
 
 /**
- * Select the cheapest enabled model from config.
- * Cheapest = lowest inputPricePerMillion among enabled models.
- */
-function selectCheapestModel(): string | null {
-  const config = getConfigRef();
-  const enabled = config.models.models.filter(m => m.enabled);
-  if (enabled.length === 0) return null;
-
-  let cheapest = enabled[0];
-  for (const m of enabled) {
-    if (m.inputPricePerMillion < cheapest.inputPricePerMillion) {
-      cheapest = m;
-    }
-  }
-  return cheapest.id;
-}
-
-/**
  * Compact old messages by summarizing them via LLM.
  * Returns true if compaction was performed.
  */
@@ -314,10 +306,9 @@ async function compactMessages(messages: ChatMessage[], budget: ContextBudget): 
     return line;
   }).join('\n\n');
 
-  // Select cheapest model for summarization
+  // Select model via standard priority/weight selection
   const config = getConfigRef();
-  const summaryModelId = selectCheapestModel()
-    ?? selectModel(config.orchestrator.models)
+  const summaryModelId = selectModel(config.orchestrator.models)
     ?? selectModel(config.models.models.filter(m => m.enabled).map(m => ({ model: m.id, weight: m.weight, priority: m.priority })));
 
   if (!summaryModelId) {

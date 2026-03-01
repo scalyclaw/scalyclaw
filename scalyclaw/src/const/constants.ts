@@ -101,3 +101,6 @@ export const MAX_TOOL_RESULT_CHARS = 20_000;
 
 /** A single tool result can consume at most this fraction of the remaining budget (in chars). */
 export const TOOL_RESULT_BUDGET_FRACTION = 0.25;
+
+/** Number of recent messages to load from DB for context. */
+export const DEFAULT_MESSAGE_LIMIT = 50;
