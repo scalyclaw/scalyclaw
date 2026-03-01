@@ -68,4 +68,5 @@ install: uv sync
 - IDs end with \`-skill\` (auto-appended). Default language: Python.
 - Always test after creating. One skill per concern.
 - Deps in metadata files only, never install from script code.
+- \`install\` field: use \`uv pip install <pkg>\` for Python deps, \`uv sync\` with pyproject.toml. Never use \`--system\`. Never include \`uv venv\`. System creates venvs automatically.
 - On dependency errors: report and stop. On runtime errors: fix script, retry once. After 2-3 retries: tell user and stop.`;

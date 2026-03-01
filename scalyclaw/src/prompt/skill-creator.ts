@@ -49,6 +49,14 @@ Follow this exact sequence to create a skill:
    - After 2-3 retries of the same error, report to the user and stop.
 6. **Report** — Use \`send_message\` to update the user on progress and final results.
 
+## Install Conventions
+
+- Python venvs are auto-created by the system. NEVER include \`uv venv\` in install commands.
+- Use \`uv pip install <packages>\` for direct deps (no --system flag).
+- Use \`uv sync\` when you write a pyproject.toml.
+- Use \`install: none\` for skills with no external dependencies.
+- Install commands run in the skill directory with the venv already available.
+
 ## Critical Script Rules
 
 - **stdout must contain ONLY the final JSON output** — no \`print()\` debug statements, no subprocess progress output. All logging/debug output goes to stderr (\`print(..., file=sys.stderr)\` in Python, \`console.error()\` in JS).

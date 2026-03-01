@@ -227,7 +227,7 @@ export const TOOL_NAMES_SET = new Set([
 export const ASSISTANT_TOOLS: ToolDefinition[] = TOOL_DEFS;
 
 /** Build scoped tool definitions for an agent based on allowed tools, skills, and MCPs */
-export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: string[], mcpTools: ToolDefinition[]): ToolDefinition[] {
+export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: string[] | null, mcpTools: ToolDefinition[]): ToolDefinition[] {
   const allowedSet = new Set(allowedTools);
 
   // Filter direct tools to intersection with allowed
@@ -236,9 +236,11 @@ export function buildAgentToolDefs(allowedTools: string[], allowedSkillIds: stri
   // Filter job tools to intersection with allowed
   const allowedJobNames = AGENT_JOB_NAMES.filter(n => allowedSet.has(n));
 
-  const skillNote = allowedSkillIds.length > 0
-    ? ` (allowed: ${allowedSkillIds.join(', ')})`
-    : ' (none allowed)';
+  const skillNote = allowedSkillIds === null
+    ? ''
+    : allowedSkillIds.length > 0
+      ? ` (allowed: ${allowedSkillIds.join(', ')})`
+      : ' (none allowed)';
 
   const result: ToolDefinition[] = [...directTools];
 

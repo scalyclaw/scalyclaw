@@ -28,7 +28,7 @@ const inFlight = new Map<string, Promise<void>>();
 const AUTO_DETECT: Record<string, { file: string; cmd: string }[]> = {
   python: [
     { file: 'pyproject.toml', cmd: 'uv sync' },
-    { file: 'requirements.txt', cmd: 'uv venv && uv pip install -r requirements.txt' },
+    { file: 'requirements.txt', cmd: 'uv pip install -r requirements.txt' },
   ],
   javascript: [
     { file: 'package.json', cmd: 'bun install' },
@@ -123,7 +123,20 @@ export async function ensureInstalled(skill: SkillDefinition, skillDir: string):
   }
 }
 
+/** Sanitize LLM-generated install commands to avoid common mistakes. */
+function sanitizeInstallCommand(command: string): string {
+  let cmd = command;
+  // Strip --system flag from uv pip commands (system creates venv, --system bypasses it)
+  cmd = cmd.replace(/\buv\s+pip\s+install\s+--system\b/g, 'uv pip install');
+  // Strip leading uv venv creation (system handles it)
+  cmd = cmd.replace(/^uv\s+venv\b[^&]*&&\s*/i, '');
+  return cmd;
+}
+
 async function doInstall(skill: SkillDefinition, skillDir: string, command: string): Promise<void> {
+  // Sanitize the command before use (fixes common LLM mistakes like --system, redundant uv venv)
+  command = sanitizeInstallCommand(command);
+
   // Compute hash of install command + dependency file contents
   const hash = await computeDepHash(command, skill.scriptLanguage, skillDir);
 
@@ -140,22 +153,20 @@ async function doInstall(skill: SkillDefinition, skillDir: string, command: stri
   }
 
   // Ensure Python skills have a venv before running install
+  // Use --allow-existing to be idempotent (no-op if venv already exists, avoids race conditions)
   if (skill.scriptLanguage === 'python') {
-    const venvPath = join(skillDir, '.venv');
-    if (!await fileExists(venvPath)) {
-      log('info', 'skill-setup: creating venv', { skillId: skill.id });
-      const venvResult = await spawnProcess({
-        cmd: 'uv',
-        args: ['venv'],
-        cwd: skillDir,
-        timeoutMs: VENV_TIMEOUT_MS,
-        workspacePath: skillDir,
-        extraEnv: getWorkerExtraEnv(),
-        label: `skill-setup:${skill.id}:venv`,
-      });
-      if (venvResult.exitCode !== 0) {
-        throw new Error(`Skill "${skill.id}" venv creation failed: ${venvResult.stderr}`);
-      }
+    log('info', 'skill-setup: ensuring venv', { skillId: skill.id });
+    const venvResult = await spawnProcess({
+      cmd: 'uv',
+      args: ['venv', '--allow-existing'],
+      cwd: skillDir,
+      timeoutMs: VENV_TIMEOUT_MS,
+      workspacePath: skillDir,
+      extraEnv: getWorkerExtraEnv(),
+      label: `skill-setup:${skill.id}:venv`,
+    });
+    if (venvResult.exitCode !== 0) {
+      throw new Error(`Skill "${skill.id}" venv creation failed: ${venvResult.stderr}`);
     }
   }
 

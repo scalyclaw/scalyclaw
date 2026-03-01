@@ -135,7 +135,7 @@ async function runAgentLoop(
     },
     messages,
     modelId,
-    allowedSkillIds: agent.skills,
+    allowedSkillIds: agent.skills ?? undefined,
     allowedToolNames,
   };
 

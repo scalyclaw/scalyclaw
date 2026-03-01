@@ -13,7 +13,7 @@ export interface AgentDefinition {
   enabled: boolean;
   maxIterations: number;
   models: { model: string; weight: number; priority: number }[];
-  skills: string[];
+  skills: string[] | null;
   tools: string[];
   mcpServers: string[];
   systemPrompt: string;
@@ -39,7 +39,7 @@ export async function loadAllAgents(): Promise<Map<string, AgentDefinition>> {
     enabled: true,
     maxIterations: 25,
     models: modelEntry,
-    skills: [],
+    skills: null,
     tools: [...AGENT_ELIGIBLE_TOOL_NAMES],
     mcpServers: [],
     systemPrompt: SKILL_CREATOR_PROMPT,
