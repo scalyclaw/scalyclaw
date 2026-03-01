@@ -165,18 +165,20 @@ async function processTask(job: Job<TaskData>): Promise<void> {
       sendToChannel: async () => {},
     });
 
-    storeMessage(targetChannel, 'assistant', result, { source: 'task', scheduledJobId });
-    await publishProgress(getRedis(), targetChannel, {
-      jobId: job.id!,
-      type: 'complete',
-      result,
-    });
+    if (result.length > 0) {
+      storeMessage(targetChannel, 'assistant', result, { source: 'task', scheduledJobId });
+      await publishProgress(getRedis(), targetChannel, {
+        jobId: job.id!,
+        type: 'complete',
+        result,
+      });
 
-    await enqueueJob({
-      name: 'memory-extraction',
-      data: { channelId: targetChannel, texts: [task, result] },
-      opts: { attempts: 1 },
-    });
+      await enqueueJob({
+        name: 'memory-extraction',
+        data: { channelId: targetChannel, texts: [task, result] },
+        opts: { attempts: 1 },
+      });
+    }
 
     await markScheduledCompleted(scheduledJobId);
     log('info', 'Task completed', { channelId: targetChannel, scheduledJobId });
@@ -228,18 +230,20 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
       sendToChannel: async () => {},
     });
 
-    storeMessage(targetChannel, 'assistant', result, { source: 'recurrent-task', scheduledJobId });
-    await publishProgress(getRedis(), targetChannel, {
-      jobId: job.id!,
-      type: 'complete',
-      result,
-    });
+    if (result.length > 0) {
+      storeMessage(targetChannel, 'assistant', result, { source: 'recurrent-task', scheduledJobId });
+      await publishProgress(getRedis(), targetChannel, {
+        jobId: job.id!,
+        type: 'complete',
+        result,
+      });
 
-    await enqueueJob({
-      name: 'memory-extraction',
-      data: { channelId: targetChannel, texts: [task, result] },
-      opts: { attempts: 1 },
-    });
+      await enqueueJob({
+        name: 'memory-extraction',
+        data: { channelId: targetChannel, texts: [task, result] },
+        opts: { attempts: 1 },
+      });
+    }
 
     log('info', 'Recurrent task completed', { channelId: targetChannel, scheduledJobId });
   } catch (err) {

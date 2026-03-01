@@ -83,3 +83,7 @@ export const DEFAULT_CONTEXT_WINDOW = 128_000;
 
 /** Approximate characters per token (heuristic). */
 export const CHARS_PER_TOKEN_RATIO = 3.5;
+
+/** Max characters for a single tool result in conversation context.
+ *  Prevents a single large result (e.g. skill stdout) from blowing up the context window. */
+export const MAX_TOOL_RESULT_CHARS = 8_000;

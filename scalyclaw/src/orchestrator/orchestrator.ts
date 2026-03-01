@@ -1,5 +1,5 @@
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO } from '../const/constants.js';
+import { DEFAULT_CONTEXT_WINDOW, CHARS_PER_TOKEN_RATIO, MAX_TOOL_RESULT_CHARS } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import type { ChatMessage } from '../models/provider.js';
@@ -101,6 +101,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
   // LLM tool loop
   let finalContent = '';
+  let lastProgressSent = '';  // Track what was already sent as progress
   let round = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -157,9 +158,8 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
         totalInputTokens,
         maxInputTokens,
       });
-      if (!finalContent) {
-        finalContent = 'I used too many resources processing this. Let me know if you\'d like me to try a different approach.';
-      }
+      // Don't override useful content with a generic error.
+      // If nothing was produced at all, leave finalContent empty — the caller decides what to do.
       break;
     }
 
@@ -167,11 +167,15 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     const progressText = response.content?.trim();
     if (progressText) {
       // LLM provided narration alongside tool calls — relay it
+      lastProgressSent = progressText;
       await input.sendToChannel(input.channelId, progressText).catch(() => {});
     } else if (round === 1) {
       // First round, no narration — auto-generate friendly status
       const brief = describeToolCalls(response.toolCalls);
-      if (brief) await input.sendToChannel(input.channelId, brief).catch(() => {});
+      if (brief) {
+        lastProgressSent = brief;
+        await input.sendToChannel(input.channelId, brief).catch(() => {});
+      }
     }
 
     // Add assistant message with tool calls to conversation
@@ -189,11 +193,14 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       })
     );
 
-    // Add all tool results to conversation
+    // Add all tool results to conversation (truncate oversized results to prevent context blowup)
     for (const { toolCall, result } of toolResults) {
+      const content = result.length > MAX_TOOL_RESULT_CHARS
+        ? result.slice(0, MAX_TOOL_RESULT_CHARS) + `\n...(truncated from ${result.length} chars)`
+        : result;
       messages.push({
         role: 'tool',
-        content: result,
+        content,
         tool_call_id: toolCall.id,
       });
     }
@@ -213,9 +220,12 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
   if (round >= maxIterations) {
     log('warn', 'Orchestrator hit max iterations', { channelId: input.channelId, rounds: round, maxIterations });
-    if (!finalContent) {
-      finalContent = 'I hit my processing limit on this one. Let me know if you need me to continue.';
-    }
+    // Don't override useful content with a generic error
+  }
+
+  // If finalContent was already sent as progress, don't re-deliver it (avoids duplicate messages)
+  if (finalContent && finalContent === lastProgressSent) {
+    finalContent = '';
   }
 
   recordUsage({
