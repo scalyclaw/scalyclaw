@@ -117,23 +117,96 @@
           </tbody>
         </table>
 
-        <h3>Fallback Chain</h3>
+        <h3>Model Selection Algorithm</h3>
 
-        <p>When a model call fails — due to a network error, rate-limit, timeout, or provider outage — ScalyClaw automatically tries the next available model. The fallback order is determined entirely by the <code>priority</code> field:</p>
+        <p>ScalyClaw uses a two-tier selection algorithm combining <strong>priority groups</strong> with <strong>weighted random selection</strong>:</p>
 
         <ol>
-          <li>All models with the lowest priority value are candidates for the first attempt. If there are multiple, they share load according to their <code>weight</code>.</li>
-          <li>If every model in that priority group fails (or none has the required capabilities), the orchestrator moves to the next priority group.</li>
-          <li>This continues until either a call succeeds or all models are exhausted, in which case an error is returned to the channel.</li>
+          <li><strong>Filter</strong> — only enabled models with the required capabilities (e.g. <code>toolEnabled</code>, <code>imageEnabled</code>) are considered.</li>
+          <li><strong>Group by priority</strong> — candidates are sorted by <code>priority</code> (lower number = higher priority). Only the lowest-numbered group is used for the initial attempt.</li>
+          <li><strong>Weighted random pick</strong> — within that priority group, a model is selected probabilistically. Each model's chance of being chosen equals <code>weight / totalWeight</code>. A model with <code>weight: 75</code> is picked three times as often as one with <code>weight: 25</code> in the same group.</li>
+          <li><strong>Fallback</strong> — if every model in the top priority group fails (network error, rate limit, timeout, provider outage), the orchestrator moves to the next priority group and repeats. This continues until a call succeeds or all groups are exhausted.</li>
         </ol>
 
         <div class="callout callout-info">
           <div class="callout-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-            How weight works
+            Weight is probabilistic, not round-robin
           </div>
-          <p>Weights within the same priority level are used for weighted-random selection, not strict round-robin. Each candidate's probability of being chosen equals its weight divided by the sum of all weights in that group. A weight of <code>0</code> disables a model without removing it from the config.</p>
+          <p>Weights control the <em>probability</em> of selection, not a strict rotation. Each request independently rolls the dice. Over many requests the distribution converges to the weight ratio, but short runs may show variance. A weight of <code>0</code> effectively disables a model without removing it from the config.</p>
         </div>
+
+        <h3>Selection Hierarchy</h3>
+
+        <p>Different components in ScalyClaw can define their own model lists. Selection follows a fallback chain from most specific to most general:</p>
+
+        <table>
+          <thead>
+            <tr><th>Component</th><th>Primary source</th><th>Fallback</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Orchestrator</strong></td>
+              <td><code>orchestrator.models[]</code></td>
+              <td>Global <code>models.models[]</code> (enabled only)</td>
+            </tr>
+            <tr>
+              <td><strong>Agent</strong></td>
+              <td>Agent-specific <code>models[]</code></td>
+              <td>Orchestrator models, then global</td>
+            </tr>
+            <tr>
+              <td><strong>Guards</strong></td>
+              <td>Guard-specific <code>model</code> field</td>
+              <td>Global <code>models.models[]</code></td>
+            </tr>
+            <tr>
+              <td><strong>Proactive</strong></td>
+              <td><code>proactive.model</code></td>
+              <td>Orchestrator models, then global</td>
+            </tr>
+            <tr>
+              <td><strong>Memory extraction</strong></td>
+              <td>Global <code>models.models[]</code></td>
+              <td>—</td>
+            </tr>
+            <tr>
+              <td><strong>Embeddings</strong></td>
+              <td><code>memory.embeddingModel</code></td>
+              <td><code>models.embeddingModels[]</code> via weighted selection</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <p>This means the orchestrator and each agent can run on different models. For example, the orchestrator can use Claude Opus while a lightweight research agent uses GPT-4o-mini — all configurable without code changes.</p>
+
+        <h3>"auto" Model Selection</h3>
+
+        <p>Several config fields accept the special value <code>"auto"</code>, which means "use weighted-random selection from enabled models instead of a fixed model." This is the recommended default — it enables load balancing and automatic fallback.</p>
+
+        <table>
+          <thead>
+            <tr><th>Field</th><th>Behavior when <code>"auto"</code></th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>memory.embeddingModel</code></td>
+              <td>Select from <code>models.embeddingModels[]</code> using priority + weight. Default is <code>"auto"</code>.</td>
+            </tr>
+            <tr>
+              <td>Agent <code>models[].model</code></td>
+              <td>Entries with <code>model: "auto"</code> are skipped, causing the agent to fall through to the orchestrator's model list, then to the global pool.</td>
+            </tr>
+            <tr>
+              <td><code>proactive.model</code></td>
+              <td>When empty or <code>""</code>, falls through to orchestrator models, then global.</td>
+            </tr>
+            <tr>
+              <td>Guard <code>model</code> fields</td>
+              <td>When empty or <code>""</code>, falls through to global model selection.</td>
+            </tr>
+          </tbody>
+        </table>
 
         <h3>Supported Providers</h3>
 

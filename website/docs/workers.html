@@ -16,11 +16,11 @@
       <div class="docs-content">
 
         <h1>Workers</h1>
-        <p>The worker process is a stateless execution sandbox that consumes only the <code>scalyclaw-tools</code> queue. It only needs Redis and a reachable gateway — no shared filesystem or direct connection to the Node. The Node process itself runs its own in-process BullMQ workers for the remaining five queues.</p>
+        <p>The worker process is a stateless execution sandbox that consumes only the <code>scalyclaw-tools</code> queue. It only needs Redis and a reachable gateway — no shared filesystem or direct connection to the Node. The Node process itself runs its own in-process BullMQ workers for the remaining three queues.</p>
 
         <h2 id="overview">Overview</h2>
 
-        <p>ScalyClaw splits queue consumption between two processes. The <strong>worker process</strong> (<code>worker/</code>) handles sandboxed tool execution in isolation. The <strong>Node process</strong> runs in-process BullMQ workers for orchestration, agents, scheduling, proactive messaging, and system events.</p>
+        <p>ScalyClaw splits queue consumption between two processes. The <strong>worker process</strong> (<code>worker/</code>) handles sandboxed tool execution in isolation. The <strong>Node process</strong> runs in-process BullMQ workers for messages, agents, and internal jobs (scheduling, proactive, memory extraction).</p>
 
         <h3>Worker process — <code>scalyclaw-tools</code> queue only</h3>
 
@@ -48,7 +48,7 @@
 
         <p>The worker connects to Redis directly and reaches the Node only through the gateway API (used as a file bridge). Sub-processors: <code>execute-code.ts</code>, <code>execute-command.ts</code>, <code>execute-skill.ts</code>.</p>
 
-        <h3>Node process — five in-process workers</h3>
+        <h3>Node process — three in-process workers</h3>
 
         <p>The Node runs its own BullMQ workers for all orchestration queues. These are not separate processes — they run inside the Node alongside the channel adapters and REST API.</p>
 
@@ -60,7 +60,7 @@
             <tr>
               <td><code>message-processor.ts</code></td>
               <td><code>scalyclaw-messages</code></td>
-              <td>1</td>
+              <td>5</td>
               <td>Drives the full orchestrator pipeline for an inbound user message — guards, LLM call, tool loop, and reply dispatch.</td>
             </tr>
             <tr>
@@ -70,22 +70,10 @@
               <td>Runs delegated sub-agents. Each sub-agent gets its own orchestrator loop with its own system prompt and tool permission set, then returns a structured result.</td>
             </tr>
             <tr>
-              <td><code>schedule-processor.ts</code></td>
-              <td><code>scalyclaw-scheduler</code></td>
-              <td>2</td>
-              <td>Fires delayed and recurring jobs — reminders, timed tasks, periodic skill runs. BullMQ's built-in delay support handles timing; this processor handles what happens when a job fires.</td>
-            </tr>
-            <tr>
-              <td><code>proactive-processor.ts</code></td>
-              <td><code>scalyclaw-proactive</code></td>
-              <td>1</td>
-              <td>Generates and sends engagement-triggered outbound messages when the proactive system decides to reach out to a channel.</td>
-            </tr>
-            <tr>
-              <td><code>system-processor.ts</code></td>
-              <td><code>scalyclaw-system</code></td>
-              <td>2</td>
-              <td>Handles operational events — config reloads, maintenance tasks, cache invalidation. Kept separate from the message queue so system operations never block user traffic.</td>
+              <td><code>internal-processor.ts</code></td>
+              <td><code>scalyclaw-internal</code></td>
+              <td>3</td>
+              <td>Handles all background internal jobs — <code>proactive-check</code> (engagement checks), <code>reminder</code>/<code>recurrent-reminder</code>, <code>task</code>/<code>recurrent-task</code>, <code>memory-extraction</code> (post-conversation memory saving), and <code>vault-key-rotation</code>. Kept separate from the message queue so internal operations never block user traffic.</td>
             </tr>
           </tbody>
         </table>
@@ -247,7 +235,7 @@
 
         <h3>Jobs Page</h3>
 
-        <p>The Jobs page gives a live view into all six BullMQ queues. You can inspect, filter, retry, and clean jobs without touching Redis directly.</p>
+        <p>The Jobs page gives a live view into all four BullMQ queues. You can inspect, filter, retry, and clean jobs without touching Redis directly.</p>
 
         <table>
           <thead>
@@ -256,7 +244,7 @@
           <tbody>
             <tr>
               <td>Queue selector</td>
-              <td>Switch between <code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-tools</code>, <code>scalyclaw-proactive</code>, <code>scalyclaw-scheduler</code>, and <code>scalyclaw-system</code> queues.</td>
+              <td>Switch between <code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-tools</code>, and <code>scalyclaw-internal</code> queues.</td>
             </tr>
             <tr>
               <td>Status filter</td>

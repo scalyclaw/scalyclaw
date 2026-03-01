@@ -222,9 +222,9 @@ ScalyClaw automatically extracts and stores memories from conversations. Memorie
 ScalyClaw works with any **OpenAI-compatible API** — OpenAI, Anthropic, local models via Ollama/LM Studio, or any provider with an OpenAI-compatible endpoint.
 
 - **Multiple models** — configure different models for different tasks (chat, agents, guards, embeddings)
-- **Fallback chain** — if one model fails, automatically try the next
-- **Budget control** — set monthly/daily spending limits per model, with soft or hard enforcement
-- **Embedding models** — separate model config for memory vector search
+- **Priority + weight load balancing** — models are grouped by `priority` (lower = tried first). Within a priority group, requests are distributed via weighted-random selection based on each model's `weight`. If the entire group fails, the next priority group is tried automatically
+- **Budget control** — global monthly/daily spending limits with soft or hard enforcement
+- **Embedding models** — separate model config for memory vector search. Set `embeddingModel` to `"auto"` (default) to select from enabled embedding models using priority + weight
 
 ---
 

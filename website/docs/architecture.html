@@ -131,7 +131,7 @@
 
         <h2 id="queues">Queue System</h2>
 
-        <p>ScalyClaw uses six BullMQ queues. The separate Worker process consumes only the <code>scalyclaw-tools</code> queue. The Node process runs its own BullMQ workers for the remaining five queues. Jobs are persistent — Redis stores them until acknowledged — so a restart never loses work in progress.</p>
+        <p>ScalyClaw uses four BullMQ queues. The separate Worker process consumes only the <code>scalyclaw-tools</code> queue. The Node process runs its own BullMQ workers for the remaining three queues. Jobs are persistent — Redis stores them until acknowledged — so a restart never loses work in progress.</p>
 
         <div class="callout callout-warn">
           <div class="callout-label">
@@ -149,7 +149,7 @@
             <tr>
               <td><code>scalyclaw-messages</code></td>
               <td>Node (<code>message-processor.ts</code>)</td>
-              <td>1</td>
+              <td>5</td>
               <td><code>message-processing</code>, <code>command</code></td>
             </tr>
             <tr>
@@ -165,29 +165,17 @@
               <td><code>tool-execution</code>, <code>skill-execution</code></td>
             </tr>
             <tr>
-              <td><code>scalyclaw-proactive</code></td>
-              <td>Node (<code>proactive-processor.ts</code>)</td>
-              <td>1</td>
-              <td><code>proactive-check</code></td>
-            </tr>
-            <tr>
-              <td><code>scalyclaw-scheduler</code></td>
-              <td>Node (<code>scheduler-processor.ts</code>)</td>
-              <td>2</td>
-              <td><code>reminder</code>, <code>recurrent-reminder</code>, <code>task</code>, <code>recurrent-task</code></td>
-            </tr>
-            <tr>
-              <td><code>scalyclaw-system</code></td>
-              <td>Node (<code>system-processor.ts</code>)</td>
-              <td>2</td>
-              <td><code>memory-extraction</code>, <code>scheduled-fire</code>, <code>proactive-fire</code></td>
+              <td><code>scalyclaw-internal</code></td>
+              <td>Node (<code>internal-processor.ts</code>)</td>
+              <td>3</td>
+              <td><code>proactive-check</code>, <code>reminder</code>, <code>recurrent-reminder</code>, <code>task</code>, <code>recurrent-task</code>, <code>memory-extraction</code>, <code>vault-key-rotation</code></td>
             </tr>
           </tbody>
         </table>
 
         <h3>Worker Scaling</h3>
 
-        <p>Because the Worker is stateless and only consumes the <code>scalyclaw-tools</code> queue, you can run as many Worker processes as you need to scale tool throughput. Each Worker connects to the same Redis and competes with peers for jobs. BullMQ handles distributed locking internally — a job is processed by exactly one worker even when many are running. The five Node-internal queues (<code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-proactive</code>, <code>scalyclaw-scheduler</code>, <code>scalyclaw-system</code>) are always consumed by the Node process itself.</p>
+        <p>Because the Worker is stateless and only consumes the <code>scalyclaw-tools</code> queue, you can run as many Worker processes as you need to scale tool throughput. Each Worker connects to the same Redis and competes with peers for jobs. BullMQ handles distributed locking internally — a job is processed by exactly one worker even when many are running. The three Node-internal queues (<code>scalyclaw-messages</code>, <code>scalyclaw-agents</code>, <code>scalyclaw-internal</code>) are always consumed by the Node process itself.</p>
 
         <div class="code-block">
           <div class="code-block-header">
@@ -214,6 +202,7 @@ scalyclaw worker start &amp;</pre>
   <span class="prop">"orchestrator"</span>: {
     <span class="prop">"id"</span>: <span class="str">"default"</span>,
     <span class="prop">"maxIterations"</span>: <span class="num">50</span>,
+    <span class="prop">"maxInputTokens"</span>: <span class="num">150000</span>,
     <span class="prop">"models"</span>: [{ <span class="prop">"model"</span>: <span class="str">"claude-sonnet-4-20250514"</span>, <span class="prop">"weight"</span>: <span class="num">100</span>, <span class="prop">"priority"</span>: <span class="num">1</span> }],
     <span class="prop">"skills"</span>: [],
     <span class="prop">"agents"</span>: []
@@ -225,9 +214,9 @@ scalyclaw worker start &amp;</pre>
     <span class="prop">"authType"</span>: <span class="str">"none"</span>,
     <span class="prop">"authValue"</span>: <span class="kw">null</span>,
     <span class="prop">"tls"</span>: { <span class="prop">"cert"</span>: <span class="str">""</span>, <span class="prop">"key"</span>: <span class="str">""</span> },
-    <span class="prop">"cors"</span>: [<span class="str">"*"</span>]
+    <span class="prop">"cors"</span>: []
   },
-  <span class="prop">"logs"</span>: { <span class="prop">"level"</span>: <span class="str">"info"</span>, <span class="prop">"format"</span>: <span class="str">"json"</span>, <span class="prop">"type"</span>: <span class="str">"console"</span> },
+  <span class="prop">"logs"</span>: { <span class="prop">"level"</span>: [<span class="str">"all"</span>], <span class="prop">"format"</span>: <span class="str">"json"</span>, <span class="prop">"type"</span>: <span class="str">"console"</span> },
   <span class="prop">"memory"</span>: {
     <span class="prop">"topK"</span>: <span class="num">10</span>,
     <span class="prop">"scoreThreshold"</span>: <span class="num">0.5</span>,
@@ -278,14 +267,14 @@ scalyclaw worker start &amp;</pre>
   },
   <span class="prop">"guards"</span>: {
     <span class="prop">"message"</span>: {
-      <span class="prop">"enabled"</span>: <span class="kw">false</span>,
+      <span class="prop">"enabled"</span>: <span class="kw">true</span>,
       <span class="prop">"model"</span>: <span class="str">""</span>,
-      <span class="prop">"echoGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"similarityThreshold"</span>: <span class="num">0.9</span> },
+      <span class="prop">"echoGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"similarityThreshold"</span>: <span class="num">0.7</span> },
       <span class="prop">"contentGuard"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span> }
     },
-    <span class="prop">"skill"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
-    <span class="prop">"agent"</span>: { <span class="prop">"enabled"</span>: <span class="kw">false</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
-    <span class="prop">"commandShield"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"denied"</span>: [<span class="str">"rm -rf /"</span>, <span class="str">"mkfs"</span>, <span class="str">"..."</span>], <span class="prop">"allowed"</span>: [] }
+    <span class="prop">"skill"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
+    <span class="prop">"agent"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"model"</span>: <span class="str">""</span> },
+    <span class="prop">"commandShield"</span>: { <span class="prop">"enabled"</span>: <span class="kw">true</span>, <span class="prop">"denied"</span>: [<span class="str">"rm -rf /"</span>, <span class="str">"mkfs."</span>, <span class="str">"shutdown"</span>, <span class="str">"..."</span>], <span class="prop">"allowed"</span>: [] }
   },
   <span class="prop">"budget"</span>: {
     <span class="prop">"monthlyLimit"</span>: <span class="num">0</span>,
@@ -305,11 +294,6 @@ scalyclaw worker start &amp;</pre>
       <span class="prop">"start"</span>: <span class="num">22</span>,
       <span class="prop">"end"</span>: <span class="num">8</span>,
       <span class="prop">"timezone"</span>: <span class="str">"UTC"</span>
-    },
-    <span class="prop">"triggers"</span>: {
-      <span class="prop">"undeliveredResults"</span>: <span class="kw">true</span>,
-      <span class="prop">"firedScheduledItems"</span>: <span class="kw">true</span>,
-      <span class="prop">"unansweredMessages"</span>: <span class="kw">true</span>
     }
   },
   <span class="prop">"channels"</span>: {},

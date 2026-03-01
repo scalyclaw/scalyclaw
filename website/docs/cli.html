@@ -205,7 +205,7 @@
             <tr>
               <td><code>--verbose</code></td>
               <td>off</td>
-              <td>Enable debug-level logging. Prints queue events, Redis round-trips, and LLM request/response details.</td>
+              <td>Override the configured log levels and enable all four levels (<code>debug</code>, <code>info</code>, <code>warn</code>, <code>error</code>). Equivalent to setting <code>logs.level</code> to <code>["all"]</code> in the config. By default, the config already defaults to <code>["all"]</code> — this flag is useful when the config has been narrowed to specific levels.</td>
             </tr>
           </tbody>
         </table>

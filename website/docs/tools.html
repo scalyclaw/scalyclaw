@@ -449,25 +449,25 @@
             <tr>
               <td><code>schedule_reminder</code></td>
               <td>Schedule a one-shot text reminder. The message is delivered back to the channel at the specified time.</td>
-              <td><code>scalyclaw-scheduler</code></td>
+              <td><code>scalyclaw-internal</code></td>
               <td><code>message</code> — content of the reminder<br /><code>at</code> — ISO 8601 timestamp<br /><code>timezone</code> — IANA timezone string</td>
             </tr>
             <tr>
               <td><code>schedule_recurrent_reminder</code></td>
               <td>Schedule a repeating reminder on a cron schedule.</td>
-              <td><code>scalyclaw-scheduler</code></td>
+              <td><code>scalyclaw-internal</code></td>
               <td><code>message</code> — content of the reminder<br /><code>cron</code> — cron expression<br /><code>timezone</code> — IANA timezone string</td>
             </tr>
             <tr>
               <td><code>schedule_task</code></td>
               <td>Schedule a one-shot LLM task to run at a future time.</td>
-              <td><code>scalyclaw-scheduler</code></td>
+              <td><code>scalyclaw-internal</code></td>
               <td><code>task</code> — natural-language task description<br /><code>at</code> — ISO 8601 timestamp</td>
             </tr>
             <tr>
               <td><code>schedule_recurrent_task</code></td>
               <td>Schedule a repeating LLM task on a cron schedule.</td>
-              <td><code>scalyclaw-scheduler</code></td>
+              <td><code>scalyclaw-internal</code></td>
               <td><code>task</code> — natural-language task description<br /><code>cron</code> — cron expression<br /><code>timezone</code> — IANA timezone string</td>
             </tr>
           </tbody>
@@ -647,25 +647,25 @@
             <tr>
               <td><code>schedule_reminder</code></td>
               <td>Node — inline</td>
-              <td><code>scheduler</code> → <code>scalyclaw-scheduler</code></td>
+              <td><code>internal</code> → <code>scalyclaw-internal</code></td>
               <td>Enqueues a BullMQ delayed job; the enqueue itself is fast and synchronous</td>
             </tr>
             <tr>
               <td><code>schedule_recurrent_reminder</code></td>
               <td>Node — inline</td>
-              <td><code>scheduler</code> → <code>scalyclaw-scheduler</code></td>
+              <td><code>internal</code> → <code>scalyclaw-internal</code></td>
               <td>Enqueues a repeating BullMQ job</td>
             </tr>
             <tr>
               <td><code>schedule_task</code></td>
               <td>Node — inline</td>
-              <td><code>scheduler</code> → <code>scalyclaw-scheduler</code></td>
+              <td><code>internal</code> → <code>scalyclaw-internal</code></td>
               <td>Enqueues a one-shot LLM task job</td>
             </tr>
             <tr>
               <td><code>schedule_recurrent_task</code></td>
               <td>Node — inline</td>
-              <td><code>scheduler</code> → <code>scalyclaw-scheduler</code></td>
+              <td><code>internal</code> → <code>scalyclaw-internal</code></td>
               <td>Enqueues a repeating LLM task job</td>
             </tr>
             <tr>
