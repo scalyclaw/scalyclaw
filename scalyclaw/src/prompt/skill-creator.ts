@@ -61,6 +61,8 @@ Follow this exact sequence to create a skill:
 
 - **stdout must contain ONLY the final JSON output** — no \`print()\` debug statements, no subprocess progress output. All logging/debug output goes to stderr (\`print(..., file=sys.stderr)\` in Python, \`console.error()\` in JS).
 - When running subprocesses (ffmpeg, curl, etc.), **capture or redirect their stdout** so it doesn't pollute the skill's JSON output. Example: \`subprocess.run(..., capture_output=True)\` or \`stdout=subprocess.DEVNULL\`.
-- Output files must use **simple filenames without spaces** where possible (use underscores or hashes). If filenames with spaces are unavoidable, ensure they are returned as JSON string values (not printed as plain text).
+- **Output files MUST be written to \`WORKSPACE_DIR\`** (available as env var: \`os.environ["WORKSPACE_DIR"]\` in Python, \`process.env.WORKSPACE_DIR\` in JS). NEVER write to \`/tmp\` — files outside workspace are invisible to the transfer system and cannot be sent to users. Use \`os.makedirs(workspace_dir, exist_ok=True)\` if needed.
+- Output files must use **simple filenames without spaces** where possible (use underscores or hashes, sanitize any user/external input). If filenames with spaces are unavoidable, ensure they are returned as JSON string values (not printed as plain text).
+- Return output file paths as **absolute paths** in the JSON output (e.g. \`os.path.join(workspace_dir, "output.mp3")\`). The system auto-detects workspace paths and transfers files from workers.
 
 ${EXTENSIONS_SECTION}`;

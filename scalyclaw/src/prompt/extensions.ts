@@ -61,7 +61,8 @@ install: uv sync
 
 - **Input**: JSON via stdin
 - **Output**: JSON to stdout only — no debug prints (redirect to stderr)
-- Output files: use absolute paths in stdout JSON. Files auto-transfer from workers.
+- **Output files**: write to \`WORKSPACE_DIR\` env var (available in all skill processes). Return absolute paths in stdout JSON. Files auto-transfer from workers. NEVER use \`/tmp\`.
+- Use simple filenames without spaces (sanitize external input — replace spaces/special chars with underscores).
 
 ### Rules
 
