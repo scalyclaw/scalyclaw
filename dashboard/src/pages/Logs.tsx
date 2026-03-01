@@ -74,11 +74,12 @@ function parseLineTimestamp(line: string): Date | null {
 }
 
 function parseLevel(line: string): string | null {
-  const lower = line.toLowerCase();
-  if (/\berror\b/.test(lower)) return 'error';
-  if (/\bwarn(ing)?\b/.test(lower)) return 'warn';
-  if (/\binfo\b/.test(lower)) return 'info';
-  if (/\bdebug\b/.test(lower)) return 'debug';
+  // Text format: "HH:mm:ss.SSS LEVEL message..." — level tag is right after timestamp
+  const textMatch = line.match(/^\d{2}:\d{2}:\d{2}\.\d{3}\s+(DEBUG|INFO|WARN|ERROR)\b/i);
+  if (textMatch) return textMatch[1].toLowerCase() as string;
+  // JSON format: {"timestamp":"...","level":"debug",...}
+  const jsonMatch = line.match(/"level"\s*:\s*"(debug|info|warn|error)"/i);
+  if (jsonMatch) return jsonMatch[1].toLowerCase() as string;
   return null;
 }
 
