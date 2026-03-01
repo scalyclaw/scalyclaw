@@ -5,12 +5,7 @@ import { LOG_META_TRUNCATE } from '../const/constants.js';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
-const LEVEL_PRIORITY: Record<LogLevel, number> = {
-  debug: 0,
-  info: 1,
-  warn: 2,
-  error: 3,
-};
+const ALL_LEVELS: LogLevel[] = ['debug', 'info', 'warn', 'error'];
 
 const LEVEL_COLORS: Record<LogLevel, string> = {
   debug: '\x1b[90m',   // gray
@@ -21,12 +16,16 @@ const LEVEL_COLORS: Record<LogLevel, string> = {
 const RESET = '\x1b[0m';
 const DIM = '\x1b[2m';
 
-let currentLevel: LogLevel = 'debug';
+let enabledLevels: Set<LogLevel> = new Set(ALL_LEVELS);
 let format: 'json' | 'text' = 'text';
 let fileStream: WriteStream | null = null;
 
-export function initLogger(config: { level: string; format: string }): void {
-  currentLevel = (config.level as LogLevel) || 'debug';
+export function initLogger(config: { level: string[]; format: string }): void {
+  if (config.level.includes('all')) {
+    enabledLevels = new Set(ALL_LEVELS);
+  } else {
+    enabledLevels = new Set(config.level.filter(l => ALL_LEVELS.includes(l as LogLevel)) as LogLevel[]);
+  }
   format = config.format === 'json' ? 'json' : 'text';
 }
 
@@ -39,7 +38,7 @@ export function initLogFile(logDir: string, filename: string): string {
 }
 
 export function log(level: LogLevel, message: string, meta?: Record<string, unknown>): void {
-  if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[currentLevel]) return;
+  if (!enabledLevels.has(level)) return;
 
   const now = new Date();
   const timestamp = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}.${String(now.getMilliseconds()).padStart(3, '0')}`;

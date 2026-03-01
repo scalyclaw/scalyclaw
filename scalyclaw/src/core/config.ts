@@ -60,7 +60,7 @@ export interface ScalyClawConfig {
     tls: { cert: string; key: string };
     cors: string[];
   };
-  logs: { level: string; format: string; type: string };
+  logs: { level: string[]; format: string; type: string };
   memory: {
     topK: number;
     scoreThreshold: number;
@@ -162,7 +162,7 @@ export const CONFIG_DEFAULTS: ScalyClawConfig = {
     tls: { cert: '', key: '' },
     cors: [],
   },
-  logs: { level: 'info', format: 'json', type: 'console' },
+  logs: { level: ['all'], format: 'json', type: 'console' },
   memory: { topK: 10, scoreThreshold: 0.5, embeddingModel: 'auto' },
   queue: {
     lockDuration: LOCK_DURATION_MS,
@@ -303,7 +303,7 @@ export function validateConfig(config: unknown): asserts config is ScalyClawConf
   // logs
   if (!isPlainObject(c.logs)) throw new ConfigError('Missing or invalid "logs" section');
   const logs = c.logs as Record<string, unknown>;
-  if (typeof logs.level !== 'string') throw new ConfigError('logs.level must be a string');
+  if (!Array.isArray(logs.level)) throw new ConfigError('logs.level must be an array of strings');
 
   // memory
   if (!isPlainObject(c.memory)) throw new ConfigError('Missing or invalid "memory" section');

@@ -56,7 +56,7 @@ export async function bootstrapWorker(configPath?: string): Promise<WorkerBootst
   initQueue(redis, QUEUE_DEFAULTS);
 
   // 6. Init logger
-  initLogger({ level: 'info', format: 'text' });
+  initLogger({ level: ['all'], format: 'text' });
   initLogFile(PATHS.logs, WORKER_LOG_FILE);
   log('info', 'Worker bootstrap complete', { homeDir: config.homeDir });
 
