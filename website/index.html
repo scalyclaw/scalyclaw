@@ -1663,7 +1663,7 @@ You remember everything about your user.
                 <div class="db-tabs"><span class="db-tab active"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Message Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Skill Guard</span><span class="db-tab">Agent Guard</span><span class="db-tab"><span class="db-dot db-dot-g" style="margin-right:4px"></span>Command Shield</span></div>
                 <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:0.625rem;color:var(--text-muted)">Enabled</span><span class="db-sw on"></span></div>
                 <div class="db-field"><div class="db-field-l">Model</div><input class="db-inp" value="claude-sonnet-4-6" readonly/></div>
-                <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 1 &mdash; Echo Guard</span><span class="db-sw on"></span></div><div class="db-field"><div class="db-field-l">Similarity Threshold</div><input class="db-inp" value="0.9" readonly style="width:80px"/></div></div>
+                <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 1 &mdash; Echo Guard</span><span class="db-sw on"></span></div><div class="db-field"><div class="db-field-l">Similarity Threshold</div><input class="db-inp" value="0.7" readonly style="width:80px"/></div></div>
                 <div class="db-sc" style="margin-top:10px"><div style="display:flex;justify-content:space-between;align-items:center"><span style="font-size:0.625rem;font-weight:600;color:#e5e5e5">Layer 2 &mdash; Content Guard</span><span class="db-sw on"></span></div><div style="font-size:0.5625rem;color:#525252;margin-top:4px">Checks for injection, social engineering, and harmful content</div></div>
               </div>
               <!-- Page 13: Logs -->
@@ -1848,7 +1848,7 @@ You remember everything about your user.
               <div class="security-num security-num-1">1</div>
               <div class="security-info">
                 <h4>Echo Guard</h4>
-                <p>LLM repeats the message; if similarity &lt; 0.9, injection detected. Blocked.</p>
+                <p>LLM repeats the message; if similarity &lt; 0.7, injection detected. Blocked.</p>
               </div>
             </div>
             <div class="security-layer">

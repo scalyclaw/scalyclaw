@@ -25,7 +25,7 @@
 
         <h3>What It Does</h3>
         <ul>
-          <li>Stores facts, preferences, and decisions via <code>memory_store</code> with typed entries (<code>fact</code>, <code>preference</code>, <code>event</code>), tags for categorization, and confidence scores (0–1)</li>
+          <li>Stores facts, preferences, and decisions via <code>memory_store</code> with typed entries (<code>fact</code>, <code>preference</code>, <code>event</code>), tags for categorization, and confidence scores (0–3)</li>
           <li>Retrieves context across channels via <code>memory_search</code> — semantic vector search (sqlite-vec) with FTS5 fallback for text matching</li>
           <li>Proactively follows up when you go idle — surfaces task results, reminders, or unfinished topics (configurable idle threshold, cooldown, and quiet hours)</li>
           <li>Personality defined in <code>mind/IDENTITY.md</code> (tone, behavior), grounded by core values in <code>mind/SOUL.md</code>, and personalized with your info in <code>mind/USER.md</code></li>
@@ -153,11 +153,11 @@
 
         <h3>What It Does</h3>
         <ul>
-          <li><code>execute_code</code> — inline code in Python (via <code>uv run</code>), JavaScript (via <code>bun run</code>), or Bash. Runs on a remote worker with a 30-second timeout</li>
+          <li><code>execute_code</code> — inline code in Python (via <code>uv run</code>), JavaScript (via <code>bun run</code>), or Bash. Runs on a remote worker with a configurable timeout (default 5 hours)</li>
           <li><code>execute_command</code> — bash commands with CommandShield guard protection (deny/allow lists checked before execution)</li>
           <li>Vault secrets auto-injected as environment variables — only the secrets referenced in the code are scoped to the worker, not the full vault</li>
           <li>Output files saved to <code>WORKSPACE_DIR</code>, automatically transferred from worker to node, and deliverable via <code>send_file</code></li>
-          <li>stdout must be JSON only — all debug output goes to stderr. stdout limit: 10 MB</li>
+          <li>stdout is returned to the LLM (JSON preferred for structured data). Debug output goes to stderr. stdout limit: 10 MB</li>
         </ul>
 
         <h3>In Practice</h3>
@@ -457,7 +457,7 @@
           <li><code>vault_store</code> — encrypts and stores a secret in Redis at <code>scalyclaw:secret:{name}</code></li>
           <li><code>vault_list</code> — lists all stored secret names (the assistant never sees actual values)</li>
           <li>Scoped injection: when running skills or code, only the secrets actually referenced in the code are resolved and passed to the worker — not the full vault</li>
-          <li>Key rotation support: re-encrypts all secrets with a new derived key, with a 1-hour recovery window</li>
+          <li>Key rotation support: re-encrypts all secrets with a new derived key, with a 5-minute recovery window</li>
           <li>Manage from the dashboard Vault page or via <code>/vault</code> and <code>/mcp</code></li>
         </ul>
 
@@ -979,7 +979,7 @@
 
         <h3>What It Does</h3>
         <ul>
-          <li><code>memory_store</code> — store with <code>type</code> (fact, preference, event, note, etc.), <code>subject</code>, <code>content</code>, <code>tags</code> (array), <code>confidence</code> (0–1), <code>source</code> (user-stated, inferred), and optional <code>ttl</code> (e.g., <code>"7d"</code>, <code>"1h"</code>) for auto-expiration</li>
+          <li><code>memory_store</code> — store with <code>type</code> (fact, preference, event, note, etc.), <code>subject</code>, <code>content</code>, <code>tags</code> (array), <code>confidence</code> (0–3), <code>source</code> (user-stated, inferred), and optional <code>ttl</code> (e.g., <code>"7d"</code>, <code>"1h"</code>) for auto-expiration</li>
           <li><code>memory_search</code> — semantic vector search with optional <code>topK</code>, <code>type</code> filter, and <code>tags</code> filter (AND logic). Falls back to FTS5 if sqlite-vec is unavailable</li>
           <li><code>memory_recall</code> — browse by ID, type, or tags (no search query needed)</li>
           <li><code>memory_update</code> — update subject, content, tags, or confidence of an existing memory</li>
