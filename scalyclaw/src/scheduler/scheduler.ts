@@ -132,13 +132,14 @@ export async function createRecurrentReminder(
 
   const jobId = `recurrent-reminder-${randomUUID()}`;
 
-  const repeat: { pattern?: string; every?: number; tz?: string } = {};
+  const repeat: { pattern?: string; every?: number; tz?: string; immediately?: boolean } = {};
   if (cron) {
     repeat.pattern = cron;
     if (timezone) repeat.tz = timezone;
   } else {
     repeat.every = intervalMs!;
   }
+  repeat.immediately = false;
 
   // Track in Redis
   await setScheduledState(jobId, {
@@ -246,13 +247,14 @@ export async function createRecurrentTask(
 
   const jobId = `recurrent-task-${randomUUID()}`;
 
-  const repeat: { pattern?: string; every?: number; tz?: string } = {};
+  const repeat: { pattern?: string; every?: number; tz?: string; immediately?: boolean } = {};
   if (cron) {
     repeat.pattern = cron;
     if (timezone) repeat.tz = timezone;
   } else {
     repeat.every = intervalMs!;
   }
+  repeat.immediately = false;
 
   // Track in Redis
   await setScheduledState(jobId, {

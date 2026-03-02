@@ -213,11 +213,12 @@ async function processTask(job: Job<TaskData>): Promise<void> {
   try {
     const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
 
-    storeMessage(targetChannel, 'user', task, { source: 'task', scheduledJobId });
+    const taggedTask = `[Scheduled Task] ${task}`;
+    storeMessage(targetChannel, 'user', taggedTask, { source: 'task', scheduledJobId });
 
     const result = await runOrchestrator({
       channelId: targetChannel,
-      text: task,
+      text: taggedTask,
       sendToChannel: async () => {},
     });
 
@@ -284,11 +285,12 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
 
     const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
 
-    storeMessage(targetChannel, 'user', task, { source: 'recurrent-task', scheduledJobId });
+    const taggedTask = `[Scheduled Task] ${task}`;
+    storeMessage(targetChannel, 'user', taggedTask, { source: 'recurrent-task', scheduledJobId });
 
     const result = await runOrchestrator({
       channelId: targetChannel,
-      text: task,
+      text: taggedTask,
       sendToChannel: async () => {},
     });
 

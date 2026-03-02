@@ -100,7 +100,6 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
   // LLM tool loop
   let finalContent = '';
-  let lastProgressSent = '';  // Track what was already sent as progress
   let round = 0;
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -186,13 +185,6 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       break;
     }
 
-    // Send auto-generated progress from actual tool calls (never LLM narration)
-    const brief = describeToolCalls(response.toolCalls);
-    if (brief) {
-      lastProgressSent = brief;
-      await input.sendToChannel(input.channelId, brief).catch(() => {});
-    }
-
     // Add assistant message with tool calls to conversation
     messages.push({
       role: 'assistant',
@@ -236,11 +228,6 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     // Don't override useful content with a generic error
   }
 
-  // If finalContent was already sent as progress, don't re-deliver it (avoids duplicate messages)
-  if (finalContent && finalContent === lastProgressSent) {
-    finalContent = '';
-  }
-
   recordUsage({
     model: modelId,
     provider: providerId,
@@ -259,174 +246,4 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
   });
 
   return finalContent;
-}
-
-// ─── Context-aware tool-call descriptions for auto-progress ───
-
-import type { ToolCall } from '../models/provider.js';
-
-/** Shorten a string with ellipsis if it exceeds maxLen */
-function shorten(text: string, maxLen: number): string {
-  return text.length > maxLen ? text.slice(0, maxLen) + '...' : text;
-}
-
-/** Extract a user-friendly description from a single tool call */
-function describeToolCall(name: string, input: Record<string, unknown> | undefined): string {
-  // Unwrap submit_job payload
-  let payload = input;
-  if (name === 'submit_job' && input) {
-    name = (input.toolName as string) || name;
-    payload = (input.payload as Record<string, unknown>) ?? input;
-  }
-
-  const p = payload ?? {};
-
-  switch (name) {
-    // Skills
-    case 'execute_skill': {
-      const id = p.skillId as string;
-      const inp = p.input as string;
-      if (id && inp) return `Running skill "${id}" with: ${shorten(inp, 50)}`;
-      if (id) return `Running skill "${id}"`;
-      return 'Running a skill';
-    }
-    // Agents — show agent name + task excerpt
-    case 'delegate_agent': {
-      const id = p.agentId as string;
-      const task = p.task as string;
-      if (id && task) return `Handing off to agent "${id}": ${shorten(task, 60)}`;
-      if (id) return `Handing off to agent "${id}"`;
-      if (task) return `Handing off to an agent: ${shorten(task, 60)}`;
-      return 'Handing off to an agent';
-    }
-    case 'create_agent': {
-      const n = (p.name as string) || (p.id as string);
-      return n ? `Setting up a new agent: "${n}"` : 'Setting up a new agent';
-    }
-    // Memory
-    case 'memory_search': {
-      const q = p.query as string;
-      return q ? `Looking up memories about "${shorten(q, 40)}"` : 'Looking up memories';
-    }
-    case 'memory_store': {
-      const s = p.subject as string;
-      return s ? `Saving to memory: "${shorten(s, 40)}"` : 'Saving something to memory';
-    }
-    case 'memory_recall': {
-      const q = (p.query as string) || (p.id as string);
-      return q ? `Recalling memory: "${shorten(q, 40)}"` : 'Recalling from memory';
-    }
-    case 'memory_update': {
-      const s = (p.subject as string) || (p.id as string);
-      return s ? `Updating memory: "${shorten(s, 40)}"` : 'Updating a memory';
-    }
-    case 'memory_delete': {
-      const id = p.id as string;
-      return id ? `Removing memory "${shorten(id, 30)}"` : 'Removing a memory';
-    }
-    // Commands
-    case 'execute_command': {
-      const cmd = p.command as string;
-      return cmd ? `Running command: \`${shorten(cmd, 50)}\`` : 'Running a shell command';
-    }
-    case 'execute_code': {
-      const lang = p.language as string;
-      return lang ? `Executing ${lang} code` : 'Executing code';
-    }
-    // Scheduling
-    case 'schedule_reminder': {
-      const msg = p.message as string;
-      return msg ? `Setting a reminder: "${shorten(msg, 50)}"` : 'Setting a reminder for you';
-    }
-    case 'schedule_task': {
-      const task = p.task as string;
-      return task ? `Scheduling a task: "${shorten(task, 50)}"` : 'Scheduling a task for later';
-    }
-    case 'schedule_recurrent_reminder': {
-      const msg = p.message as string;
-      return msg ? `Setting up recurring reminder: "${shorten(msg, 40)}"` : 'Setting up a recurring reminder';
-    }
-    case 'schedule_recurrent_task': {
-      const task = p.task as string;
-      return task ? `Setting up recurring task: "${shorten(task, 40)}"` : 'Setting up a recurring task';
-    }
-    // Files
-    case 'file_read': {
-      const path = p.path as string;
-      return path ? `Reading file: ${shorten(path, 40)}` : 'Reading a file';
-    }
-    case 'file_write': {
-      const path = p.path as string;
-      return path ? `Writing to file: ${shorten(path, 40)}` : 'Writing a file';
-    }
-    case 'file_edit': {
-      const path = p.path as string;
-      return path ? `Editing file: ${shorten(path, 40)}` : 'Editing a file';
-    }
-    case 'send_file': {
-      const path = p.path as string;
-      if (path) {
-        const fileName = path.split('/').pop() || path;
-        return `Sending file: ${fileName}`;
-      }
-      return 'Sending a file';
-    }
-    // System
-    case 'system_info': {
-      const section = p.section as string;
-      return section ? `Checking system info: ${section}` : 'Checking system info';
-    }
-    // Vault
-    case 'vault_store': {
-      const name = p.name as string;
-      return name ? `Storing secret "${name}" in the vault` : 'Storing a secret in the vault';
-    }
-    case 'vault_list':      return 'Listing vault secrets';
-    // Skills management
-    case 'register_skill': {
-      const id = p.id as string;
-      return id ? `Registering skill "${id}"` : 'Registering a new skill';
-    }
-    // Context
-    case 'compact_context': return 'Compacting conversation to free up context space';
-    // Scheduling lists
-    case 'list_reminders':  return 'Looking up your reminders';
-    case 'list_tasks':      return 'Looking up your scheduled tasks';
-    case 'cancel_reminder': {
-      const id = p.id as string;
-      return id ? `Cancelling reminder "${shorten(id, 30)}"` : 'Cancelling a reminder';
-    }
-    case 'cancel_task': {
-      const id = p.id as string;
-      return id ? `Cancelling task "${shorten(id, 30)}"` : 'Cancelling a task';
-    }
-    // Don't narrate send_message — it IS user-facing output
-    case 'send_message':    return '';
-    default:                return '';
-  }
-}
-
-/** Build a user-friendly status line from a list of tool calls */
-function describeToolCalls(toolCalls: ToolCall[]): string {
-  const labels: string[] = [];
-  for (const tc of toolCalls) {
-    // Unwrap submit_parallel_jobs into individual descriptions
-    if (tc.name === 'submit_parallel_jobs' && tc.input) {
-      const jobs = tc.input.jobs as Array<{ toolName?: string; payload?: Record<string, unknown> }> | undefined;
-      if (jobs) {
-        for (const j of jobs) {
-          const desc = describeToolCall(j.toolName || '', j.payload);
-          if (desc) labels.push(desc);
-        }
-      }
-      continue;
-    }
-    const desc = describeToolCall(tc.name, tc.input as Record<string, unknown>);
-    if (desc) labels.push(desc);
-  }
-  if (labels.length === 0) return '';
-  const unique = [...new Set(labels)];
-  if (unique.length === 1) return unique[0];
-  if (unique.length <= 3) return unique.join(' · ');
-  return `${unique.slice(0, 2).join(' · ')} (+${unique.length - 2} more)`;
 }
