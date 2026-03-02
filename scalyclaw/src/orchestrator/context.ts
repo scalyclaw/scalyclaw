@@ -181,7 +181,10 @@ export async function ensureBudget(
 /**
  * Dynamically truncate a tool result based on remaining context budget.
  */
-export function truncateToolResult(result: string, budget: ContextBudget): string {
+export function truncateToolResult(result: string, budget: ContextBudget, toolName?: string): string {
+  // MCP tool results are external data the user requested — never truncate
+  if (toolName?.startsWith('mcp_')) return result;
+
   const remainingTokens = budget.messageBudget - budget.messageTokens;
   const remainingChars = remainingTokens * budget.charsPerToken;
   const dynamicLimit = Math.min(
@@ -298,13 +301,17 @@ async function compactMessages(messages: ChatMessage[], budget: ContextBudget): 
   const candidateMessages = messages.slice(0, compactEndIdx);
   if (candidateMessages.length === 0) return false;
 
-  // Format for summarization
-  const formatted = candidateMessages.map(m => {
-    if (m.tool_call_id) return `[tool result for ${m.tool_call_id}]: ${m.content}`;
-    let line = `[${m.role}]: ${m.content}`;
-    if (m.tool_calls) line += `\n[tool_calls]: ${JSON.stringify(m.tool_calls)}`;
-    return line;
-  }).join('\n\n');
+  // Format for summarization — exclude tool results (raw data).
+  // Only summarize user/assistant messages (conversational flow).
+  // Tool results are referenced by the assistant responses that follow them,
+  // so the summary captures conclusions without needing the raw data.
+  const formatted = candidateMessages
+    .filter(m => m.role !== 'tool')
+    .map(m => {
+      let line = `[${m.role}]: ${m.content}`;
+      if (m.tool_calls) line += `\n[tool_calls]: ${JSON.stringify(m.tool_calls)}`;
+      return line;
+    }).join('\n\n');
 
   // Select model via standard priority/weight selection
   const config = getConfigRef();

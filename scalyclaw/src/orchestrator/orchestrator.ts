@@ -204,7 +204,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
 
     // Add all tool results to conversation (dynamically truncate based on remaining budget)
     for (const { toolCall, result } of toolResults) {
-      const content = truncateToolResult(result, budget);
+      const content = truncateToolResult(result, budget, toolCall.name);
       messages.push({
         role: 'tool',
         content,
