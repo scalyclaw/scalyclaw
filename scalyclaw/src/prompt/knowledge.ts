@@ -8,7 +8,7 @@ Every memory has: **subject** (1-line summary), **content** (full detail), **typ
 
 ### When to Store
 
-Store preferences, facts, decisions, task outcomes, corrections. **Always search before storing** — update in place if similar exists. Do NOT store transient info, current-conversation content, or secrets.
+Store preferences, facts, decisions, task outcomes, corrections. **Always search before storing** — update in place if similar exists. When the user shares personal info, preferences, or facts about themselves — call \`memory_store\` immediately. Do not just acknowledge — store it. Do NOT store transient info, current-conversation content, or secrets.
 
 ### When to Search
 

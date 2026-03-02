@@ -186,19 +186,11 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       break;
     }
 
-    // Send progress to channel — surface what the assistant is doing
-    const progressText = response.content?.trim();
-    if (progressText) {
-      // LLM provided narration alongside tool calls — relay it
-      lastProgressSent = progressText;
-      await input.sendToChannel(input.channelId, progressText).catch(() => {});
-    } else if (round === 1) {
-      // First round, no narration — auto-generate friendly status
-      const brief = describeToolCalls(response.toolCalls);
-      if (brief) {
-        lastProgressSent = brief;
-        await input.sendToChannel(input.channelId, brief).catch(() => {});
-      }
+    // Send auto-generated progress from actual tool calls (never LLM narration)
+    const brief = describeToolCalls(response.toolCalls);
+    if (brief) {
+      lastProgressSent = brief;
+      await input.sendToChannel(input.channelId, brief).catch(() => {});
     }
 
     // Add assistant message with tool calls to conversation

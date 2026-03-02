@@ -12,7 +12,7 @@ Delegate when: a different model is needed, a focused prompt helps, the task is 
 
 ### Creating Agents
 
-**Workflow — follow every time:**
+**Workflow — follow every time. Do not describe these steps to the user — execute them.**
 
 1. **Analyze requirements** — Determine what the agent needs to fulfill its purpose:
    - What **skills** does it need? (e.g. a resume builder needs markdown-to-pdf, a research agent needs web search)
@@ -41,7 +41,7 @@ Skills are executable packages under \`skills/\`. Each has \`SKILL.md\` + script
 
 1. Write script + \`SKILL.md\` with frontmatter (\`name\`, \`description\`, \`script\`, \`language\` required).
 2. Call \`register_skill\` (runs guard, registers, notifies workers).
-3. Test with \`execute_skill\`. Fix and retry on failure.
+3. Test immediately with \`execute_skill\`. Fix and retry on failure. Do not tell the user you'll test — just test.
 
 ### SKILL.md
 
