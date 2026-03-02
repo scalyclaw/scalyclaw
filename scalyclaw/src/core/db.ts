@@ -63,27 +63,10 @@ function runMigrations(db: Database, dimensions: number): void {
     CREATE INDEX IF NOT EXISTS idx_usage_logs_model ON usage_logs(model);
   `);
 
-  // ─── Memory schema v2 ───
-  migrateMemorySchema(db, dimensions);
-
-  log('info', 'Database migrations complete');
-}
-
-function migrateMemorySchema(db: Database, dimensions: number): void {
-  const hasSubject = db.prepare(
-    "SELECT COUNT(*) as c FROM pragma_table_info('memories') WHERE name = 'subject'"
-  ).get() as { c: number };
-
-  if (hasSubject.c > 0) return; // already on v2
-
-  // Drop old tables (order matters for FKs)
-  db.exec('DROP TABLE IF EXISTS memory_fts');
-  db.exec('DROP TABLE IF EXISTS memory_vec');
-  db.exec('DROP TABLE IF EXISTS memory_tags');
-  db.exec('DROP TABLE IF EXISTS memories');
+  // ─── Memory schema ───
 
   db.exec(`
-    CREATE TABLE memories (
+    CREATE TABLE IF NOT EXISTS memories (
       id          TEXT PRIMARY KEY,
       type        TEXT NOT NULL,
       subject     TEXT NOT NULL,
@@ -97,31 +80,41 @@ function migrateMemorySchema(db: Database, dimensions: number): void {
       updated_at  TEXT DEFAULT (datetime('now'))
     );
 
-    CREATE INDEX idx_memories_type ON memories(type);
-    CREATE INDEX idx_memories_ttl ON memories(ttl);
-    CREATE INDEX idx_memories_confidence ON memories(confidence);
-    CREATE INDEX idx_memories_updated ON memories(updated_at);
+    CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type);
+    CREATE INDEX IF NOT EXISTS idx_memories_ttl ON memories(ttl);
+    CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(confidence);
+    CREATE INDEX IF NOT EXISTS idx_memories_updated ON memories(updated_at);
 
-    CREATE TABLE memory_tags (
+    CREATE TABLE IF NOT EXISTS memory_tags (
       memory_id   TEXT NOT NULL REFERENCES memories(id) ON DELETE CASCADE,
       tag         TEXT NOT NULL,
       PRIMARY KEY (memory_id, tag)
     );
-    CREATE INDEX idx_memory_tags_tag ON memory_tags(tag);
+    CREATE INDEX IF NOT EXISTS idx_memory_tags_tag ON memory_tags(tag);
   `);
 
   if (vecAvailable) {
-    db.exec(`
-      CREATE VIRTUAL TABLE memory_vec USING vec0(
-        id TEXT PRIMARY KEY,
-        embedding float[${dimensions}]
-      );
-    `);
+    const vecExists = db.prepare(
+      "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='memory_vec'"
+    ).get() as { c: number };
+    if (vecExists.c === 0) {
+      db.exec(`
+        CREATE VIRTUAL TABLE memory_vec USING vec0(
+          id TEXT PRIMARY KEY,
+          embedding float[${dimensions}]
+        );
+      `);
+    }
   }
 
-  db.exec(`CREATE VIRTUAL TABLE memory_fts USING fts5(id UNINDEXED, subject, content, tags, type UNINDEXED);`);
+  const ftsExists = db.prepare(
+    "SELECT COUNT(*) as c FROM sqlite_master WHERE type='table' AND name='memory_fts'"
+  ).get() as { c: number };
+  if (ftsExists.c === 0) {
+    db.exec(`CREATE VIRTUAL TABLE memory_fts USING fts5(id UNINDEXED, subject, content, tags, type UNINDEXED);`);
+  }
 
-  log('info', 'Memory schema v2 created');
+  log('info', 'Database migrations complete');
 }
 
 // ─── Message helpers ───

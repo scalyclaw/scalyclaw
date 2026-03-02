@@ -835,7 +835,7 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
 
     // Dedup: skip if this exact file (path + size + mtime) was already sent in this session
     const dedupKey = `${filePath}:${fileStat.size}:${fileStat.mtimeMs}`;
-    if (ctx.sentFiles?.has(dedupKey)) {
+    if (ctx.sentFiles.has(dedupKey)) {
       log('debug', 'send_file dedup — identical file already sent', { filePath, channelId: ctx.channelId });
       return JSON.stringify({ sent: true, path: filePath, note: 'File was already sent' });
     }
@@ -847,7 +847,7 @@ async function handleSendFile(input: Record<string, unknown>, ctx: ToolContext):
       filePath,
       caption,
     });
-    ctx.sentFiles?.add(dedupKey);
+    ctx.sentFiles.add(dedupKey);
     return JSON.stringify({ sent: true, path: filePath });
   } catch (err) {
     log('error', 'send_file failed', { error: String(err), filePath });

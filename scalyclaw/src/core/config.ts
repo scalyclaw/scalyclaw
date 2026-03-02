@@ -362,10 +362,6 @@ export async function loadConfig(): Promise<ScalyClawConfig> {
     throw new ConfigError('Config in Redis is not valid JSON');
   }
 
-  // Strip legacy fields that belong in scalyclaw.json, not in Redis config
-  delete parsed.homeDir;
-  delete parsed.redis;
-
   // Fill missing keys from defaults
   const merged = deepMerge(parsed, CONFIG_DEFAULTS as unknown as Record<string, unknown>) as unknown as ScalyClawConfig;
 

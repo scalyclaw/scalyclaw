@@ -147,6 +147,7 @@ async function runAgentLoop(
     modelId,
     allowedSkillIds: agent.skills ?? undefined,
     allowedToolNames,
+    sentFiles: new Set(),
   };
 
   let finalContent = '';
