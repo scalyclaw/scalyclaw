@@ -49,7 +49,7 @@ export const PROGRESS_DRAIN_INTERVAL_MS = 60_000;
 export const STARTUP_NOTIFY_DELAY_MS = 3_000;
 
 /** Node process shutdown timeout. */
-export const SHUTDOWN_TIMEOUT_MS = 8_000;
+export const SHUTDOWN_TIMEOUT_MS = 15_000;
 
 /** Timeout for `git fetch` during /update. */
 export const GIT_FETCH_TIMEOUT_MS = 15_000;
@@ -104,3 +104,44 @@ export const TOOL_RESULT_BUDGET_FRACTION = 0.25;
 
 /** Number of recent messages to load from DB for context. */
 export const DEFAULT_MESSAGE_LIMIT = 50;
+
+// ─── Reliability ───
+
+/** Per-channel processing lock TTL (seconds). */
+export const CHANNEL_LOCK_TTL_S = 300;
+
+/** Max time to wait for per-channel lock (ms). */
+export const CHANNEL_LOCK_WAIT_MS = 120_000;
+
+/** LLM retry attempts (includes first attempt). */
+export const LLM_RETRY_ATTEMPTS = 3;
+
+/** LLM retry base delay (ms, doubled each retry). */
+export const LLM_RETRY_BASE_DELAY_MS = 1_000;
+
+/** Guard LLM call timeout (ms). */
+export const GUARD_TIMEOUT_MS = 30_000;
+
+/** Channel send retry attempts. */
+export const SEND_RETRY_ATTEMPTS = 3;
+
+/** Channel send retry base delay (ms). */
+export const SEND_RETRY_BASE_DELAY_MS = 500;
+
+/** Embedding generation retry attempts. */
+export const EMBEDDING_RETRY_ATTEMPTS = 2;
+
+/** MCP tool call retry attempts. */
+export const MCP_RETRY_ATTEMPTS = 2;
+
+/** MCP retry base delay (ms). */
+export const MCP_RETRY_BASE_DELAY_MS = 1_000;
+
+/** Memory TTL cleanup interval (ms) — 1 hour. */
+export const MEMORY_CLEANUP_INTERVAL_MS = 3_600_000;
+
+/** Task lock heartbeat interval (ms). */
+export const TASK_LOCK_HEARTBEAT_MS = 60_000;
+
+/** Task lock TTL (seconds) — refreshed by heartbeat. */
+export const TASK_LOCK_TTL_S = 120;

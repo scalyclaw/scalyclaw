@@ -11,6 +11,8 @@ export function initDatabase(dbPath: string, dimensions: number): Database {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec(`PRAGMA busy_timeout = ${SQLITE_BUSY_TIMEOUT_MS}`);
   db.exec('PRAGMA foreign_keys = ON');
+  db.exec('PRAGMA synchronous = NORMAL');
+  db.exec('PRAGMA wal_autocheckpoint = 2000');
 
   try {
     db.loadExtension(getLoadablePath());
@@ -20,9 +22,26 @@ export function initDatabase(dbPath: string, dimensions: number): Database {
     log('warn', 'sqlite-vec extension failed to load — vector search will be unavailable', { error: String(err) });
   }
 
+  // Integrity check on startup
+  try {
+    const result = db.prepare('PRAGMA integrity_check(1)').get() as { integrity_check: string } | null;
+    if (result && result.integrity_check !== 'ok') {
+      log('error', 'SQLite integrity check failed!', { result: result.integrity_check });
+    }
+  } catch (err) {
+    log('error', 'SQLite integrity check error', { error: String(err) });
+  }
+
+  activeDimensions = dimensions;
   runMigrations(db, dimensions);
-  log('info', 'SQLite database initialized', { path: dbPath, vecAvailable });
+  log('info', 'SQLite database initialized', { path: dbPath, vecAvailable, dimensions });
   return db;
+}
+
+let activeDimensions = 0;
+
+export function getActiveDimensions(): number {
+  return activeDimensions;
 }
 
 export function isVecAvailable(): boolean {

@@ -1,5 +1,6 @@
 import { getConfigRef } from '../core/config.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { withTimeout } from '@scalyclaw/shared/core/retry.js';
 import { recordUsage } from '../core/db.js';
 import { selectModel, parseModelId } from '../models/provider.js';
 import { getProvider } from '../models/registry.js';
@@ -10,6 +11,7 @@ import {
   SKILL_GUARD_SYSTEM_PROMPT,
   AGENT_GUARD_SYSTEM_PROMPT,
 } from '../prompt/guard.js';
+import { GUARD_TIMEOUT_MS } from '../const/constants.js';
 import type { GuardResult } from './types.js';
 
 // ─── Internal helper ───
@@ -35,13 +37,17 @@ async function guardLlmCall(systemPrompt: string, userContent: string, guardMode
   const { provider: providerId, model } = parseModelId(modelId);
   const provider = getProvider(providerId);
 
-  const response = await provider.chat({
-    model,
-    systemPrompt,
-    messages: [{ role: 'user', content: userContent }],
-    temperature: 0.0,
-    maxTokens: 1024,
-  });
+  const response = await withTimeout(
+    provider.chat({
+      model,
+      systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+      temperature: 0.0,
+      maxTokens: 1024,
+    }),
+    GUARD_TIMEOUT_MS,
+    'Guard LLM call',
+  );
 
   recordUsage({
     model: modelId,
@@ -100,6 +106,12 @@ async function runEchoGuard(
     }
     return null;
   } catch (err) {
+    const config = getConfigRef();
+    const failOpen = config.guards?.message?.failOpen === true;
+    if (failOpen) {
+      log('warn', 'Echo guard LLM call failed — allowing message (fail-open)', { error: String(err) });
+      return null;
+    }
     log('error', 'Echo guard LLM call failed — blocking message (fail-closed)', { error: String(err) });
     return {
       passed: false,
@@ -133,6 +145,12 @@ async function runContentGuard(
     }
     return null;
   } catch (err) {
+    const config = getConfigRef();
+    const failOpen = config.guards?.message?.failOpen === true;
+    if (failOpen) {
+      log('warn', 'Content guard failed — allowing message (fail-open)', { error: String(err) });
+      return null;
+    }
     log('error', 'Content guard failed — blocking message (fail-closed)', { error: String(err) });
     return {
       passed: false,

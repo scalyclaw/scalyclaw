@@ -1,5 +1,6 @@
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { DEFAULT_CONTEXT_WINDOW } from '../const/constants.js';
+import { withRetry } from '@scalyclaw/shared/core/retry.js';
+import { DEFAULT_CONTEXT_WINDOW, LLM_RETRY_ATTEMPTS, LLM_RETRY_BASE_DELAY_MS } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import type { ChatMessage } from '../models/provider.js';
@@ -123,16 +124,29 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       messageBudget: budget.messageBudget,
     });
 
-    const response = await provider.chat({
-      model,
-      systemPrompt,
-      messages,
-      tools: allTools,
-      maxTokens: modelConfig?.maxTokens ?? 8192,
-      temperature: modelConfig?.temperature ?? 0.7,
-      reasoningEnabled: modelConfig?.reasoningEnabled,
-      signal: input.signal,
-    });
+    const response = await withRetry(
+      () => provider.chat({
+        model,
+        systemPrompt,
+        messages,
+        tools: allTools,
+        maxTokens: modelConfig?.maxTokens ?? 8192,
+        temperature: modelConfig?.temperature ?? 0.7,
+        reasoningEnabled: modelConfig?.reasoningEnabled,
+        signal: input.signal,
+      }),
+      {
+        attempts: LLM_RETRY_ATTEMPTS,
+        baseDelay: LLM_RETRY_BASE_DELAY_MS,
+        signal: input.signal,
+        label: 'LLM call',
+        shouldRetry: (err) => {
+          // Don't retry on abort or budget errors
+          const msg = String(err);
+          return !msg.includes('Aborted') && !msg.includes('Budget limit');
+        },
+      },
+    );
 
     totalInputTokens += response.usage?.inputTokens ?? 0;
     totalOutputTokens += response.usage?.outputTokens ?? 0;

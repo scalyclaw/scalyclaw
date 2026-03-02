@@ -109,6 +109,15 @@ export async function generateEmbedding(text: string): Promise<EmbeddingVector> 
   log('debug', 'Generating embedding', { textLength: text.length });
   const start = Date.now();
   const vec = await provider.embed(text);
+
+  // Validate dimensions match what the DB was initialized with
+  if (embeddingDimensions > 0 && vec.length !== embeddingDimensions) {
+    throw new Error(
+      `Embedding dimension mismatch: got ${vec.length}, expected ${embeddingDimensions}. ` +
+      `The embedding model may have changed. Rebuild the memory_vec table or switch back.`
+    );
+  }
+
   log('debug', 'Embedding generated', { dimensions: vec.length, durationMs: Date.now() - start });
 
   // LRU eviction: delete oldest entry if at capacity

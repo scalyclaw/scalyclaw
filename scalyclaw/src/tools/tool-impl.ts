@@ -32,6 +32,28 @@ export type { ToolContext } from './tool-registry.js';
 
 // ─── Scoped secret resolution ───
 
+/** Redact known secret values from error messages to prevent leakage. */
+let cachedSecretValues: string[] | null = null;
+let cachedSecretAge = 0;
+function redactSecrets(text: string): string {
+  // Refresh cache every 60s
+  if (!cachedSecretValues || Date.now() - cachedSecretAge > 60_000) {
+    getAllSecrets().then(secrets => {
+      cachedSecretValues = Object.values(secrets).filter(v => v.length >= 8);
+      cachedSecretAge = Date.now();
+    }).catch(() => {});
+    // On first call, return as-is while cache populates
+    if (!cachedSecretValues) return text;
+  }
+  let safe = text;
+  for (const val of cachedSecretValues) {
+    if (safe.includes(val)) {
+      safe = safe.replaceAll(val, '[REDACTED]');
+    }
+  }
+  return safe;
+}
+
 /** Extract secret names referenced as env-style vars in text (e.g. $SECRET_NAME or ${SECRET_NAME}). */
 function extractSecretRefs(text: string): Set<string> {
   const refs = new Set<string>();
@@ -611,8 +633,9 @@ async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext)
     } catch { /* not JSON, that's fine */ }
     return result;
   } catch (err) {
-    log('error', `Tool "${toolName}" threw`, { error: String(err), payload });
-    return JSON.stringify({ error: `Tool "${toolName}" failed: ${String(err)}` });
+    const safeError = redactSecrets(String(err));
+    log('error', `Tool "${toolName}" threw`, { error: safeError, payload });
+    return JSON.stringify({ error: `Tool "${toolName}" failed: ${safeError}` });
   }
 }
 

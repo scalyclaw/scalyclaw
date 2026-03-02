@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq';
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { acquireChannelLock } from '@scalyclaw/shared/core/channel-lock.js';
 import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
@@ -10,7 +11,7 @@ import type { MessageProcessingData, CommandData, AttachmentData } from '@scalyc
 import { recordChannelActivity } from '../scheduler/proactive.js';
 import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
 import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
-import { CANCEL_FLAG_KEY } from '../const/constants.js';
+import { CANCEL_FLAG_KEY, CHANNEL_LOCK_TTL_S, CHANNEL_LOCK_WAIT_MS } from '../const/constants.js';
 
 // ─── Message queue job dispatcher ───
 
@@ -160,12 +161,23 @@ async function processMessageJob(job: Job<MessageProcessingData>): Promise<void>
 
   log('info', 'Processing message job', { jobId: job.id, channelId, textLength: fullText.length, attachments: attachments?.length ?? 0 });
 
-  await recordChannelActivity(channelId).catch(() => {});
-  startAllTypingLoops();
+  // Serialize processing per channel — prevents interleaved conversations
+  const redis = getRedis();
+  const lock = await acquireChannelLock(redis, channelId, CHANNEL_LOCK_TTL_S, CHANNEL_LOCK_WAIT_MS);
+  if (!lock) {
+    log('error', 'Failed to acquire channel lock, processing anyway', { channelId, jobId: job.id });
+  }
+
   try {
-    await runOrchestratorPipeline(channelId, fullText, job.id!);
+    await recordChannelActivity(channelId).catch(() => {});
+    startAllTypingLoops();
+    try {
+      await runOrchestratorPipeline(channelId, fullText, job.id!);
+    } finally {
+      stopAllTypingLoops();
+    }
   } finally {
-    stopAllTypingLoops();
+    await lock?.release();
   }
 }
 
@@ -175,10 +187,20 @@ async function processCommandJob(job: Job<CommandData>): Promise<void> {
   const { channelId, text } = job.data;
   log('info', 'Processing command job', { jobId: job.id, channelId, text });
 
-  startAllTypingLoops();
+  const redis = getRedis();
+  const lock = await acquireChannelLock(redis, channelId, CHANNEL_LOCK_TTL_S, CHANNEL_LOCK_WAIT_MS);
+  if (!lock) {
+    log('error', 'Failed to acquire channel lock for command, processing anyway', { channelId, jobId: job.id });
+  }
+
   try {
-    await runOrchestratorPipeline(channelId, text, job.id!);
+    startAllTypingLoops();
+    try {
+      await runOrchestratorPipeline(channelId, text, job.id!);
+    } finally {
+      stopAllTypingLoops();
+    }
   } finally {
-    stopAllTypingLoops();
+    await lock?.release();
   }
 }

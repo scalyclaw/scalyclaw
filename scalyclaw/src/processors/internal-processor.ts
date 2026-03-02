@@ -13,20 +13,60 @@ import type {
   MemoryExtractionData, ProactiveCheckData, VaultKeyRotationData,
 } from '@scalyclaw/shared/queue/jobs.js';
 
-// ─── Global lock for scheduled tasks (prevents concurrent orchestrator runs) ───
+import { randomUUID } from 'node:crypto';
+import { TASK_LOCK_TTL_S, TASK_LOCK_HEARTBEAT_MS } from '../const/constants.js';
+
+// ─── Global lock for scheduled tasks (with heartbeat) ───
 
 const TASK_LOCK_KEY = 'scalyclaw:lock:scheduled-task';
-const TASK_LOCK_TTL = 300; // 5 minutes
 
-async function acquireTaskLock(): Promise<boolean> {
-  const redis = getRedis();
-  const result = await redis.set(TASK_LOCK_KEY, Date.now().toString(), 'EX', TASK_LOCK_TTL, 'NX');
-  return result === 'OK';
+const RELEASE_LOCK_LUA = `
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('del', KEYS[1])
+end
+return 0
+`;
+
+const EXTEND_LOCK_LUA = `
+if redis.call('get', KEYS[1]) == ARGV[1] then
+  return redis.call('expire', KEYS[1], ARGV[2])
+end
+return 0
+`;
+
+interface TaskLockHandle {
+  value: string;
+  heartbeat: ReturnType<typeof setInterval>;
+  release: () => Promise<void>;
 }
 
-async function releaseTaskLock(): Promise<void> {
+async function acquireTaskLock(): Promise<TaskLockHandle | null> {
   const redis = getRedis();
-  await redis.del(TASK_LOCK_KEY);
+  const value = randomUUID();
+  const result = await redis.set(TASK_LOCK_KEY, value, 'EX', TASK_LOCK_TTL_S, 'NX');
+  if (result !== 'OK') return null;
+
+  // Heartbeat: extend TTL periodically so long-running tasks don't lose the lock
+  const heartbeat = setInterval(async () => {
+    try {
+      await redis.eval(EXTEND_LOCK_LUA, 1, TASK_LOCK_KEY, value, TASK_LOCK_TTL_S);
+    } catch (err) {
+      log('warn', 'Task lock heartbeat failed', { error: String(err) });
+    }
+  }, TASK_LOCK_HEARTBEAT_MS);
+
+  return {
+    value,
+    heartbeat,
+    release: async () => {
+      clearInterval(heartbeat);
+      try {
+        await redis.eval(RELEASE_LOCK_LUA, 1, TASK_LOCK_KEY, value);
+      } catch (err) {
+        log('warn', 'Task lock release failed', { error: String(err) });
+      }
+    },
+  };
 }
 
 // ─── Internal queue job dispatcher ───
@@ -230,8 +270,8 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
     return;
   }
 
-  const locked = await acquireTaskLock();
-  if (!locked) {
+  const lock = await acquireTaskLock();
+  if (!lock) {
     log('info', 'Recurrent task skipped — another scheduled task is running', { jobId: job.id, scheduledJobId });
     return;
   }
@@ -283,7 +323,7 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
     }
     throw err;
   } finally {
-    await releaseTaskLock();
+    await lock.release();
     stopAllTypingLoops();
   }
 }

@@ -241,24 +241,62 @@ export async function callMcpTool(name: string, args: Record<string, unknown>): 
   }
 
   const conn = connections.get(entry.serverId);
-  if (!conn || conn.status !== 'connected') {
+  if (!conn) {
     return JSON.stringify({ error: `MCP server "${entry.serverId}" is not connected` });
   }
 
-  try {
-    const result = await conn.client.callTool({ name: entry.toolName, arguments: args });
-    // Flatten content array into a single string
-    if (Array.isArray(result.content)) {
-      const texts = result.content
-        .filter((c): c is { type: string; text: string } => c.type === 'text' && typeof c.text === 'string')
-        .map((c) => c.text);
-      if (texts.length > 0) return texts.join('\n');
+  // Auto-reconnect if server was in error state
+  if (conn.status !== 'connected') {
+    log('info', `MCP server "${entry.serverId}" not connected, attempting reconnect...`);
+    try {
+      await disconnectServer(entry.serverId);
+      await connectServer(entry.serverId, conn.config);
+      const refreshed = connections.get(entry.serverId);
+      if (!refreshed || refreshed.status !== 'connected') {
+        return JSON.stringify({ error: `MCP server "${entry.serverId}" reconnect failed` });
+      }
+    } catch (err) {
+      return JSON.stringify({ error: `MCP server "${entry.serverId}" reconnect failed: ${String(err)}` });
     }
-    return JSON.stringify(result.content ?? result);
-  } catch (err) {
-    log('error', `MCP tool call failed: ${name}`, { error: String(err) });
-    return JSON.stringify({ error: `MCP tool "${name}" failed: ${String(err)}` });
   }
+
+  // Call with one retry on connection-level errors
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const active = connections.get(entry.serverId);
+    if (!active || active.status !== 'connected') {
+      return JSON.stringify({ error: `MCP server "${entry.serverId}" is not connected` });
+    }
+
+    try {
+      const result = await active.client.callTool({ name: entry.toolName, arguments: args });
+      // Flatten content array into a single string
+      if (Array.isArray(result.content)) {
+        const texts = result.content
+          .filter((c): c is { type: string; text: string } => c.type === 'text' && typeof c.text === 'string')
+          .map((c) => c.text);
+        if (texts.length > 0) return texts.join('\n');
+      }
+      return JSON.stringify(result.content ?? result);
+    } catch (err) {
+      const errMsg = String(err);
+      log('error', `MCP tool call failed (attempt ${attempt}/2): ${name}`, { error: errMsg });
+
+      // On first failure, try reconnecting
+      if (attempt === 1) {
+        try {
+          await disconnectServer(entry.serverId);
+          await connectServer(entry.serverId, active.config);
+        } catch {
+          // reconnect failed, fall through to return error
+        }
+        continue;
+      }
+
+      return JSON.stringify({ error: `MCP tool "${name}" failed: ${errMsg}` });
+    }
+  }
+
+  return JSON.stringify({ error: `MCP tool "${name}" failed after retries` });
 }
 
 export async function reconnectServer(id: string, config: McpServerConfig): Promise<void> {

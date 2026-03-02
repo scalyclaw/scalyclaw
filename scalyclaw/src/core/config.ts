@@ -113,6 +113,7 @@ export interface ScalyClawConfig {
     message: {
       enabled: boolean;
       model: string;
+      failOpen?: boolean;
       echoGuard: { enabled: boolean; similarityThreshold: number };
       contentGuard: { enabled: boolean };
     };

@@ -1,6 +1,7 @@
 import type { ChannelAdapter, MessageHandler } from './adapter.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { TYPING_INTERVAL_MS } from '../const/constants.js';
+import { withRetry } from '@scalyclaw/shared/core/retry.js';
+import { TYPING_INTERVAL_MS, SEND_RETRY_ATTEMPTS, SEND_RETRY_BASE_DELAY_MS } from '../const/constants.js';
 
 const adapters = new Map<string, ChannelAdapter>();
 let activeHandler: MessageHandler | null = null;
@@ -79,7 +80,7 @@ export async function reloadChannels(newAdapters: ChannelAdapter[]): Promise<voi
   }
 }
 
-/** Send a text message to a specific channel */
+/** Send a text message to a specific channel (with retry). */
 export async function sendToChannel(channelId: string, text: string): Promise<void> {
   const adapter = adapters.get(channelId);
   if (!adapter) {
@@ -87,9 +88,13 @@ export async function sendToChannel(channelId: string, text: string): Promise<vo
     return;
   }
   try {
-    await adapter.send(text);
+    await withRetry(() => adapter.send(text), {
+      attempts: SEND_RETRY_ATTEMPTS,
+      baseDelay: SEND_RETRY_BASE_DELAY_MS,
+      label: `sendToChannel(${channelId})`,
+    });
   } catch (err) {
-    log('error', `sendToChannel failed for channel: ${channelId}`, { error: String(err) });
+    log('error', `sendToChannel failed after ${SEND_RETRY_ATTEMPTS} attempts: ${channelId}`, { error: String(err) });
   }
 }
 
@@ -144,7 +149,7 @@ export function stopAllTypingLoops(): void {
   }
 }
 
-/** Send a file to a specific channel */
+/** Send a file to a specific channel (with retry). */
 export async function sendFileToChannel(channelId: string, filePath: string, caption?: string): Promise<void> {
   const adapter = adapters.get(channelId);
   if (!adapter) {
@@ -152,9 +157,13 @@ export async function sendFileToChannel(channelId: string, filePath: string, cap
     return;
   }
   try {
-    await adapter.sendFile(filePath, caption);
+    await withRetry(() => adapter.sendFile(filePath, caption), {
+      attempts: SEND_RETRY_ATTEMPTS,
+      baseDelay: SEND_RETRY_BASE_DELAY_MS,
+      label: `sendFileToChannel(${channelId})`,
+    });
   } catch (err) {
-    log('error', `sendFileToChannel failed for channel: ${channelId}`, { error: String(err) });
+    log('error', `sendFileToChannel failed after ${SEND_RETRY_ATTEMPTS} attempts: ${channelId}`, { error: String(err) });
   }
 }
 

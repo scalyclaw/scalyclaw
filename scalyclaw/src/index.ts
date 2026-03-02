@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
 import { PATHS } from './core/paths.js';
-import { getRedis, getSubscriber } from '@scalyclaw/shared/core/redis.js';
+import { getRedis, getSubscriber, closeRedis } from '@scalyclaw/shared/core/redis.js';
 import { log, initLogFile } from '@scalyclaw/shared/core/logger.js';
 import { bootstrap } from './core/bootstrap.js';
 import { enqueueJob, closeQueue, getQueue, getQueueName, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
@@ -10,7 +10,7 @@ import { processAgentJob } from './processors/agent-processor.js';
 import { cancelAllChannelJobs } from '@scalyclaw/shared/queue/cancel.js';
 import { CHANNEL_JOBS_KEY_PREFIX } from '@scalyclaw/shared/const/constants.js';
 import { randomUUID } from 'node:crypto';
-import { subscribeToProgress, type ProgressEvent } from './queue/progress.js';
+import { subscribeToProgress, publishProgress, type ProgressEvent } from './queue/progress.js';
 import { initGateway, listenGateway, closeGateway } from './gateway/server.js';
 import { registerAdapter, connectAll, disconnectAll, reloadChannels, sendToChannel, sendFileToChannel, sendTypingToChannel } from './channels/manager.js';
 import { resolveFilePath } from './core/workspace.js';
@@ -33,7 +33,17 @@ import {
   CANCEL_FLAG_TTL_S, UPDATE_NOTIFY_TTL_S, UPDATE_AWAITING_TTL_S,
   PROGRESS_DRAIN_INTERVAL_MS, STARTUP_NOTIFY_DELAY_MS, SHUTDOWN_TIMEOUT_MS,
   GIT_FETCH_TIMEOUT_MS, VAULT_ROTATION_INTERVAL_MS,
+  MEMORY_CLEANUP_INTERVAL_MS,
 } from './const/constants.js';
+
+// ── Global error handlers — prevent silent crashes ──
+process.on('unhandledRejection', (reason) => {
+  log('error', 'Unhandled promise rejection', { error: String(reason), stack: (reason as Error)?.stack });
+});
+process.on('uncaughtException', (err) => {
+  log('error', 'Uncaught exception — shutting down', { error: String(err), stack: err.stack });
+  process.exit(1);
+});
 
 async function main(): Promise<void> {
   await startSystem();
@@ -106,6 +116,19 @@ async function startSystem(): Promise<void> {
     });
     w.on('failed', (job, err) => {
       log('error', `Job failed: ${job?.name}`, { jobId: job?.id, queue: w.name, error: String(err) });
+
+      // Notify user on final failure for message/command jobs
+      const channelId = job?.data?.channelId;
+      if (channelId && (job?.name === 'message-processing' || job?.name === 'command')) {
+        publishProgress(redis, channelId, {
+          jobId: job.id ?? 'unknown',
+          type: 'error',
+          error: 'Something went wrong on my end. Try again?',
+        }).catch(() => {});
+      }
+    });
+    w.on('error', (err) => {
+      log('error', `Worker error: ${w.name}`, { error: String(err) });
     });
   }
   log('info', `Assistant consumers started (messages: ${messageConcurrency}, agent: ${agentConcurrency}, queues: ${workers.length})`);
@@ -189,6 +212,18 @@ async function startSystem(): Promise<void> {
   }, PROGRESS_DRAIN_INTERVAL_MS);
   progressDrainInterval.unref();
 
+  // ── Scheduled memory TTL cleanup (deterministic, not probabilistic) ──
+  const memoryCleanupInterval = setInterval(async () => {
+    try {
+      const { cleanupExpired } = await import('./memory/memory.js');
+      const cleaned = cleanupExpired();
+      if (cleaned > 0) log('info', 'Scheduled memory TTL cleanup', { cleaned });
+    } catch (err) {
+      log('warn', 'Memory cleanup failed', { error: String(err) });
+    }
+  }, MEMORY_CLEANUP_INTERVAL_MS);
+  memoryCleanupInterval.unref();
+
   // ── Register process ──
   let version = '0.1.0';
   try {
@@ -230,11 +265,15 @@ async function startSystem(): Promise<void> {
       await closeGateway();
       await deregisterProcess(redis);
       clearInterval(progressDrainInterval);
+      clearInterval(memoryCleanupInterval);
       await disconnectAll();
+      // Pause workers (stop picking new jobs) then close (waits for active to finish, up to shutdown timeout)
+      await Promise.allSettled(workers.map(w => w.pause()));
       await Promise.allSettled(workers.map(w => w.close()));
       await disconnectMcpServers();
       reloadSubscriber?.disconnect();
       await closeQueue();
+      await closeRedis();
     } catch (err) {
       log('error', 'Error during shutdown', { error: String(err) });
     }
@@ -250,12 +289,9 @@ async function drainProgressBuffers(redis: Redis): Promise<void> {
   const keys = await redis.keys(`${PROGRESS_BUFFER_KEY_PREFIX}*`);
   for (const key of keys) {
     const channelId = key.slice(PROGRESS_BUFFER_KEY_PREFIX.length);
-    const events = await redis.eval(
-      `local msgs = redis.call('lrange', KEYS[1], 0, -1)
-       if #msgs > 0 then redis.call('del', KEYS[1]) end
-       return msgs`, 1, key,
-    ) as string[];
-    for (const raw of events) {
+    // Pop one event at a time — only removes after successful delivery
+    let raw: string | null;
+    while ((raw = await redis.lpop(key)) !== null) {
       try {
         const event = JSON.parse(raw) as ProgressEvent;
 
@@ -269,6 +305,7 @@ async function drainProgressBuffers(redis: Redis): Promise<void> {
         }
       } catch (err) {
         log('warn', 'Failed to process buffered progress event', { channelId, error: String(err) });
+        // Don't re-push — avoid infinite retry loop. Event is logged for debugging.
       }
     }
   }

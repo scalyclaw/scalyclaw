@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { getDb, isVecAvailable } from '../core/db.js';
 import { getConfigRef } from '../core/config.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
+import { withRetry } from '@scalyclaw/shared/core/retry.js';
+import { EMBEDDING_RETRY_ATTEMPTS } from '../const/constants.js';
 import { generateEmbedding, vectorToBlob, isEmbeddingsAvailable } from './embeddings.js';
 
 const TTL_FILTER = "(ttl IS NULL OR ttl > datetime('now'))";
@@ -74,7 +76,11 @@ export async function storeMemory(input: StoreMemoryInput): Promise<string> {
   let embeddingBlob: Buffer | null = null;
   if (isEmbeddingsAvailable()) {
     try {
-      const embedding = await generateEmbedding(embeddingText);
+      const embedding = await withRetry(() => generateEmbedding(embeddingText), {
+        attempts: EMBEDDING_RETRY_ATTEMPTS,
+        baseDelay: 500,
+        label: 'Embedding (store)',
+      });
       embeddingBlob = vectorToBlob(embedding);
     } catch (err) {
       log('warn', 'Embedding generation failed — storing without vector', { id, error: String(err) });
@@ -126,7 +132,11 @@ export async function updateMemory(id: string, updates: UpdateMemoryInput): Prom
   let embeddingBlob: Buffer | null = null;
   if (needsReembed && isEmbeddingsAvailable()) {
     try {
-      const embedding = await generateEmbedding(subject + '\n' + content);
+      const embedding = await withRetry(() => generateEmbedding(subject + '\n' + content), {
+        attempts: EMBEDDING_RETRY_ATTEMPTS,
+        baseDelay: 500,
+        label: 'Embedding (update)',
+      });
       embeddingBlob = vectorToBlob(embedding);
     } catch (err) {
       log('warn', 'Embedding regeneration failed during update', { id, error: String(err) });
@@ -418,12 +428,12 @@ export function cleanupExpired(): number {
     if (isVecAvailable()) {
       db.prepare(`DELETE FROM memory_vec WHERE id IN (${placeholders})`).run(...ids);
     }
-    try {
-      for (const id of ids) {
+    for (const id of ids) {
+      try {
         db.prepare('DELETE FROM memory_fts WHERE id = ?').run(id);
+      } catch {
+        // FTS cleanup is best-effort per entry
       }
-    } catch {
-      // FTS cleanup is best-effort
     }
   });
   deleteAll();
