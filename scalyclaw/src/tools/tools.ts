@@ -80,7 +80,7 @@ const TOOL_DEFS: ToolDefinition[] = [
     caption: STR('Optional caption'),
   }, ['path'])),
 
-  // ─── Agents (1 — create only, admin ops via dashboard) ───
+  // ─── Agents (2 — create + delete, other admin ops via dashboard) ───
   tool('create_agent', 'Create a new agent', schema({
     id: STR('Agent ID (will be suffixed with -agent if needed)'),
     name: 'Display name',
@@ -92,6 +92,7 @@ const TOOL_DEFS: ToolDefinition[] = [
     mcpServers: STRARR('MCP server IDs the agent can access'),
     maxIterations: NUM('Max tool-use iterations'),
   }, ['id', 'name', 'description', 'systemPrompt'])),
+  tool('delete_agent', 'Delete an agent by ID', schema({ id: 'Agent ID to delete' }, ['id'])),
 
   // ─── Scheduling (4) ───
   tool('list_reminders', 'List reminders and recurrent reminders'),
@@ -210,7 +211,7 @@ export const AGENT_ELIGIBLE_TOOL_NAMES: string[] = [...AGENT_DIRECT_NAMES, ...AG
 export const TOOL_NAMES_SET = new Set([
   ...TOOL_DEFS.map(t => t.name),
   // Internal tools still registered for API/dashboard use
-  'list_agents', 'update_agent', 'delete_agent', 'toggle_agent',
+  'list_agents', 'update_agent', 'toggle_agent',
   'set_agent_models', 'set_agent_skills', 'set_agent_tools', 'set_agent_mcps',
   'list_models', 'toggle_model',
   'list_skills', 'toggle_skill', 'delete_skill',
