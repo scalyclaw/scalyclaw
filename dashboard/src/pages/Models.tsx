@@ -46,6 +46,7 @@ export default function Models() {
   const [editEmbeddingIndex, setEditEmbeddingIndex] = useState<number | null>(null);
   const [showAdd, setShowAdd] = useState(false);
   const [showAddEmbedding, setShowAddEmbedding] = useState(false);
+  const [activeTab, setActiveTab] = useState('models');
   const config = useConfigSection<ModelsConfig>('models');
 
   /** Remove a provider entry if no remaining models or embedding models use it. */
@@ -130,6 +131,7 @@ export default function Models() {
     });
     config.save().then(() => {
       refetch();
+      setActiveTab('embedding');
       toast.success(`Embedding model "${model.id}" added`);
     });
   }
@@ -215,7 +217,7 @@ export default function Models() {
         </div>
       </div>
 
-      <Tabs defaultValue="models">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="models">Models ({models.length})</TabsTrigger>
           <TabsTrigger value="embedding">Embedding Models ({embeddingModels.length})</TabsTrigger>
