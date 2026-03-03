@@ -627,6 +627,15 @@ async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext)
     }
   }
 
+  // Server-side agent enforcement — block disabled agents
+  if (toolName === 'delegate_agent') {
+    const agentId = payload.agentId as string;
+    const agentConfig = getConfigRef().orchestrator.agents.find(a => a.id === agentId);
+    if (agentConfig && !agentConfig.enabled) {
+      return JSON.stringify({ error: `Agent "${agentId}" is disabled. Enable it in the dashboard first.` });
+    }
+  }
+
   log('info', 'Tool call', { tool: toolName, payload, channelId: ctx.channelId });
   try {
     const result = await dispatchTool(toolName, payload, ctx);

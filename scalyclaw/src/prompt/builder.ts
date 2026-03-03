@@ -4,6 +4,7 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 import { PATHS } from '../core/paths.js';
 import { getAllAgents } from '../agents/agent-loader.js';
 import { getAllSkills } from '@scalyclaw/shared/skills/skill-loader.js';
+import { getConfigRef } from '../core/config.js';
 import { getConnectionStatuses } from '../mcp/mcp-manager.js';
 import { coreInstructionsSection } from './core-instructions.js';
 import { KNOWLEDGE_SECTION } from './knowledge.js';
@@ -43,8 +44,10 @@ export async function buildSystemPrompt(): Promise<string> {
   parts.push(KNOWLEDGE_SECTION);
   parts.push(EXTENSIONS_SECTION);
 
-  // 3. Available skills (listed for reference — invoked via submit_job)
-  const skills = getAllSkills();
+  // 3. Available skills — only show ENABLED ones to the LLM
+  const config = getConfigRef();
+  const disabledSkillIds = new Set(config.skills.filter(s => !s.enabled).map(s => s.id));
+  const skills = getAllSkills().filter(s => !disabledSkillIds.has(s.id));
   if (skills.length > 0) {
     const entries = skills.slice(0, MAX_DYNAMIC_ENTRIES);
     const lines = entries.map(s => {
@@ -60,8 +63,9 @@ export async function buildSystemPrompt(): Promise<string> {
     log('debug', 'Prompt: added skills', { count: skills.length });
   }
 
-  // 4. Available agents (delegated via submit_job + delegate_agent)
-  const agents = getAllAgents();
+  // 4. Available agents — only show ENABLED ones to the LLM
+  const disabledAgentIds = new Set(config.orchestrator.agents.filter(a => !a.enabled).map(a => a.id));
+  const agents = getAllAgents().filter(a => !disabledAgentIds.has(a.id));
   if (agents.length > 0) {
     const entries = agents.slice(0, MAX_DYNAMIC_ENTRIES);
     const lines = entries.map(a => {

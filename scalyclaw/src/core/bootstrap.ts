@@ -96,13 +96,9 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
   }
 
   // ── Skills + Agents + MCP (parallel — independent of each other) ──
-  // Re-read config after potential builtin registration
-  const freshConfig = getConfigRef();
-  const disabledSkillIds = new Set(
-    freshConfig.skills.filter(s => !s.enabled).map(s => s.id),
-  );
+  // Load ALL skills/agents into memory (enabled filtering at API/prompt level)
   await Promise.all([
-    loadSkills(disabledSkillIds),
+    loadSkills(),
     loadAllAgents(),
     connectMcpServers(resolvedConfig.mcpServers ?? {}),
   ]);
@@ -123,10 +119,7 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
   await reloadSubscriber.connect();
   subscribeToSkillReload(reloadSubscriber, async () => {
     log('info', 'Received skills reload notification, reloading from disk');
-    const freshDisabledSkills = new Set(
-      getConfigRef().skills.filter(s => !s.enabled).map(s => s.id),
-    );
-    await loadSkills(freshDisabledSkills);
+    await loadSkills();
     invalidatePromptCache();
   });
   subscribeToCancelSignal(reloadSubscriber);

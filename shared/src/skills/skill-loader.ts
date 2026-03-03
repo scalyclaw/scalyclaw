@@ -18,18 +18,14 @@ export interface SkillDefinition {
 
 const loadedSkills = new Map<string, SkillDefinition>();
 
-export async function loadSkills(disabledIds?: Set<string>): Promise<Map<string, SkillDefinition>> {
+export async function loadSkills(): Promise<Map<string, SkillDefinition>> {
   loadedSkills.clear();
 
-  // Load user-created skills from the skills directory
+  // Load all skills from the skills directory (enabled filtering happens at API/prompt level)
   try {
     const entries = await readdir(PATHS.skills, { withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) {
-        if (disabledIds?.has(entry.name)) {
-          log('info', `Skipping disabled skill: ${entry.name}`);
-          continue;
-        }
         await loadSkillFromDir(join(PATHS.skills, entry.name), entry.name);
       }
     }

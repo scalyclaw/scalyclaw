@@ -69,13 +69,7 @@ async function loadAgentFromDir(agentId: string): Promise<void> {
     // Get model config from Redis config
     const config = getConfigRef();
     const agentConfig = config.orchestrator.agents.find(a => a.id === agentId);
-
-    // Skip disabled agents
     const enabled = agentConfig?.enabled ?? true;
-    if (!enabled) {
-      log('info', `Skipping disabled agent: ${agentId}`);
-      return;
-    }
 
     loadedAgents.set(agentId, {
       id: agentId,
