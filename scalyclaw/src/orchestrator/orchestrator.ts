@@ -193,8 +193,8 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     });
 
     // Send intermediate progress message before executing tools
-    const toolNames = response.toolCalls.map(tc => tc.name).join(', ');
-    input.sendToChannel(input.channelId, `Using ${toolNames}...`).catch(() => {});
+    const progressLines = response.toolCalls.map(tc => describeToolCall(tc.name, tc.input));
+    input.sendToChannel(input.channelId, progressLines.join('\n')).catch(() => {});
 
     const toolResults = await Promise.all(
       response.toolCalls.map(async (tc) => {
@@ -250,4 +250,68 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
   });
 
   return finalContent;
+}
+
+// ─── Progress message helpers ───
+
+const TOOL_PROGRESS: Record<string, string> = {
+  memory_store:     '💾 Saving to memory…',
+  memory_search:    '🔍 Searching memories…',
+  memory_recall:    '🧠 Recalling memories…',
+  memory_update:    '💾 Updating memory…',
+  memory_delete:    '🗑️ Removing a memory…',
+  send_message:     '💬 Sending a message…',
+  send_file:        '📎 Sending a file…',
+  create_agent:     '🤖 Creating an agent…',
+  delete_agent:     '🤖 Removing an agent…',
+  register_skill:   '⚡ Registering a skill…',
+  vault_store:      '🔐 Storing a secret…',
+  vault_list:       '🔐 Checking the vault…',
+  list_reminders:   '⏰ Checking reminders…',
+  list_tasks:       '📋 Checking tasks…',
+  cancel_reminder:  '⏰ Cancelling a reminder…',
+  cancel_task:      '📋 Cancelling a task…',
+  list_directory:   '📂 Browsing files…',
+  file_read:        '📄 Reading a file…',
+  file_write:       '✏️ Writing a file…',
+  file_edit:        '✏️ Editing a file…',
+  file_ops:         '📁 Managing files…',
+  system_info:      '📊 Checking system info…',
+  compact_context:  '🧹 Tidying up context…',
+  get_job:          '📋 Checking job status…',
+  list_active_jobs: '📋 Listing active jobs…',
+  stop_job:         '🛑 Stopping a job…',
+};
+
+const SUBMIT_JOB_PROGRESS: Record<string, string> = {
+  execute_command:             '⚙️ Running a command…',
+  execute_skill:              '⚡ Running a skill…',
+  execute_code:               '💻 Running code…',
+  delegate_agent:             '🤖 Delegating to an agent…',
+  schedule_reminder:          '⏰ Setting a reminder…',
+  schedule_recurrent_reminder:'⏰ Setting a recurring reminder…',
+  schedule_task:              '📋 Scheduling a task…',
+  schedule_recurrent_task:    '📋 Scheduling a recurring task…',
+};
+
+function describeToolCall(name: string, input: Record<string, unknown>): string {
+  // submit_job / submit_parallel_jobs — resolve from inner toolName
+  if (name === 'submit_job') {
+    const toolName = input.toolName as string | undefined;
+    if (toolName) return SUBMIT_JOB_PROGRESS[toolName] ?? `⚙️ Running ${toolName}…`;
+    return '⚙️ Working on it…';
+  }
+  if (name === 'submit_parallel_jobs') {
+    const jobs = input.jobs as Array<{ toolName?: string }> | undefined;
+    if (jobs?.length) {
+      const lines = jobs.map(j => SUBMIT_JOB_PROGRESS[j.toolName ?? ''] ?? `⚙️ Running ${j.toolName}…`);
+      // deduplicate identical lines (e.g. two execute_command calls)
+      return [...new Set(lines)].join('\n');
+    }
+    return '⚡ Running parallel jobs…';
+  }
+  // MCP tools
+  if (name.startsWith('mcp_')) return `🔌 Calling ${name.replace(/^mcp_/, '')}…`;
+  // Direct tools
+  return TOOL_PROGRESS[name] ?? `⚙️ Working on it…`;
 }
