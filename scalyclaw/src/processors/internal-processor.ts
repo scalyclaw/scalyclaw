@@ -5,7 +5,7 @@ import { storeMessage } from '../core/db.js';
 import { publishProgress } from '../queue/progress.js';
 import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { extractMemories } from '../memory/extractor.js';
-import { startAllTypingLoops, stopAllTypingLoops } from '../channels/manager.js';
+import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
 import { isScheduledJobActive, markScheduledCompleted, markScheduledFailed, updateScheduledNextRun } from '../scheduler/scheduler.js';
 import { processProactiveEngagement } from '../scheduler/proactive.js';
 import type {
@@ -208,7 +208,7 @@ async function processTask(job: Job<TaskData>): Promise<void> {
   }
 
   const targetChannel = channelId || 'system';
-  startAllTypingLoops();
+  startTypingLoop(targetChannel);
 
   try {
     const { runOrchestrator } = await import('../orchestrator/orchestrator.js');
@@ -254,7 +254,7 @@ async function processTask(job: Job<TaskData>): Promise<void> {
     }
     throw err;
   } finally {
-    stopAllTypingLoops();
+    stopTypingLoop(targetChannel);
   }
 }
 
@@ -278,7 +278,7 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
   }
 
   const targetChannel = channelId || 'system';
-  startAllTypingLoops();
+  startTypingLoop(targetChannel);
 
   try {
     await updateScheduledNextRun(scheduledJobId, new Date().toISOString());
@@ -326,7 +326,7 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
     throw err;
   } finally {
     await lock.release();
-    stopAllTypingLoops();
+    stopTypingLoop(targetChannel);
   }
 }
 
