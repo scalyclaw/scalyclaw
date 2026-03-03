@@ -43,7 +43,7 @@ async function guardLlmCall(systemPrompt: string, userContent: string, guardMode
       systemPrompt,
       messages: [{ role: 'user', content: userContent }],
       temperature: 0.0,
-      maxTokens: 1024,
+      maxTokens: 2048,
     }),
     GUARD_TIMEOUT_MS,
     'Guard LLM call',
@@ -65,8 +65,13 @@ async function guardLlmCall(systemPrompt: string, userContent: string, guardMode
 }
 
 function parseSecurityResponse(text: string): SecurityAnalysis {
+  // Strip model thinking artifacts before JSON extraction
+  let cleaned = text;
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/g, '');   // tagged thinking
+  cleaned = cleaned.replace(/<\|[^|]*\|>/g, '');                // ChatML tokens
+
   // Extract JSON from response (may be wrapped in markdown code block)
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
   if (!jsonMatch) throw new Error('No JSON found in guard response');
 
   const parsed = JSON.parse(jsonMatch[0]);

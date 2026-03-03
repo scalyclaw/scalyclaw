@@ -35,7 +35,7 @@ export async function extractMemories(userMessages: string[], channelId?: string
       systemPrompt: EXTRACTION_PROMPT,
       messages: [{ role: 'user', content: userContent }],
       temperature: 0,
-      maxTokens: 1024,
+      maxTokens: 2048,
     });
 
     recordUsage({
@@ -47,10 +47,15 @@ export async function extractMemories(userMessages: string[], channelId?: string
       channelId,
     });
 
+    // Strip model thinking artifacts before JSON extraction
+    let content = response.content;
+    content = content.replace(/<think>[\s\S]*?<\/think>/g, '');   // tagged thinking
+    content = content.replace(/<\|[^|]*\|>/g, '');                // ChatML tokens
+
     // Parse JSON array from response
-    const jsonMatch = response.content.match(/\[[\s\S]*\]/);
+    const jsonMatch = content.match(/\[[\s\S]*\]/);
     if (!jsonMatch) {
-      log('debug', 'Memory extraction returned no JSON array — nothing to store');
+      log('debug', 'Memory extraction returned no JSON array — nothing to store', { contentLength: content.length, preview: content.slice(0, 200) });
       return;
     }
 

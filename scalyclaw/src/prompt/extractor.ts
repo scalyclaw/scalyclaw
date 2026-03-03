@@ -20,4 +20,6 @@ Type mapping guide:
 - Data insights, comparisons → "analysis"
 - Gathered information, sources → "research"
 
-Return [] if nothing is worth storing. Return ONLY the JSON array, no other text.`;
+Return [] if nothing is worth storing.
+
+CRITICAL: Return ONLY the raw JSON array. Do NOT include any reasoning, thinking process, explanation, or preamble. Your entire response must be a valid JSON array starting with [ and ending with ].`;
