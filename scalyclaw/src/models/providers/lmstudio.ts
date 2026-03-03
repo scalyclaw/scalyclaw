@@ -4,6 +4,22 @@ import { log } from '@scalyclaw/shared/core/logger.js';
 
 const BASE_URL = 'http://localhost:1234/v1';
 
+/**
+ * Strip local-model artifacts from content.
+ * Handles: <think> tags, ChatML tokens (<|im_start|>, <|im_end|>, etc.),
+ * and hallucinated multi-turn continuations that Qwen/DeepSeek/etc. emit.
+ */
+function cleanContent(raw: string): string {
+  // 1. Strip <think>...</think> reasoning tags (DeepSeek R1, Qwen3 emit them)
+  let text = raw.replace(/<think>[\s\S]*?<\/think>/g, '');
+  // 2. Truncate at first <|im_end|> — everything after is hallucinated turns
+  const imEndIdx = text.indexOf('<|im_end|>');
+  if (imEndIdx !== -1) text = text.slice(0, imEndIdx);
+  // 3. Strip any remaining special tokens (<|...|> format covers im_start, im_end, endoftext, etc.)
+  text = text.replace(/<\|[^|]*\|>/g, '').trim();
+  return text;
+}
+
 export function createLMStudioProvider(baseUrl?: string): ModelProvider {
   const client = new OpenAI({ apiKey: 'lm-studio', baseURL: baseUrl ?? BASE_URL });
 
@@ -18,10 +34,13 @@ export function createLMStudioProvider(baseUrl?: string): ModelProvider {
             return { role: 'tool', content: m.content, tool_call_id: m.tool_call_id || '' };
           }
           if (m.role === 'assistant') {
+            // Clean historical assistant messages — previous responses may contain
+            // leaked ChatML tokens or <think> tags stored before cleanup was added.
+            const cleaned = cleanContent(m.content || '');
             if (m.tool_calls && m.tool_calls.length > 0) {
               return {
                 role: 'assistant' as const,
-                content: m.content || null,
+                content: cleaned || null,
                 tool_calls: m.tool_calls.map(tc => ({
                   id: tc.id,
                   type: 'function' as const,
@@ -29,7 +48,7 @@ export function createLMStudioProvider(baseUrl?: string): ModelProvider {
                 })),
               };
             }
-            return { role: 'assistant', content: m.content };
+            return { role: 'assistant', content: cleaned };
           }
           return { role: 'user', content: m.content };
         }),
@@ -56,8 +75,7 @@ export function createLMStudioProvider(baseUrl?: string): ModelProvider {
       log('debug', 'LM Studio API response', { model, durationMs: Date.now() - startTime, finishReason: response.choices[0]?.finish_reason, promptTokens: response.usage?.prompt_tokens, completionTokens: response.usage?.completion_tokens });
 
       const choice = response.choices[0];
-      // Strip <think>...</think> reasoning tags (local models like DeepSeek R1, Qwen3 emit them)
-      const content = (choice.message.content || '').replace(/<think>[\s\S]*?<\/think>/g, '').trim();
+      const content = cleanContent(choice.message.content || '');
       const toolCalls: ModelResponse['toolCalls'] = [];
 
       if (choice.message.tool_calls) {
