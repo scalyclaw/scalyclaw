@@ -53,11 +53,12 @@ export async function initEmbeddings(): Promise<void> {
 
   switch (providerName) {
     case 'openai':
-    case 'openrouter': {
+    case 'openrouter':
+    case 'lmstudio': {
       const { default: OpenAI } = await import('openai');
       const client = new OpenAI({
-        apiKey: providerConfig.apiKey,
-        baseURL: providerConfig.baseUrl,
+        apiKey: providerConfig.apiKey || 'lm-studio',
+        baseURL: providerConfig.baseUrl || (providerName === 'lmstudio' ? 'http://localhost:1234/v1' : undefined),
       });
       provider = {
         async embed(text: string): Promise<EmbeddingVector> {

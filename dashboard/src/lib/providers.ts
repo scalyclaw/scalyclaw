@@ -155,6 +155,22 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
       { id: 'cohere:embed-multilingual-v3.0', hint: '1024 dims, multilingual', dimensions: 1024, inputPrice: 0.1 },
     ],
   },
+  lmstudio: {
+    label: 'LM Studio',
+    baseUrl: 'http://localhost:1234/v1',
+    requiresKey: false,
+    chatModels: [
+      { id: 'lmstudio:qwen3-8b', hint: 'Qwen 3 8B' },
+      { id: 'lmstudio:llama-3.3-8b', hint: 'Llama 3.3 8B' },
+      { id: 'lmstudio:gemma-3-12b', hint: 'Gemma 3 12B' },
+      { id: 'lmstudio:deepseek-r1-8b', hint: 'DeepSeek R1 8B' },
+      { id: 'lmstudio:phi-4-mini', hint: 'Phi 4 Mini' },
+    ],
+    embeddingModels: [
+      { id: 'lmstudio:text-embedding-nomic-embed-text-v1.5', hint: '768 dims', dimensions: 768 },
+      { id: 'lmstudio:text-embedding-bge-small-en-v1.5', hint: '384 dims', dimensions: 384 },
+    ],
+  },
   custom: {
     label: 'Custom',
     baseUrl: '',
