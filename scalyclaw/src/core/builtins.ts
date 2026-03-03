@@ -54,6 +54,19 @@ export const BUILTIN_SKILL_IDS: string[] = [
   // Bash (2)
   'git-info-skill',
   'system-monitor-skill',
+  // Python — batch 3 (3)
+  'pdf-merger-skill',
+  'database-query-skill',
+  'spell-checker-skill',
+  // JavaScript — batch 3 (5)
+  'stock-price-skill',
+  'slack-webhook-skill',
+  'timezone-converter-skill',
+  'sitemap-parser-skill',
+  'compress-skill',
+  // Rust — batch 3 (2)
+  'unit-converter-skill',
+  'color-converter-skill',
 ];
 
 // ── Built-in Agent Manifest ─────────────────────────────────────────
@@ -139,6 +152,31 @@ export const BUILTIN_AGENT_MANIFEST: Record<string, BuiltinAgentManifest> = {
     skills: ['audio-transcriber-skill', 'translator-skill'],
     tools: ['send_message', 'send_file', 'execute_skill', 'file_write', 'file_read'],
     maxIterations: 20,
+  },
+  'finance-agent': {
+    skills: ['stock-price-skill', 'crypto-price-skill', 'web-search-skill'],
+    tools: ['send_message', 'execute_skill', 'file_write', 'file_read'],
+    maxIterations: 20,
+  },
+  'notification-agent': {
+    skills: ['slack-webhook-skill', 'email-sender-skill'],
+    tools: ['send_message', 'execute_skill', 'file_read'],
+    maxIterations: 10,
+  },
+  'pdf-toolkit-agent': {
+    skills: ['pdf-reader-skill', 'pdf-merger-skill', 'ocr-skill', 'markdown-to-pdf-skill'],
+    tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write'],
+    maxIterations: 25,
+  },
+  'database-analyst-agent': {
+    skills: ['database-query-skill', 'data-analyzer-skill', 'chart-generator-skill'],
+    tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write', 'list_directory'],
+    maxIterations: 25,
+  },
+  'site-auditor-agent': {
+    skills: ['sitemap-parser-skill', 'http-client-skill', 'web-scraper-skill', 'dns-lookup-skill'],
+    tools: ['send_message', 'execute_skill', 'file_write', 'file_read'],
+    maxIterations: 30,
   },
 };
 

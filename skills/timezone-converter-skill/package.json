@@ -1,8 +1,8 @@
 {
-  "name": "email-sender-skill",
+  "name": "timezone-converter-skill",
   "version": "0.1.0",
   "private": true,
   "dependencies": {
-    "nodemailer": "^7.0.11"
+    "luxon": "^3.5.0"
   }
 }
