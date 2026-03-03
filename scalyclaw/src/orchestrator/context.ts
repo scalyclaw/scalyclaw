@@ -10,7 +10,7 @@ import {
   MAX_TOOL_RESULT_CHARS,
   TOOL_RESULT_BUDGET_FRACTION,
 } from '../const/constants.js';
-import { getChannelMessages } from '../core/db.js';
+import { getAllRecentMessages } from '../core/db.js';
 import { getConfigRef } from '../core/config.js';
 import { COMPACT_CONTEXT_PROMPT } from '../prompt/compact.js';
 import type { ChatMessage, ToolDefinition } from '../models/provider.js';
@@ -58,7 +58,7 @@ const EXCLUDED_SOURCES = new Set(['reminder', 'recurrent-reminder', 'task', 'rec
 export function initContext(opts: InitContextOpts): { messages: ChatMessage[]; budget: ContextBudget } {
   const { channelId, systemPrompt, tools, contextWindow = DEFAULT_CONTEXT_WINDOW } = opts;
 
-  const recentMessages = getChannelMessages(channelId, DEFAULT_MESSAGE_LIMIT).filter(m => {
+  const recentMessages = getAllRecentMessages(DEFAULT_MESSAGE_LIMIT).filter(m => {
     if (!m.metadata) return true;
     try {
       const meta = JSON.parse(m.metadata);

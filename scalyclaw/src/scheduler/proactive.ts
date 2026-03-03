@@ -3,13 +3,13 @@ import { join } from 'node:path';
 import { getRedis } from '@scalyclaw/shared/core/redis.js';
 import { SEVEN_DAYS_S } from '@scalyclaw/shared/const/constants.js';
 import { getConfigRef, type ScalyClawConfig } from '../core/config.js';
-import { getChannelMessages, recordUsage, type Message } from '../core/db.js';
+import { getAllRecentMessages, recordUsage, type Message } from '../core/db.js';
 import { PATHS } from '../core/paths.js';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { selectModel, parseModelId } from '../models/provider.js';
 import { getProvider } from '../models/registry.js';
 import { buildProactivePrompt } from '../prompt/proactive.js';
-import { ACTIVITY_KEY_PREFIX, PROACTIVE_COOLDOWN_KEY_PREFIX, PROACTIVE_DAILY_KEY_PREFIX } from '../const/constants.js';
+import { ACTIVITY_KEY_PREFIX, PROACTIVE_COOLDOWN_KEY_PREFIX, PROACTIVE_DAILY_KEY_PREFIX, PROACTIVE_MESSAGE_LIMIT } from '../const/constants.js';
 
 // ─── Types ──────────────────────────────────────────────────────────
 
@@ -34,7 +34,7 @@ interface ChannelContext {
 }
 
 function gatherChannelContext(channelId: string, lastActiveTs: number): ChannelContext {
-  const messages = getChannelMessages(channelId, 10);
+  const messages = getAllRecentMessages(PROACTIVE_MESSAGE_LIMIT);
 
   // Pending results = assistant messages with scheduled sources created after lastActiveTs
   const lastActiveIso = new Date(lastActiveTs).toISOString().replace('T', ' ').slice(0, 19);

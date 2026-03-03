@@ -105,13 +105,10 @@ export const TOOL_RESULT_BUDGET_FRACTION = 0.25;
 /** Number of recent messages to load from DB for context. */
 export const DEFAULT_MESSAGE_LIMIT = 50;
 
+/** Number of recent messages to load for proactive engagement context. */
+export const PROACTIVE_MESSAGE_LIMIT = 10;
+
 // ─── Reliability ───
-
-/** Per-channel processing lock TTL (seconds). */
-export const CHANNEL_LOCK_TTL_S = 300;
-
-/** Max time to wait for per-channel lock (ms). */
-export const CHANNEL_LOCK_WAIT_MS = 120_000;
 
 /** LLM retry attempts (includes first attempt). */
 export const LLM_RETRY_ATTEMPTS = 3;

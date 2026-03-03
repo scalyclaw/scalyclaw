@@ -192,6 +192,10 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
       tool_calls: response.toolCalls,
     });
 
+    // Send intermediate progress message before executing tools
+    const toolNames = response.toolCalls.map(tc => tc.name).join(', ');
+    input.sendToChannel(input.channelId, `Using ${toolNames}...`).catch(() => {});
+
     const toolResults = await Promise.all(
       response.toolCalls.map(async (tc) => {
         if (input.signal?.aborted) return { toolCall: tc, result: '{"error":"Aborted"}' };
