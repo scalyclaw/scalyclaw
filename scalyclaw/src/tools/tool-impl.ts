@@ -614,9 +614,15 @@ async function handleSubmitJob(input: Record<string, unknown>, ctx: ToolContext)
   if (payloadError) return JSON.stringify({ error: payloadError });
 
   // Server-side skill enforcement for scoped agents
-  if (toolName === 'execute_skill' && ctx.allowedSkillIds !== undefined) {
+  if (toolName === 'execute_skill') {
     const skillId = payload.skillId as string;
-    if (!ctx.allowedSkillIds.includes(skillId)) {
+    // Check if skill is disabled in config
+    const skillConfig = getConfigRef().skills.find(s => s.id === skillId);
+    if (skillConfig && !skillConfig.enabled) {
+      return JSON.stringify({ error: `Skill "${skillId}" is disabled. Enable it in the dashboard first.` });
+    }
+    // Check agent-scoped skill access
+    if (ctx.allowedSkillIds !== undefined && !ctx.allowedSkillIds.includes(skillId)) {
       return JSON.stringify({ error: `Skill "${skillId}" is not available to this agent.` });
     }
   }

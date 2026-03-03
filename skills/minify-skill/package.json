@@ -1,0 +1,11 @@
+{
+  "name": "minify-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "terser": "^5.37.0",
+    "prettier": "^3.4.2",
+    "clean-css": "^5.3.3",
+    "html-minifier-terser": "^7.2.0"
+  }
+}

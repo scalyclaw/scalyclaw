@@ -1,4 +1,4 @@
-import { ensureDirectories, syncMindFiles, setBasePath, PATHS, loadSetupConfig } from './paths.js';
+import { ensureDirectories, syncMindFiles, syncBuiltinSkills, syncBuiltinAgents, setBasePath, PATHS, loadSetupConfig } from './paths.js';
 import { initRedis, getRedis, createRedisClient, type RedisConfig } from '@scalyclaw/shared/core/redis.js';
 import { loadConfig, getConfigRef, subscribeToConfigReload, type ScalyClawConfig } from './config.js';
 import { resolveSecrets } from './vault.js';
@@ -11,6 +11,7 @@ import { subscribeToSkillReload } from '../skills/skill-store.js';
 import { loadAllAgents } from '../agents/agent-loader.js';
 import { connectAll as connectMcpServers } from '../mcp/mcp-manager.js';
 import { invalidatePromptCache } from '../prompt/builder.js';
+import { registerBuiltins } from './builtins.js';
 import { registerProvider } from '../models/registry.js';
 import { createMiniMaxProvider } from '../models/providers/minimax.js';
 import { createLMStudioProvider } from '../models/providers/lmstudio.js';
@@ -56,6 +57,11 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
   ensureDirectories();
   if (options.syncMind) {
     syncMindFiles();
+    const installedSkills = syncBuiltinSkills();
+    const installedAgents = syncBuiltinAgents();
+    if (installedSkills.length || installedAgents.length) {
+      log('info', 'Synced built-ins', { skills: installedSkills.length, agents: installedAgents.length });
+    }
   }
   log('info', 'Data directory', { base: PATHS.base });
 
@@ -84,9 +90,19 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
     log('info', 'Skipping database initialization (skipDatabase=true)');
   }
 
+  // ── Register built-in skills/agents in config (first-run only) ──
+  if (options.syncMind) {
+    await registerBuiltins();
+  }
+
   // ── Skills + Agents + MCP (parallel — independent of each other) ──
+  // Re-read config after potential builtin registration
+  const freshConfig = getConfigRef();
+  const disabledSkillIds = new Set(
+    freshConfig.skills.filter(s => !s.enabled).map(s => s.id),
+  );
   await Promise.all([
-    loadSkills(),
+    loadSkills(disabledSkillIds),
     loadAllAgents(),
     connectMcpServers(resolvedConfig.mcpServers ?? {}),
   ]);
@@ -107,7 +123,10 @@ export async function bootstrap(options: BootstrapOptions = {}): Promise<Bootstr
   await reloadSubscriber.connect();
   subscribeToSkillReload(reloadSubscriber, async () => {
     log('info', 'Received skills reload notification, reloading from disk');
-    await loadSkills();
+    const freshDisabledSkills = new Set(
+      getConfigRef().skills.filter(s => !s.enabled).map(s => s.id),
+    );
+    await loadSkills(freshDisabledSkills);
     invalidatePromptCache();
   });
   subscribeToCancelSignal(reloadSubscriber);

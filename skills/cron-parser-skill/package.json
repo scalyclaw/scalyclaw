@@ -1,0 +1,8 @@
+{
+  "name": "cron-parser-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "cron-parser": "^4.9.0"
+  }
+}

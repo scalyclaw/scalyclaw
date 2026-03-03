@@ -1,0 +1,9 @@
+{
+  "name": "calendar-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "ical.js": "^2.1.0",
+    "luxon": "^3.5.0"
+  }
+}

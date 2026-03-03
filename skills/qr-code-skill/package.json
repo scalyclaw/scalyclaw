@@ -1,0 +1,10 @@
+{
+  "name": "qr-code-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "qrcode": "^1.5.4",
+    "jimp": "^1.6.0",
+    "jsqr": "^1.4.0"
+  }
+}

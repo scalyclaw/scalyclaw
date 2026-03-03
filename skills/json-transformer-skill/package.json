@@ -1,0 +1,8 @@
+{
+  "name": "json-transformer-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@metrichor/jmespath": "^0.3.1"
+  }
+}

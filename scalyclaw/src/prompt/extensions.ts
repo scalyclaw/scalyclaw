@@ -49,11 +49,24 @@ Follow this exact sequence to create a skill:
    - Re-test directly — file changes are auto-reloaded, no need to re-register.
    - After 2-3 retries of the same error, report to the user and stop.
 
+### Runtimes
+
+Skills run via these runtimes — use the matching language toolchain:
+
+| Language | Runtime | Run command | Install command | Dep file |
+|----------|---------|-------------|-----------------|----------|
+| Python | \`uv\` | \`uv run script.py\` | \`uv sync\` | \`pyproject.toml\` |
+| JavaScript | \`bun\` | \`bun run script.ts\` | \`bun install\` | \`package.json\` |
+| Rust | \`cargo\` | \`cargo run --release\` | \`cargo build --release\` | \`Cargo.toml\` |
+| Bash | \`bash\` | \`bash script.sh\` | — | — |
+
 ### Install Conventions
 
 - Python venvs are auto-created by the system. NEVER include \`uv venv\` in install commands.
 - Use \`uv pip install <packages>\` for direct deps (no --system flag).
 - Use \`uv sync\` when you write a pyproject.toml.
+- JavaScript: use \`bun install\` for deps, or \`install: none\` if the skill uses only built-in APIs / fetch.
+- Rust: use \`cargo build --release\` for compilation.
 - Use \`install: none\` for skills with no external dependencies.
 - Install commands run in the skill directory with the venv already available.
 
@@ -85,6 +98,17 @@ install: uv sync
 - **Output**: JSON to stdout only — no debug prints (redirect to stderr)
 - **Output files**: write to \`WORKSPACE_DIR\` env var (available in all skill processes). Return absolute paths in stdout JSON. Files auto-transfer from workers. NEVER use \`/tmp\`.
 - Use simple filenames without spaces (sanitize external input — replace spaces/special chars with underscores).
+
+### Secrets in Skills
+
+Vault secrets are automatically injected as environment variables into skill processes. The system scans SKILL.md for \`$VAR_NAME\` or \`\${VAR_NAME}\` references and injects matching vault secrets.
+
+- Reference secrets in SKILL.md (e.g. in a "Secrets" section): \`$API_KEY\`, \`$SMTP_PASS\`
+- Access in Python: \`os.environ.get("API_KEY")\`
+- Access in JavaScript: \`process.env.API_KEY\`
+- Access in Rust: \`std::env::var("API_KEY")\`
+- Store via: \`vault_store({ name: "API_KEY", value: "..." })\`
+- Skills should accept secrets both as input params AND env vars (env vars as fallback), so they work with or without vault.
 
 ### Rules
 

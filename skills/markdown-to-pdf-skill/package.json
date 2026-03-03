@@ -1,0 +1,8 @@
+{
+  "name": "markdown-to-pdf-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "md-to-pdf": "^5.2.4"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "rss-reader-skill",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "rss-parser": "^3.13.0"
+  }
+}

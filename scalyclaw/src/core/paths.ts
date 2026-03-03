@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { mkdirSync, readdirSync, copyFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, copyFileSync, readFileSync, writeFileSync, existsSync, cpSync } from 'node:fs';
 import { homedir } from 'node:os';
 
 // Re-export generic parts from shared
@@ -41,6 +41,48 @@ export function ensureDirectories(): void {
   for (const dir of [PATHS.base, PATHS.workspace, PATHS.logs, PATHS.skills, PATHS.agents, PATHS.mind, PATHS.database]) {
     mkdirSync(dir, { recursive: true });
   }
+}
+
+/** Copy built-in skills from repo skills/ to user data dir. Non-destructive: skips existing. */
+export function syncBuiltinSkills(): string[] {
+  const sourceDir = join(process.cwd(), 'skills');
+  const installed: string[] = [];
+  try {
+    const entries = readdirSync(sourceDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const target = join(PATHS.skills, entry.name);
+        if (!existsSync(target)) {
+          cpSync(join(sourceDir, entry.name), target, { recursive: true });
+          installed.push(entry.name);
+        }
+      }
+    }
+  } catch {
+    // skills/ source dir missing — skip (e.g. standalone worker without source)
+  }
+  return installed;
+}
+
+/** Copy built-in agents from repo agents/ to user data dir. Non-destructive: skips existing. */
+export function syncBuiltinAgents(): string[] {
+  const sourceDir = join(process.cwd(), 'agents');
+  const installed: string[] = [];
+  try {
+    const entries = readdirSync(sourceDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        const target = join(PATHS.agents, entry.name);
+        if (!existsSync(target)) {
+          cpSync(join(sourceDir, entry.name), target, { recursive: true });
+          installed.push(entry.name);
+        }
+      }
+    }
+  } catch {
+    // agents/ source dir missing — skip (e.g. standalone worker without source)
+  }
+  return installed;
 }
 
 /** Copy mind/ reference docs from project source to data dir. Call after ensureDirectories(). */

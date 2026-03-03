@@ -694,6 +694,24 @@ do_update() {
     cp -n "$SCALYCLAW_REPO/mind/"*.md "$SCALYCLAW_HOME/mind/" 2>/dev/null || true
   fi
 
+  # ── Copy new built-in skills (don't overwrite existing) ─────────
+  if [ -d "$SCALYCLAW_REPO/skills" ]; then
+    for skill_dir in "$SCALYCLAW_REPO/skills"/*/; do
+      skill_name=$(basename "$skill_dir")
+      target_dir="$SCALYCLAW_HOME/skills/$skill_name"
+      [ ! -d "$target_dir" ] && cp -r "$skill_dir" "$target_dir"
+    done
+  fi
+
+  # ── Copy new built-in agents (don't overwrite existing) ─────────
+  if [ -d "$SCALYCLAW_REPO/agents" ]; then
+    for agent_dir in "$SCALYCLAW_REPO/agents"/*/; do
+      agent_name=$(basename "$agent_dir")
+      target_dir="$SCALYCLAW_HOME/agents/$agent_name"
+      [ ! -d "$target_dir" ] && cp -r "$agent_dir" "$target_dir"
+    done
+  fi
+
   # ── Restart everything ───────────────────────────────────────────
   header "Restarting ScalyClaw"
 
@@ -1033,6 +1051,24 @@ CEOF
   # Copy default mind files from repo
   if [ -d "$SCALYCLAW_REPO/mind" ]; then
     cp -n "$SCALYCLAW_REPO/mind/"*.md "$SCALYCLAW_HOME/mind/" 2>/dev/null || true
+  fi
+
+  # Copy built-in skills (non-destructive — preserves user edits)
+  if [ -d "$SCALYCLAW_REPO/skills" ]; then
+    for skill_dir in "$SCALYCLAW_REPO/skills"/*/; do
+      skill_name=$(basename "$skill_dir")
+      target_dir="$SCALYCLAW_HOME/skills/$skill_name"
+      [ ! -d "$target_dir" ] && cp -r "$skill_dir" "$target_dir"
+    done
+  fi
+
+  # Copy built-in agents (non-destructive — preserves user edits)
+  if [ -d "$SCALYCLAW_REPO/agents" ]; then
+    for agent_dir in "$SCALYCLAW_REPO/agents"/*/; do
+      agent_name=$(basename "$agent_dir")
+      target_dir="$SCALYCLAW_HOME/agents/$agent_name"
+      [ ! -d "$target_dir" ] && cp -r "$agent_dir" "$target_dir"
+    done
   fi
 
   success "Directories created"
