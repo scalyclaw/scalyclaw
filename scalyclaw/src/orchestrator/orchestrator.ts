@@ -126,6 +126,11 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
   let totalOutputTokens = 0;
   const sentProgress = new Set<string>();
 
+  // Consecutive execution-tool failure tracking (prevents retry storms)
+  const EXEC_TOOLS = new Set(['execute_skill', 'execute_code', 'execute_command']);
+  const MAX_CONSECUTIVE_EXEC_FAILURES = 3;
+  let consecutiveExecFailures = 0;
+
   while (round < maxIterations) {
     // Check abort before each round
     if (input.signal?.aborted) {
@@ -238,6 +243,31 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
         role: 'tool',
         content,
         tool_call_id: toolCall.id,
+      });
+
+      // Track consecutive execution-tool failures
+      if (EXEC_TOOLS.has(toolCall.name)) {
+        try {
+          const parsed = JSON.parse(result);
+          if (parsed.error || (parsed.exitCode !== undefined && parsed.exitCode !== 0)) {
+            consecutiveExecFailures++;
+          } else {
+            consecutiveExecFailures = 0;
+          }
+        } catch { consecutiveExecFailures++; }
+      }
+    }
+
+    // Stop retry storms: after N consecutive execution failures, inject a system hint
+    if (consecutiveExecFailures >= MAX_CONSECUTIVE_EXEC_FAILURES) {
+      log('warn', 'Consecutive execution failures — injecting stop hint', {
+        channelId: input.channelId,
+        failures: consecutiveExecFailures,
+      });
+      consecutiveExecFailures = 0;
+      messages.push({
+        role: 'user',
+        content: '[System: Tool execution has failed repeatedly on the worker. Stop retrying and inform the user that the requested operation could not be completed. Suggest they check the worker logs for details.]',
       });
     }
 

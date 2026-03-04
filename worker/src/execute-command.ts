@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { mkdir, writeFile, unlink } from 'node:fs/promises';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { spawnProcess } from './subprocess.js';
+import { getWorkerExtraEnv } from './worker-env.js';
 import { PATHS } from '@scalyclaw/shared/core/paths.js';
 import { EXECUTION_TIMEOUT_MS } from '@scalyclaw/shared/const/constants.js';
 import { EXEC_DIR, JOB_FIELD_DENIED_COMMANDS, JOB_FIELD_SECRETS } from './const/constants.js';
@@ -44,7 +45,7 @@ export async function executeCommand(input: Record<string, unknown>, signal?: Ab
       timeoutMs: EXECUTION_TIMEOUT_MS,
       input: stdinInput,
       workspacePath: PATHS.workspace,
-      extraEnv: secrets,
+      extraEnv: { ...secrets, ...getWorkerExtraEnv() },
       label: 'execute_command',
       signal,
     });

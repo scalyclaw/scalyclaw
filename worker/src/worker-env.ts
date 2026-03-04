@@ -2,23 +2,41 @@ import { spawnSync } from 'node:child_process';
 import { dirname } from 'node:path';
 import { WHICH_TIMEOUT_MS } from './const/constants.js';
 
-let bunBinDir: string | null = null;
-try {
-  bunBinDir = dirname(process.argv[0]);
-  if (!bunBinDir || !process.argv[0].includes('bun')) {
-    const which = spawnSync('which', ['bun'], { stdio: 'pipe', timeout: WHICH_TIMEOUT_MS });
-    const resolved = which.stdout?.toString().trim();
-    bunBinDir = resolved ? dirname(resolved) : null;
+const RUNTIMES = ['bun', 'uv', 'cargo'] as const;
+
+/** Cached bin directories for each runtime (null = not found). */
+const runtimeBinDirs: Record<string, string | null> = {};
+
+for (const cmd of RUNTIMES) {
+  let binDir: string | null = null;
+  try {
+    // For bun: check if the current process IS bun
+    if (cmd === 'bun' && process.argv[0]?.includes('bun')) {
+      binDir = dirname(process.argv[0]);
+    }
+    if (!binDir) {
+      const which = spawnSync('which', [cmd], { stdio: 'pipe', timeout: WHICH_TIMEOUT_MS });
+      const resolved = which.stdout?.toString().trim();
+      binDir = resolved ? dirname(resolved) : null;
+    }
+  } catch {
+    binDir = null;
   }
-} catch {
-  bunBinDir = null;
+  runtimeBinDirs[cmd] = binDir;
 }
 
-/** Extra env vars for worker subprocesses (ensures bun is on PATH). */
+/** Extra env vars for worker subprocesses (ensures bun/uv/cargo are on PATH). */
 export function getWorkerExtraEnv(): Record<string, string> {
-  const env: Record<string, string> = {};
-  if (bunBinDir && !process.env.PATH?.includes(bunBinDir)) {
-    env.PATH = `${bunBinDir}:${process.env.PATH ?? ''}`;
+  const currentPath = process.env.PATH ?? '';
+  const extraDirs: string[] = [];
+
+  for (const cmd of RUNTIMES) {
+    const dir = runtimeBinDirs[cmd];
+    if (dir && !currentPath.includes(dir)) {
+      extraDirs.push(dir);
+    }
   }
-  return env;
+
+  if (extraDirs.length === 0) return {};
+  return { PATH: `${extraDirs.join(':')}:${currentPath}` };
 }

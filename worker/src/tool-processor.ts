@@ -237,6 +237,17 @@ async function processToolExecution(job: Job<ToolExecutionData>): Promise<string
       default:
         result = JSON.stringify({ error: `Unknown tool "${toolName}" — worker only handles execute_skill, execute_code, execute_command` });
     }
+    // Ensure failed executions have an explicit error field (makes them visible in node logs + to the LLM)
+    try {
+      const parsed = JSON.parse(result);
+      if (parsed.exitCode !== undefined && parsed.exitCode !== 0 && !parsed.error) {
+        parsed.error = parsed.stderr
+          ? `Execution failed (exit ${parsed.exitCode}): ${String(parsed.stderr).slice(0, 500)}`
+          : `Execution failed with exit code ${parsed.exitCode}`;
+        result = JSON.stringify(parsed);
+      }
+    } catch { /* not JSON — leave as-is */ }
+
     log('info', `Tool execution complete: ${toolName}`, { jobId, toolCallId, durationMs: Date.now() - start });
     return annotateWorkerResult(result);
   } catch (err) {
