@@ -1128,7 +1128,7 @@ CEOF
     "url": "http://localhost:${GATEWAY_PORT}",
     "token": ""
   },
-  "concurrency": 3
+  "concurrency": 1
 }
 WEOF
       chmod 600 "$worker_config"

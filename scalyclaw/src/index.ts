@@ -78,7 +78,7 @@ async function startSystem(): Promise<void> {
   initLogFile(PATHS.logs, 'scalyclaw.log');
 
   // ── BullMQ Workers: 3 queues (messages + agents + internal) ──
-  const messageConcurrency = Number(process.env.SCALYCLAW_MESSAGE_CONCURRENCY ?? 5);
+  const messageConcurrency = Number(process.env.SCALYCLAW_MESSAGE_CONCURRENCY ?? 3);
   const agentConcurrency = Number(process.env.SCALYCLAW_AGENT_CONCURRENCY ?? 3);
   const workerOpts = {
     connection: redis.duplicate() as never,
