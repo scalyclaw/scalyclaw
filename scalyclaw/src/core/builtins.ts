@@ -67,6 +67,14 @@ export const BUILTIN_SKILL_IDS: string[] = [
   // Rust — batch 3 (2)
   'unit-converter-skill',
   'color-converter-skill',
+  // Python — job/career (3)
+  'job-search-skill',
+  'resume-parser-skill',
+  'job-match-skill',
+  // JavaScript — job/career (1)
+  'resume-formatter-skill',
+  // Python — job/career (1)
+  'job-description-extractor-skill',
 ];
 
 // ── Built-in Agent Manifest ─────────────────────────────────────────
@@ -177,6 +185,21 @@ export const BUILTIN_AGENT_MANIFEST: Record<string, BuiltinAgentManifest> = {
     skills: ['sitemap-parser-skill', 'http-client-skill', 'web-scraper-skill', 'dns-lookup-skill'],
     tools: ['send_message', 'execute_skill', 'file_write', 'file_read'],
     maxIterations: 30,
+  },
+  'job-search-agent': {
+    skills: ['job-search-skill', 'job-description-extractor-skill', 'web-search-skill', 'web-scraper-skill'],
+    tools: ['send_message', 'execute_skill', 'memory_store', 'memory_search', 'file_write', 'file_read'],
+    maxIterations: 25,
+  },
+  'resume-coach-agent': {
+    skills: ['resume-parser-skill', 'resume-formatter-skill', 'job-match-skill', 'markdown-to-pdf-skill', 'spell-checker-skill'],
+    tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write', 'memory_store', 'memory_search'],
+    maxIterations: 25,
+  },
+  'career-advisor-agent': {
+    skills: ['job-search-skill', 'job-match-skill', 'resume-parser-skill', 'web-search-skill'],
+    tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write', 'memory_store', 'memory_search'],
+    maxIterations: 25,
   },
 };
 
