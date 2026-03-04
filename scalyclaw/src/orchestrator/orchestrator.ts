@@ -353,6 +353,12 @@ function describeDirectTool(name: string, input: Record<string, unknown>): strin
     case 'delete_agent':    return `🤖 Removing agent "${d('id')}"…`;
     // Skills
     case 'register_skill':  return `⚡ Registering skill "${d('id')}"…`;
+    case 'execute_skill':   return `⚡ Running skill "${d('skillId') || 'a skill'}"…`;
+    // Agents (direct call)
+    case 'delegate_agent':  return `🤖 Delegating to "${d('agentId') || 'an agent'}"…`;
+    // Code & commands (direct call)
+    case 'execute_code':    return `💻 Running ${d('language') || 'code'}…`;
+    case 'execute_command': return `⚙️ Running command: ${d('command', 60) || '…'}`;
     // Vault
     case 'vault_store':     return `🔐 Storing secret "${d('name')}"…`;
     case 'vault_list':      return '🔐 Checking the vault…';
@@ -383,10 +389,10 @@ function describeSubmitJob(input: Record<string, unknown>): string {
   const payload = (input.payload ?? {}) as Record<string, unknown>;
   const d = (key: string, max?: number) => detail(payload, key, max);
   switch (toolName) {
-    case 'execute_command':              return `⚙️ Running command: ${d('command', 60)}`;
-    case 'execute_skill':               return `⚡ Running skill "${d('skillId')}"…`;
+    case 'execute_command':              return `⚙️ Running command: ${d('command', 60) || '…'}`;
+    case 'execute_skill':               return `⚡ Running skill "${d('skillId') || 'a skill'}"…`;
     case 'execute_code':                return `💻 Running ${d('language') || 'code'}…`;
-    case 'delegate_agent':              return `🤖 Delegating to "${d('agentId')}"…`;
+    case 'delegate_agent':              return `🤖 Delegating to "${d('agentId') || 'an agent'}"…`;
     case 'schedule_reminder':           return `⏰ Setting a reminder…`;
     case 'schedule_recurrent_reminder': return `⏰ Setting a recurring reminder…`;
     case 'schedule_task':               return `📋 Scheduling a task…`;
