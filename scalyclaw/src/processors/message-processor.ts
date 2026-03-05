@@ -7,12 +7,15 @@ import { enqueueJob } from '@scalyclaw/shared/queue/queue.js';
 import { runOrchestrator, type StopReason } from '../orchestrator/orchestrator.js';
 import { runMessageGuard, runResponseEchoGuard } from '../guards/guard.js';
 import type { MessageProcessingData, CommandData, AttachmentData } from '@scalyclaw/shared/queue/jobs.js';
-import { ACTIVITY_KEY_PREFIX } from '../const/constants.js';
+import {
+  ACTIVITY_KEY_PREFIX, CANCEL_FLAG_KEY,
+  EXTRACT_BUF_KEY, EXTRACT_TIMER_KEY, EXTRACT_DEBOUNCE_MS,
+  PRIORITY_BACKGROUND,
+} from '../const/constants.js';
 import { SEVEN_DAYS_S } from '@scalyclaw/shared/const/constants.js';
 import { onUserMessage } from '../proactive/engine.js';
 import { startTypingLoop, stopTypingLoop } from '../channels/manager.js';
 import { registerAbort, unregisterAbort } from '@scalyclaw/shared/queue/cancel-signal.js';
-import { CANCEL_FLAG_KEY } from '../const/constants.js';
 
 // ─── Message queue job dispatcher ───
 
@@ -57,9 +60,9 @@ async function runOrchestratorPipeline(
       reason: guardResult.reason,
       durationMs: guardResult.durationMs,
     });
-    storeMessage(channelId, 'user', text, { blocked: true, reason: guardResult.reason });
+    storeMessage(channelId, 'user', text, { blocked: true, reason: guardResult.reason }, jobId);
     const rejection = `I can't process that message. ${guardResult.reason}`;
-    storeMessage(channelId, 'assistant', rejection);
+    storeMessage(channelId, 'assistant', rejection, undefined, jobId);
     await publishProgress(redis, channelId, {
       jobId,
       type: 'complete',
@@ -75,7 +78,7 @@ async function runOrchestratorPipeline(
     return;
   }
 
-  storeMessage(channelId, 'user', text);
+  storeMessage(channelId, 'user', text, undefined, jobId);
 
   const ac = new AbortController();
   registerAbort(jobId, ac);
@@ -112,18 +115,23 @@ async function runOrchestratorPipeline(
           durationMs: responseGuard.durationMs,
         });
         const safeResponse = 'My response was flagged by the security guard. Please try rephrasing your request.';
-        storeMessage(channelId, 'assistant', safeResponse);
+        storeMessage(channelId, 'assistant', safeResponse, undefined, jobId);
         await publishProgress(redis, channelId, { jobId, type: 'complete', result: safeResponse });
         return;
       }
 
-      storeMessage(channelId, 'assistant', response);
+      storeMessage(channelId, 'assistant', response, undefined, jobId);
 
-      await enqueueJob({
-        name: 'memory-extraction',
-        data: { channelId, texts: [text] },
-        opts: { attempts: 2, backoff: { type: 'fixed', delay: 5000 } },
-      });
+      // Buffered memory extraction: push to Redis list + schedule debounced job
+      await redis.rpush(EXTRACT_BUF_KEY, text);
+      const isFirst = await redis.set(EXTRACT_TIMER_KEY, '1', 'PX', EXTRACT_DEBOUNCE_MS, 'NX');
+      if (isFirst === 'OK') {
+        await enqueueJob({
+          name: 'memory-extraction',
+          data: { channelId, texts: [] },
+          opts: { delay: EXTRACT_DEBOUNCE_MS, priority: PRIORITY_BACKGROUND, attempts: 2, backoff: { type: 'fixed', delay: 5000 } },
+        });
+      }
     }
 
     await publishProgress(redis, channelId, {

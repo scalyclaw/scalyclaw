@@ -13,6 +13,7 @@ import type {
   MemoryExtractionData, ProactiveCheckData, ProactiveEvalData, VaultKeyRotationData,
 } from '@scalyclaw/shared/queue/jobs.js';
 import { runConsolidation } from '../memory/consolidation.js';
+import { EXTRACT_BUF_KEY, EXTRACT_TIMER_KEY, PRIORITY_BACKGROUND } from '../const/constants.js';
 
 import { randomUUID } from 'node:crypto';
 import { TASK_LOCK_TTL_S, TASK_LOCK_HEARTBEAT_MS } from '../const/constants.js';
@@ -108,14 +109,32 @@ export async function processInternalJob(job: Job): Promise<void> {
   }
 }
 
-// ─── Memory extraction ───
+// ─── Memory extraction (drains Redis buffer + job data) ───
+
+const DRAIN_EXTRACT_LUA = `
+local items = redis.call('lrange', KEYS[1], 0, -1)
+if #items > 0 then redis.call('del', KEYS[1]) end
+redis.call('del', KEYS[2])
+return items
+`;
 
 async function processMemoryExtraction(job: Job<MemoryExtractionData>): Promise<void> {
-  const { channelId, texts } = job.data;
-  log('debug', 'Processing memory extraction job', { jobId: job.id, channelId, textCount: texts.length });
+  const { channelId, texts: jobTexts } = job.data;
+  const redis = getRedis();
+
+  // Atomically drain buffered texts and clear timer
+  const buffered = await redis.eval(DRAIN_EXTRACT_LUA, 2, EXTRACT_BUF_KEY, EXTRACT_TIMER_KEY) as string[];
+  const allTexts = [...(buffered ?? []), ...jobTexts];
+
+  if (allTexts.length === 0) {
+    log('debug', 'Memory extraction job — no texts to process', { jobId: job.id });
+    return;
+  }
+
+  log('debug', 'Processing memory extraction job', { jobId: job.id, channelId, buffered: buffered?.length ?? 0, jobTexts: jobTexts.length });
 
   try {
-    await extractMemories(texts, channelId);
+    await extractMemories(allTexts, channelId);
   } catch (err) {
     log('warn', 'Memory extraction job failed', { jobId: job.id, error: String(err) });
     throw err;
@@ -241,7 +260,7 @@ async function processTask(job: Job<TaskData>): Promise<void> {
       await enqueueJob({
         name: 'memory-extraction',
         data: { channelId: targetChannel, texts: [task, result] },
-        opts: { attempts: 1 },
+        opts: { priority: PRIORITY_BACKGROUND, attempts: 1 },
       });
     }
 
@@ -314,7 +333,7 @@ async function processRecurrentTask(job: Job<RecurrentTaskData>): Promise<void> 
       await enqueueJob({
         name: 'memory-extraction',
         data: { channelId: targetChannel, texts: [task, result] },
-        opts: { attempts: 1 },
+        opts: { priority: PRIORITY_BACKGROUND, attempts: 1 },
       });
     }
 
@@ -404,6 +423,7 @@ export async function registerConsolidationSchedule(): Promise<void> {
       opts: {
         repeat: { pattern: schedule },
         jobId: 'memory-consolidation-schedule',
+        priority: PRIORITY_BACKGROUND,
         attempts: 1,
       },
     });

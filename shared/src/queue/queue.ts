@@ -104,6 +104,7 @@ export async function enqueueJob(spec: JobSpec): Promise<string> {
       opts: {
         attempts: spec.opts.attempts,
         backoff: spec.opts.backoff as { type: 'exponential' | 'fixed'; delay: number },
+        priority: spec.opts.priority,
       },
     });
 

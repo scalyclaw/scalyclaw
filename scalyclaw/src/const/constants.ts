@@ -32,8 +32,8 @@ export const UPDATE_NOTIFY_TTL_S = 300;
 /** Update confirmation prompt TTL (2 min). */
 export const UPDATE_AWAITING_TTL_S = 120;
 
-/** Progress response buffer TTL (5 min). */
-export const RESPONSE_TTL_S = 300;
+/** Progress response buffer TTL (30 min). */
+export const RESPONSE_TTL_S = 1800;
 
 /** Vault recovery key TTL during rotation (5 min). */
 export const RECOVERY_KEY_TTL_S = 300;
@@ -66,6 +66,33 @@ export const CHAT_RESPONSE_TIMEOUT_MS = 120_000;
 
 /** SQLite busy timeout. */
 export const SQLITE_BUSY_TIMEOUT_MS = 30_000;
+
+// ─── Message Dedup ───
+
+/** Redis key prefix for incoming message deduplication. */
+export const DEDUP_KEY_PREFIX = 'scalyclaw:dedup:';
+
+/** Incoming message dedup window (seconds). */
+export const DEDUP_TTL_S = 5;
+
+// ─── Memory Extraction Batching ───
+
+/** Redis list key for buffered extraction texts. */
+export const EXTRACT_BUF_KEY = 'scalyclaw:extract-buf';
+
+/** Redis flag key indicating an extraction job is already scheduled. */
+export const EXTRACT_TIMER_KEY = 'scalyclaw:extract-timer';
+
+/** Delay before extraction job fires, allowing texts to accumulate (ms). */
+export const EXTRACT_DEBOUNCE_MS = 30_000;
+
+// ─── Internal Queue Priority ───
+
+/** BullMQ priority for time-sensitive jobs (reminders, tasks). Lower = higher priority. */
+export const PRIORITY_TIME_SENSITIVE = 1;
+
+/** BullMQ priority for background jobs (memory extraction, consolidation). */
+export const PRIORITY_BACKGROUND = 10;
 
 // ─── Rate Limiting ───
 

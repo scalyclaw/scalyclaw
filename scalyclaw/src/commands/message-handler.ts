@@ -4,7 +4,7 @@ import { enqueueJob, getQueue, removeRepeatableJob } from '@scalyclaw/shared/que
 import { requestJobCancel } from '@scalyclaw/shared/queue/cancel.js';
 import { sendToChannel, sendTypingToChannel } from '../channels/manager.js';
 import { PATHS } from '../core/paths.js';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NormalizedMessage } from '../channels/adapter.js';
@@ -13,6 +13,7 @@ import {
   RATE_LIMIT_KEY_PREFIX, DEFAULT_RATE_LIMIT_PER_MINUTE,
   CANCEL_FLAG_TTL_S, UPDATE_NOTIFY_TTL_S, UPDATE_AWAITING_TTL_S,
   GIT_FETCH_TIMEOUT_MS, VAULT_ROTATION_INTERVAL_MS,
+  DEDUP_KEY_PREFIX, DEDUP_TTL_S,
 } from '../const/constants.js';
 
 // ─── Rate limiting (Redis sliding window) ───
@@ -268,6 +269,18 @@ export async function handleIncomingMessage(message: NormalizedMessage): Promise
   }
 
   const isCommand = KNOWN_COMMANDS.has(command);
+
+  // ─── Incoming message dedup (guards against webhook/network double-delivery) ───
+  {
+    const redis = getRedis();
+    const hash = createHash('sha256').update(`${channelId}:${message.text}`).digest('hex').slice(0, 16);
+    const dedupKey = `${DEDUP_KEY_PREFIX}${hash}`;
+    const isNew = await redis.set(dedupKey, '1', 'EX', DEDUP_TTL_S, 'NX');
+    if (isNew !== 'OK') {
+      log('info', 'Duplicate message detected, skipping', { channelId });
+      return;
+    }
+  }
 
   const attachments = message.attachments.length > 0
     ? message.attachments.map(a => ({ type: a.type, filePath: a.filePath, fileName: a.fileName, mimeType: a.mimeType }))

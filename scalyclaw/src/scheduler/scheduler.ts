@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { log } from '@scalyclaw/shared/core/logger.js';
 import { enqueueJob, removeRepeatableJob } from '@scalyclaw/shared/queue/queue.js';
 import { SEVEN_DAYS_S } from '@scalyclaw/shared/const/constants.js';
-import { SCHEDULED_KEY_PREFIX } from '../const/constants.js';
+import { SCHEDULED_KEY_PREFIX, PRIORITY_TIME_SENSITIVE } from '../const/constants.js';
 
 // ─── Redis helpers ───
 
@@ -71,6 +71,7 @@ export async function createReminder(
       opts: {
         delay: delayMs,
         jobId,
+        priority: PRIORITY_TIME_SENSITIVE,
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
       },
@@ -163,6 +164,7 @@ export async function createRecurrentReminder(
       opts: {
         repeat,
         jobId,
+        priority: PRIORITY_TIME_SENSITIVE,
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
       },
@@ -209,6 +211,7 @@ export async function createTask(
       opts: {
         delay: delayMs,
         jobId,
+        priority: PRIORITY_TIME_SENSITIVE,
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
       },
@@ -278,6 +281,7 @@ export async function createRecurrentTask(
       opts: {
         repeat,
         jobId,
+        priority: PRIORITY_TIME_SENSITIVE,
         attempts: 3,
         backoff: { type: 'exponential', delay: 1000 },
       },

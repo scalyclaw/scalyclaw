@@ -167,6 +167,14 @@ function runMigrations(db: Database, dimensions: number): void {
     db.exec(`CREATE VIRTUAL TABLE memory_fts USING fts5(id UNINDEXED, subject, content, tags, type UNINDEXED);`);
   }
 
+  // ─── Idempotent message storage (job_id column) ───
+
+  const hasJobId = db.prepare("SELECT COUNT(*) as c FROM pragma_table_info('messages') WHERE name='job_id'").get() as { c: number };
+  if (hasJobId.c === 0) {
+    db.exec("ALTER TABLE messages ADD COLUMN job_id TEXT");
+    db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_messages_job_dedup ON messages(job_id, role) WHERE job_id IS NOT NULL");
+  }
+
   // ─── Proactive engagement schema ───
 
   db.exec(`
@@ -227,14 +235,29 @@ export interface Message {
   created_at: string;
 }
 
-export function storeMessage(channelId: string, role: string, content: string, metadata?: Record<string, unknown>): number {
+export function storeMessage(channelId: string, role: string, content: string, metadata?: Record<string, unknown>, jobId?: string): number {
   const d = getDb();
-  d.prepare(
-    'INSERT INTO messages (channel, role, content, metadata) VALUES (?, ?, ?, ?)'
-  ).run(channelId, role, content, metadata ? JSON.stringify(metadata) : null);
+  const metaJson = metadata ? JSON.stringify(metadata) : null;
+
+  if (jobId) {
+    // Idempotent insert — skip if (job_id, role) already exists
+    d.prepare(
+      'INSERT OR IGNORE INTO messages (channel, role, content, metadata, job_id) VALUES (?, ?, ?, ?, ?)'
+    ).run(channelId, role, content, metaJson, jobId);
+    const changes = (d.prepare('SELECT changes() as c').get() as { c: number }).c;
+    if (changes === 0) {
+      const existing = d.prepare('SELECT id FROM messages WHERE job_id = ? AND role = ?').get(jobId, role) as { id: number } | null;
+      const msgId = existing?.id ?? 0;
+      log('debug', 'Message already stored (idempotent)', { channelId, role, msgId, jobId });
+      return msgId;
+    }
+  } else {
+    d.prepare(
+      'INSERT INTO messages (channel, role, content, metadata) VALUES (?, ?, ?, ?)'
+    ).run(channelId, role, content, metaJson);
+  }
 
   const msgId = (d.prepare('SELECT last_insert_rowid() as id').get() as { id: number }).id;
-
   log('debug', 'Message stored', { channelId, role, msgId, contentLength: content.length });
   return msgId;
 }
