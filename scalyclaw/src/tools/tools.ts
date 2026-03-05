@@ -186,7 +186,7 @@ const TOOL_DEFS: ToolDefinition[] = [
 
   // ─── Job submission (2) ───
   tool('submit_job', [
-    'Execute a job tool and wait for the result.',
+    'Execute a single job tool and wait for the result. For 2+ independent jobs, prefer submit_parallel_jobs.',
     'Payload per tool:',
     '- execute_command: { command: string, input?: string }',
     '- execute_skill: { skillId: string, input?: string }',
@@ -200,12 +200,23 @@ const TOOL_DEFS: ToolDefinition[] = [
     toolName: ENUM('Job tool to execute', [...JOB_ONLY_NAMES]),
     payload: { type: 'object', description: 'Tool-specific parameters (see description above)' },
   }, ['toolName', 'payload'])),
-  tool('submit_parallel_jobs', 'Execute multiple tools in parallel and wait for all results.', schema({
+  tool('submit_parallel_jobs', [
+    'Run 2+ independent tools in parallel and wait for all results.',
+    'Always prefer this over sequential submit_job calls for independent work.',
+    'Each job uses the same payload format as submit_job:',
+    '- execute_command: { command: string, input?: string }',
+    '- execute_skill: { skillId: string, input?: string }',
+    '- execute_code: { language: "python"|"javascript"|"bash", code: string }',
+    '- delegate_agent: { agentId: string, task: string, context?: string }',
+  ].join('\n'), schema({
     jobs: {
       type: 'array',
       items: {
         type: 'object',
-        properties: { toolName: { type: 'string', description: 'Any tool name' }, payload: { type: 'object' } },
+        properties: {
+          toolName: ENUM('Job tool to execute', [...JOB_ONLY_NAMES]),
+          payload: { type: 'object', description: 'Tool-specific parameters (same as submit_job payload)' },
+        },
         required: ['toolName'],
       },
     },

@@ -1,10 +1,10 @@
 export const EXTENSIONS_SECTION = `## Agents
 
-An agent is a specialized LLM with its own system prompt, model, tools, skills, and iteration loop. Use \`delegate_agent\` via \`submit_job\`.
+An agent is a specialized LLM with its own system prompt, model, tools, skills, and iteration loop. Use \`delegate_agent\` via \`submit_job\`, or \`submit_parallel_jobs\` for multiple agents.
 
 ### When to Delegate
 
-Delegate when: a different model is needed, a focused prompt helps, the task is self-contained. Do NOT delegate when: you can handle it yourself (latency cost), the task needs user back-and-forth.
+Delegate when: a different model is needed, a focused prompt helps, the task is self-contained. When delegating to 2+ agents, always use \`submit_parallel_jobs\`. Do NOT delegate when: you can handle it yourself (latency cost), the task needs user back-and-forth.
 
 ### Creating Agents
 

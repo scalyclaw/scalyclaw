@@ -59,7 +59,7 @@ export async function buildSystemPrompt(): Promise<string> {
     const overflow = skills.length > MAX_DYNAMIC_ENTRIES
       ? `\n(${skills.length - MAX_DYNAMIC_ENTRIES} more — use \`system_info({ section: "skills" })\` for full list)`
       : '';
-    parts.push(`## Registered Skills — prefer these over native tools\n${lines.join('\n')}${overflow}\nExecute via \`submit_job({ toolName: "execute_skill", payload: { skillId: "<id>", input: "<json>" } })\`.`);
+    parts.push(`## Registered Skills — prefer these over native tools\n${lines.join('\n')}${overflow}\nExecute via \`submit_job({ toolName: "execute_skill", payload: { skillId: "<id>", input: "<json>" } })\`. For 2+ skills, use \`submit_parallel_jobs\`.`);
     log('debug', 'Prompt: added skills', { count: skills.length });
   }
 
@@ -77,7 +77,7 @@ export async function buildSystemPrompt(): Promise<string> {
     const overflow = agents.length > MAX_DYNAMIC_ENTRIES
       ? `\n(${agents.length - MAX_DYNAMIC_ENTRIES} more — use \`system_info({ section: "agents" })\` for full list)`
       : '';
-    parts.push(`## Registered Agents — delegate when one matches\n${lines.join('\n')}${overflow}\nDelegate via \`submit_job({ toolName: "delegate_agent", payload: { agentId: "<id>", task: "..." } })\`.`);
+    parts.push(`## Registered Agents — delegate when one matches\n${lines.join('\n')}${overflow}\nDelegate via \`submit_job({ toolName: "delegate_agent", payload: { agentId: "<id>", task: "..." } })\`. For 2+ agents, use \`submit_parallel_jobs\`.`);
     log('debug', 'Prompt: added agents', { count: agents.length });
   }
 
