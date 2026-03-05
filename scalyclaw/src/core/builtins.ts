@@ -18,7 +18,6 @@ export const BUILTIN_SKILL_IDS: string[] = [
   'translator-skill',
   'wikipedia-skill',
   'image-processor-skill',
-  'screenshot-skill',
   'ip-geolocator-skill',
   // JavaScript (12)
   'weather-skill',
@@ -75,6 +74,8 @@ export const BUILTIN_SKILL_IDS: string[] = [
   'resume-formatter-skill',
   // JavaScript — general (1)
   'html-to-pdf-skill',
+  // JavaScript — browser automation (1)
+  'browser-use-skill',
   // Python — job/career (1)
   'job-description-extractor-skill',
 ];
@@ -202,6 +203,11 @@ export const BUILTIN_AGENT_MANIFEST: Record<string, BuiltinAgentManifest> = {
     skills: ['job-search-skill', 'job-match-skill', 'resume-parser-skill', 'web-search-skill'],
     tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write', 'memory_store', 'memory_search'],
     maxIterations: 25,
+  },
+  'browser-agent': {
+    skills: ['browser-use-skill', 'html-to-pdf-skill', 'web-scraper-skill'],
+    tools: ['send_message', 'send_file', 'execute_skill', 'file_read', 'file_write', 'memory_store', 'memory_search'],
+    maxIterations: 30,
   },
 };
 
