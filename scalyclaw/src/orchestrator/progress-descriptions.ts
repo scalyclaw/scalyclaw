@@ -1,9 +1,22 @@
+import { getAgent } from '../agents/agent-loader.js';
+import { getSkill } from '@scalyclaw/shared/skills/skill-loader.js';
+
 /** Extract a short detail string from tool input for a given key, truncated. */
 export function detail(input: Record<string, unknown>, key: string, maxLen = 40): string {
   const val = input[key];
   if (val == null) return '';
   const s = String(val);
   return s.length > maxLen ? s.slice(0, maxLen) + '…' : s;
+}
+
+/** Resolve agent display name from agentId, falling back to the raw ID. */
+function agentName(agentId: string): string {
+  return getAgent(agentId)?.name ?? agentId;
+}
+
+/** Resolve skill display name from skillId, falling back to the raw ID. */
+function skillName(skillId: string): string {
+  return getSkill(skillId)?.name ?? skillId;
 }
 
 export function describeDirectTool(name: string, input: Record<string, unknown>): string {
@@ -25,9 +38,15 @@ export function describeDirectTool(name: string, input: Record<string, unknown>)
     case 'delete_agent':    return `🤖 Removing agent "${d('id')}"…`;
     // Skills
     case 'register_skill':  return `⚡ Registering skill "${d('id')}"…`;
-    case 'execute_skill':   return `⚡ Running skill "${d('skillId') || 'a skill'}"…`;
+    case 'execute_skill': {
+      const sid = d('skillId') || d('id');
+      return sid ? `⚡ Running skill "${skillName(sid)}"…` : '';
+    }
     // Agents (direct call)
-    case 'delegate_agent':  return `🤖 Delegating to "${d('agentId') || 'an agent'}"…`;
+    case 'delegate_agent': {
+      const aid = d('agentId');
+      return aid ? `🤖 Delegating to "${agentName(aid)}"…` : '';
+    }
     // Code & commands (direct call)
     case 'execute_code':    return `💻 Running ${d('language') || 'code'}…`;
     case 'execute_command': return `⚙️ Running command: ${d('command', 60) || '…'}`;
@@ -52,24 +71,30 @@ export function describeDirectTool(name: string, input: Record<string, unknown>)
     case 'get_job':          return `📋 Checking job ${d('jobId')}…`;
     case 'list_active_jobs': return '📋 Listing active jobs…';
     case 'stop_job':         return `🛑 Stopping job ${d('jobId')}…`;
-    default:                 return `⚙️ Working on it…`;
+    default:                 return '';
   }
 }
 
 export function describeSubmitJob(input: Record<string, unknown>): string {
   const toolName = input.toolName as string | undefined;
   const payload = (input.payload ?? {}) as Record<string, unknown>;
-  const d = (key: string, max?: number) => detail(payload, key, max);
+  const d = (key: string, max?: number) => detail(payload, key, max) || detail(input, key, max);
   switch (toolName) {
     case 'execute_command':              return `⚙️ Running command: ${d('command', 60) || '…'}`;
-    case 'execute_skill':               return `⚡ Running skill "${d('skillId') || 'a skill'}"…`;
+    case 'execute_skill': {
+      const sid = d('skillId') || d('id');
+      return sid ? `⚡ Running skill "${skillName(sid)}"…` : '';
+    }
     case 'execute_code':                return `💻 Running ${d('language') || 'code'}…`;
-    case 'delegate_agent':              return `🤖 Delegating to "${d('agentId') || 'an agent'}"…`;
+    case 'delegate_agent': {
+      const aid = d('agentId');
+      return aid ? `🤖 Delegating to "${agentName(aid)}"…` : '';
+    }
     case 'schedule_reminder':           return `⏰ Setting a reminder…`;
     case 'schedule_recurrent_reminder': return `⏰ Setting a recurring reminder…`;
     case 'schedule_task':               return `📋 Scheduling a task…`;
     case 'schedule_recurrent_task':     return `📋 Scheduling a recurring task…`;
-    default:                            return `⚙️ Running ${toolName ?? 'job'}…`;
+    default:                            return '';
   }
 }
 
@@ -78,7 +103,7 @@ export function describeToolCall(name: string, input: Record<string, unknown>): 
   if (name === 'submit_parallel_jobs') {
     const jobs = input.jobs as Array<Record<string, unknown>> | undefined;
     if (jobs?.length) {
-      const lines = jobs.map(j => describeSubmitJob(j));
+      const lines = jobs.map(j => describeSubmitJob(j)).filter(Boolean);
       return [...new Set(lines)].join('\n');
     }
     return '⚡ Running parallel jobs…';

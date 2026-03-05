@@ -238,7 +238,6 @@ const TOOL_DEFS: ToolDefinition[] = [
 
 /** Tools available to agents as direct calls (operational only — no admin tools) */
 const AGENT_DIRECT_NAMES = new Set([
-  'send_message', 'send_file',
   'memory_store', 'memory_search', 'memory_recall', 'memory_update', 'memory_delete', 'memory_reflect', 'memory_graph',
   'vault_store', 'vault_list',
   'list_directory', 'file_read', 'file_write', 'file_edit', 'file_ops',

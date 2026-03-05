@@ -238,6 +238,7 @@ export async function runOrchestrator(input: OrchestratorInput): Promise<string>
     // Send intermediate progress message before executing tools (skip already-sent lines)
     const newLines = response.toolCalls
       .map(tc => describeToolCall(tc.name, tc.input))
+      .filter(Boolean)
       .filter(line => !sentProgress.has(line));
     if (newLines.length > 0) {
       for (const line of newLines) sentProgress.add(line);
