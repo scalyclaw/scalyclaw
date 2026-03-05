@@ -1,7 +1,6 @@
 // ─── Redis Key Prefixes ───
 
 export const CANCEL_KEY_PREFIX = 'scalyclaw:cancel:';
-export const CHANNEL_JOBS_KEY_PREFIX = 'scalyclaw:jobs:';
 export const PROCESS_KEY_PREFIX = 'scalyclaw:proc:';
 
 // ─── Redis Pub/Sub Channels ───

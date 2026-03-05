@@ -113,10 +113,6 @@ export async function storeMemory(input: StoreMemoryInput): Promise<string> {
   });
   insertAll();
 
-  if (Math.random() < 0.05) {
-    cleanupExpired();
-  }
-
   log('debug', 'Memory stored', { id, type, subject, hasEmbedding: !!embeddingBlob });
   return id;
 }

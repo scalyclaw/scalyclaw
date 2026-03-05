@@ -1,6 +1,7 @@
 import type { Job } from 'bullmq';
 import { log } from '@scalyclaw/shared/core/logger.js';
-import { DEFAULT_CONTEXT_WINDOW } from '../const/constants.js';
+import { withRetry } from '@scalyclaw/shared/core/retry.js';
+import { DEFAULT_CONTEXT_WINDOW, LLM_RETRY_ATTEMPTS, LLM_RETRY_BASE_DELAY_MS } from '../const/constants.js';
 import { getConfigRef } from '../core/config.js';
 import { checkBudget } from '../core/budget.js';
 import { loadAgent } from '../agents/agent-loader.js';
@@ -185,16 +186,28 @@ async function runAgentLoop(
         messageBudget: budget.messageBudget,
       });
 
-      const response = await provider.chat({
-        model,
-        systemPrompt: agent.systemPrompt,
-        messages,
-        tools: agentToolDefs,
-        maxTokens: modelConfig?.maxTokens ?? 8192,
-        temperature: modelConfig?.temperature ?? 0.7,
-        reasoningEnabled: modelConfig?.reasoningEnabled,
-        signal,
-      });
+      const response = await withRetry(
+        () => provider.chat({
+          model,
+          systemPrompt: agent.systemPrompt,
+          messages,
+          tools: agentToolDefs,
+          maxTokens: modelConfig?.maxTokens ?? 8192,
+          temperature: modelConfig?.temperature ?? 0.7,
+          reasoningEnabled: modelConfig?.reasoningEnabled,
+          signal,
+        }),
+        {
+          attempts: LLM_RETRY_ATTEMPTS,
+          baseDelay: LLM_RETRY_BASE_DELAY_MS,
+          signal,
+          label: `Agent "${agentId}" LLM call`,
+          shouldRetry: (err) => {
+            const msg = String(err);
+            return !msg.includes('Aborted') && !msg.includes('Budget limit');
+          },
+        },
+      );
 
       totalInputTokens += response.usage?.inputTokens ?? 0;
       totalOutputTokens += response.usage?.outputTokens ?? 0;

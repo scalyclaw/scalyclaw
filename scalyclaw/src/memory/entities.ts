@@ -323,6 +323,33 @@ export function relinkEntitiesToConsolidated(oldMemoryIds: string[], newMemoryId
 }
 
 /**
+ * Prune stale entities: remove those with mention_count = 1 and last_seen > 90 days ago.
+ * Also deletes orphaned relations and mentions.
+ */
+export function pruneStaleEntities(): number {
+  const db = getDb();
+
+  const stale = db.prepare(
+    "SELECT id FROM memory_entities WHERE mention_count <= 1 AND last_seen < datetime('now', '-90 days')",
+  ).all() as { id: string }[];
+
+  if (stale.length === 0) return 0;
+
+  const ids = stale.map(e => e.id);
+  const placeholders = ids.map(() => '?').join(',');
+
+  const pruneAll = db.transaction(() => {
+    db.prepare(`DELETE FROM memory_entity_mentions WHERE entity_id IN (${placeholders})`).run(...ids);
+    db.prepare(`DELETE FROM memory_relations WHERE source_id IN (${placeholders}) OR target_id IN (${placeholders})`).run(...ids, ...ids);
+    db.prepare(`DELETE FROM memory_entities WHERE id IN (${placeholders})`).run(...ids);
+  });
+  pruneAll();
+
+  log('info', 'Pruned stale entities', { count: ids.length });
+  return ids.length;
+}
+
+/**
  * Get top entities for context injection (most mentioned, most recently seen).
  */
 export function getTopEntities(limit = 10): Array<{ name: string; type: string; mentionCount: number; relations: Array<{ relation: string; target: string }> }> {
