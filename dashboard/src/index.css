@@ -206,3 +206,8 @@ body {
   90% { opacity: 1; }
   100% { left: 100%; opacity: 0; }
 }
+
+@keyframes item-bob {
+  0%, 100% { transform: translateX(-50%) translateY(0); }
+  50% { transform: translateX(-50%) translateY(-3px); }
+}
