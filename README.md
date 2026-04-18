@@ -211,19 +211,22 @@ Agents are created and managed via the dashboard. When delegated a task, they ru
 ScalyClaw automatically extracts and stores memories from conversations. Memories persist across all channels — what you say on Telegram is remembered on Discord.
 
 - **Hybrid search** — vector similarity (sqlite-vec) + full-text search (FTS5)
-- **Auto-extraction** — facts, preferences, and context are extracted without manual input
-- **Types** — facts, preferences, events, relationships — each with a confidence score
-- **Management** — search, view, and delete memories from the dashboard
+- **Auto-extraction** — a debounced background job turns user messages into structured memories; the LLM can also call `memory_store` directly mid-reply
+- **Types** — `semantic`, `episodic`, `procedural`, each with an importance score (1–10) used in composite retrieval scoring
+- **Entity graph** — people, projects, technologies, places, organizations, and concepts with directed relations, queryable via the `memory_graph` tool
+- **Consolidation** — scheduled background merging of near-duplicate memories into comprehensive entries
+- **Management** — search, view, edit, delete memories from the dashboard
 
 ---
 
 ## 🤖 Models
 
-ScalyClaw works with any **OpenAI-compatible API** — OpenAI, Anthropic, local models via Ollama/LM Studio, or any provider with an OpenAI-compatible endpoint.
+ScalyClaw ships with native **Anthropic** support and a unified **OpenAI-compatible** factory that covers OpenAI, Google (Gemini via OpenAI-compat), OpenRouter, Mistral, Groq, xAI, DeepSeek, Cohere, MiniMax, Ollama, LM Studio, and any custom endpoint.
 
-- **Multiple models** — configure different models for different tasks (chat, agents, guards, embeddings)
-- **Priority + weight load balancing** — models are grouped by `priority` (lower = tried first). Within a priority group, requests are distributed via weighted-random selection based on each model's `weight`. If the entire group fails, the next priority group is tried automatically
-- **Budget control** — global monthly/daily spending limits with soft or hard enforcement
+- **Multiple models** — configure different models for different tasks (chat, agents, guards, embeddings, memory extraction, proactive monitoring)
+- **Priority + weight load balancing** — models are grouped by `priority` (lower = higher priority). Only the top group is used for selection; within it, requests are distributed by weighted-random. Transient failures retry on the same provider with exponential backoff — there is no automatic cross-provider fallback
+- **Reasoning** — the `reasoningEnabled` flag plumbs through to providers that support it: OpenAI o-series / GPT-5.x, Google Gemini 2.5/3/3.1, DeepSeek-R1, Claude 4.x extended & adaptive thinking, and local models via `<think>` trace stripping
+- **Budget control** — global monthly/daily spending limits with soft or hard enforcement, threshold alerts, and per-model cost tracking driven by `inputPricePerMillion` / `outputPricePerMillion`
 - **Embedding models** — separate model config for memory vector search. Set `embeddingModel` to `"auto"` (default) to select from enabled embedding models using priority + weight
 
 ---

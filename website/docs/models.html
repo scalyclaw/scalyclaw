@@ -16,7 +16,7 @@
       <div class="docs-content">
 
         <h1>Models &amp; Providers</h1>
-        <p>ScalyClaw routes LLM calls through a configurable provider stack. You can register multiple models from different providers, assign priorities and weights for load balancing, and define fallback chains so that a single provider outage never stops the system. All model configuration lives in Redis — no config files on disk — and changes take effect immediately without a restart.</p>
+        <p>ScalyClaw routes LLM calls through a configurable provider stack. You can register multiple models from different providers and control how they are picked at call time through <code>priority</code> (selection tier) and <code>weight</code> (load-balancing share). All model configuration lives in Redis — no config files on disk — and changes take effect immediately without a restart.</p>
 
         <h2 id="configuration">Model Configuration</h2>
 
@@ -52,7 +52,7 @@
             <tr>
               <td><code>priority</code></td>
               <td><span class="badge badge-blue">integer</span></td>
-              <td>Lower number = higher priority. The orchestrator always tries the lowest-numbered priority group first. If every model in that group fails, it falls back to the next group. Models with <code>priority: 1</code> are tried before <code>priority: 2</code>.</td>
+              <td>Lower number = higher priority. Only the <strong>lowest-numbered enabled group is used</strong> for selection; higher-numbered groups act as disabled unless you remove or disable every model in a lower-numbered one. Within the selected group, models are distributed by <code>weight</code>. There is <strong>no automatic cross-priority fallback</strong> on failure — see the Selection Algorithm and "Retry Behavior" below.</td>
             </tr>
             <tr>
               <td><code>weight</code></td>
@@ -119,13 +119,13 @@
 
         <h3>Model Selection Algorithm</h3>
 
-        <p>ScalyClaw uses a two-tier selection algorithm combining <strong>priority groups</strong> with <strong>weighted random selection</strong>:</p>
+        <p>ScalyClaw picks one model per request using a two-step algorithm:</p>
 
         <ol>
-          <li><strong>Filter</strong> — only enabled models with the required capabilities (e.g. <code>toolEnabled</code>, <code>imageEnabled</code>) are considered.</li>
-          <li><strong>Group by priority</strong> — candidates are sorted by <code>priority</code> (lower number = higher priority). Only the lowest-numbered group is used for the initial attempt.</li>
-          <li><strong>Weighted random pick</strong> — within that priority group, a model is selected probabilistically. Each model's chance of being chosen equals <code>weight / totalWeight</code>. A model with <code>weight: 75</code> is picked three times as often as one with <code>weight: 25</code> in the same group.</li>
-          <li><strong>Fallback</strong> — if every model in the top priority group fails (network error, rate limit, timeout, provider outage), the orchestrator moves to the next priority group and repeats. This continues until a call succeeds or all groups are exhausted.</li>
+          <li><strong>Filter out disabled</strong> — only models with <code>enabled: true</code> are considered. Capability flags (<code>toolEnabled</code>, <code>imageEnabled</code>, etc.) are <em>not</em> enforced at this step — see the callout below.</li>
+          <li><strong>Top priority group</strong> — candidates are sorted by <code>priority</code> (lower number = higher priority). Only the lowest-numbered group is considered. Higher-numbered groups are effectively dormant unless every model in a lower-numbered group is disabled or removed.</li>
+          <li><strong>Weighted random pick</strong> — within that priority group, one model is selected probabilistically. Each model's chance equals <code>weight / totalWeight</code>. A model with <code>weight: 75</code> is picked three times as often as one with <code>weight: 25</code> in the same group.</li>
+          <li><strong>Retry on transient failure</strong> — if the selected provider/model call fails with a retryable error, the <strong>same</strong> provider/model is retried with exponential backoff (default 3 attempts, 500ms base delay; see <code>shared/src/const/constants.ts</code>). Retries never swap to a different model or priority group. If all retries fail, the error propagates to the caller.</li>
         </ol>
 
         <div class="callout callout-info">
@@ -134,6 +134,14 @@
             Weight is probabilistic, not round-robin
           </div>
           <p>Weights control the <em>probability</em> of selection, not a strict rotation. Each request independently rolls the dice. Over many requests the distribution converges to the weight ratio, but short runs may show variance. A weight of <code>0</code> effectively disables a model without removing it from the config.</p>
+        </div>
+
+        <div class="callout callout-warn">
+          <div class="callout-label">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+            No automatic cross-provider fallback
+          </div>
+          <p>If you need provider-level high availability, do not rely on priority tiers — put all the candidates you want to load-balance across into the <em>same</em> priority group with non-zero weights. Today the selector picks one model at the start of a turn; a transient provider failure will exhaust the retry budget on that same model and then surface the error rather than trying the next group. Building true cross-priority fallback is on the roadmap.</p>
         </div>
 
         <h3>Selection Hierarchy</h3>
@@ -210,44 +218,34 @@
 
         <h3>Supported Providers</h3>
 
-        <p>Providers are registered under <code>config.models.providers</code> as a map from a provider key to an object with an optional <code>apiKey</code> and optional <code>baseUrl</code>. Each model entry's <code>provider</code> field references one of these keys.</p>
+        <p>Providers are registered under <code>config.models.providers</code> as a map from a provider key to an object with an optional <code>apiKey</code> and optional <code>baseUrl</code>. Each model entry's <code>provider</code> field references one of these keys. ScalyClaw ships with 13 built-in provider keys. <code>anthropic</code> uses the native Anthropic SDK; every other key routes through a single OpenAI-compatible factory with the provider's own base URL.</p>
 
         <table>
           <thead>
-            <tr><th>Provider</th><th><code>provider</code> key</th><th>Notes</th></tr>
+            <tr><th><code>provider</code> key</th><th>Default baseUrl</th><th>API key</th><th>Notes</th></tr>
           </thead>
           <tbody>
-            <tr>
-              <td><strong>OpenAI</strong></td>
-              <td><code>openai</code></td>
-              <td>GPT-4o, GPT-4o-mini, o1, o3, and future models. Set <code>apiKey</code> to your OpenAI API key.</td>
-            </tr>
-            <tr>
-              <td><strong>Anthropic</strong></td>
-              <td><code>anthropic</code></td>
-              <td>Claude Opus, Sonnet, and Haiku family. Extended thinking supported where available. Set <code>apiKey</code> to your Anthropic API key.</td>
-            </tr>
-            <tr>
-              <td><strong>Google AI</strong></td>
-              <td><code>google</code></td>
-              <td>Gemini 1.5 Pro, Flash, and 2.0 series. Uses the Gemini API (not Vertex AI). Set <code>apiKey</code> to your Google AI API key.</td>
-            </tr>
-            <tr>
-              <td><strong>Azure OpenAI</strong></td>
-              <td><code>azure</code></td>
-              <td>Set <code>apiKey</code> to your Azure API key and <code>baseUrl</code> to your Azure endpoint. Use the deployment name as the model's <code>name</code> field.</td>
-            </tr>
-            <tr>
-              <td><strong>Local / Ollama</strong></td>
-              <td><code>local</code></td>
-              <td>Any OpenAI-compatible local server (Ollama, LM Studio, llama.cpp). Set <code>baseUrl</code> to the local address (e.g. <code>http://localhost:11434/v1</code>). <code>apiKey</code> can be omitted or left empty.</td>
-            </tr>
+            <tr><td><code>openai</code></td><td><code>https://api.openai.com/v1</code></td><td>required</td><td>GPT-4 / GPT-4.1 / GPT-4o / GPT-5 / o3 / o4 families. Reasoning models auto-detected by name.</td></tr>
+            <tr><td><code>anthropic</code></td><td><code>https://api.anthropic.com</code></td><td>required</td><td>Claude Opus / Sonnet / Haiku. Extended and adaptive thinking wired up for Claude 4.x.</td></tr>
+            <tr><td><code>google</code></td><td><code>https://generativelanguage.googleapis.com/v1beta/openai</code></td><td>required</td><td>Gemini via Google's OpenAI-compatible endpoint. Gemini 2.5 / 3 / 3.1 families.</td></tr>
+            <tr><td><code>openrouter</code></td><td><code>https://openrouter.ai/api/v1</code></td><td>required</td><td>Any model from OpenRouter's catalog. Pricing on their site.</td></tr>
+            <tr><td><code>mistral</code></td><td><code>https://api.mistral.ai/v1</code></td><td>required</td><td>Mistral Large / Medium / Small / Codestral.</td></tr>
+            <tr><td><code>groq</code></td><td><code>https://api.groq.com/openai/v1</code></td><td>required</td><td>Llama 3.3 / Mixtral / Gemma 2 on Groq's fast-inference stack.</td></tr>
+            <tr><td><code>xai</code></td><td><code>https://api.x.ai/v1</code></td><td>required</td><td>Grok 2 / Grok 3 / Grok 3 mini.</td></tr>
+            <tr><td><code>deepseek</code></td><td><code>https://api.deepseek.com/v1</code></td><td>required</td><td>DeepSeek Chat and Reasoner (R1). Reasoning traces are captured and discarded (echoing back violates the DeepSeek API contract).</td></tr>
+            <tr><td><code>cohere</code></td><td><code>https://api.cohere.com/compatibility/v1</code></td><td>required</td><td>Command R / R+ and Cohere embedding models.</td></tr>
+            <tr><td><code>minimax</code></td><td><code>https://api.minimax.io/v1</code></td><td>required</td><td>MiniMax M2.5 family.</td></tr>
+            <tr><td><code>ollama</code></td><td><code>http://localhost:11434/v1</code></td><td>not required</td><td>Local Ollama over the OpenAI-compatible endpoint. Tool calling works on models that support it (Qwen, Llama 3.3, etc.); Gemma replies in plain text.</td></tr>
+            <tr><td><code>lmstudio</code></td><td><code>http://localhost:1234/v1</code></td><td>not required</td><td>Local LM Studio. Same tool-calling caveats as Ollama.</td></tr>
+            <tr><td><code>custom</code></td><td>(you supply one)</td><td>optional</td><td>Arbitrary OpenAI-compatible endpoint. Use for vLLM, llama.cpp server, proxies, or any self-hosted gateway.</td></tr>
           </tbody>
         </table>
 
+        <p>A provider is registered at boot and on every config reload. If a provider is marked "key required" above and you haven't supplied <code>apiKey</code>, registration is skipped with a warning log — the provider won't be usable until you add one. There is <strong>no</strong> <code>azure</code> key in the current build; point a <code>custom</code> entry at your Azure OpenAI endpoint instead.</p>
+
         <h3>Example Configuration</h3>
 
-        <p>The following shows a realistic multi-provider setup: Anthropic as the primary model, OpenAI as a same-priority peer with lower weight, and a local Ollama model as a last-resort fallback for basic requests.</p>
+        <p>A realistic multi-provider setup: Claude Opus 4.7 as the primary, GPT-5.4 as a same-priority peer with lower weight, and a local Qwen model via Ollama for offline resilience. Because there is no automatic cross-priority fallback, put the two cloud models in the <em>same</em> priority tier to share load; the local model sits in a higher-numbered tier and is effectively dormant until you disable the cloud ones.</p>
 
         <div class="code-block">
           <div class="code-block-header">
@@ -258,64 +256,64 @@
   <span class="prop">"models"</span>: {
     <span class="prop">"providers"</span>: {
       <span class="prop">"anthropic"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-ant-..."</span> },
-      <span class="prop">"openai"</span>: { <span class="prop">"apiKey"</span>: <span class="str">"sk-..."</span> },
-      <span class="prop">"local"</span>: { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
+      <span class="prop">"openai"</span>:    { <span class="prop">"apiKey"</span>: <span class="str">"sk-..."</span> },
+      <span class="prop">"ollama"</span>:    { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
     },
     <span class="prop">"models"</span>: [
       {
-        <span class="prop">"id"</span>: <span class="str">"claude-primary"</span>,
-        <span class="prop">"name"</span>: <span class="str">"claude-opus-4-6"</span>,
+        <span class="prop">"id"</span>: <span class="str">"anthropic:claude-opus-4-7"</span>,
+        <span class="prop">"name"</span>: <span class="str">"anthropic:claude-opus-4-7"</span>,
         <span class="prop">"provider"</span>: <span class="str">"anthropic"</span>,
         <span class="prop">"enabled"</span>: <span class="kw">true</span>,
         <span class="prop">"priority"</span>: <span class="num">1</span>,
         <span class="prop">"weight"</span>: <span class="num">75</span>,
         <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
         <span class="prop">"maxTokens"</span>: <span class="num">8192</span>,
-        <span class="prop">"contextWindow"</span>: <span class="num">200000</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">1000000</span>,
         <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"documentEnabled"</span>: <span class="kw">true</span>,
-        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
-        <span class="prop">"inputPricePerMillion"</span>: <span class="num">15.00</span>,
-        <span class="prop">"outputPricePerMillion"</span>: <span class="num">75.00</span>
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">true</span>,
+        <span class="prop">"inputPricePerMillion"</span>: <span class="num">5.00</span>,
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">25.00</span>
       },
       {
-        <span class="prop">"id"</span>: <span class="str">"gpt4o-secondary"</span>,
-        <span class="prop">"name"</span>: <span class="str">"gpt-4o"</span>,
+        <span class="prop">"id"</span>: <span class="str">"openai:gpt-5.4"</span>,
+        <span class="prop">"name"</span>: <span class="str">"openai:gpt-5.4"</span>,
         <span class="prop">"provider"</span>: <span class="str">"openai"</span>,
         <span class="prop">"enabled"</span>: <span class="kw">true</span>,
         <span class="prop">"priority"</span>: <span class="num">1</span>,
         <span class="prop">"weight"</span>: <span class="num">25</span>,
         <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
-        <span class="prop">"maxTokens"</span>: <span class="num">4096</span>,
-        <span class="prop">"contextWindow"</span>: <span class="num">128000</span>,
+        <span class="prop">"maxTokens"</span>: <span class="num">8192</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">1000000</span>,
         <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"imageEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"documentEnabled"</span>: <span class="kw">false</span>,
-        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"inputPricePerMillion"</span>: <span class="num">2.50</span>,
-        <span class="prop">"outputPricePerMillion"</span>: <span class="num">10.00</span>
+        <span class="prop">"outputPricePerMillion"</span>: <span class="num">15.00</span>
       },
       {
-        <span class="prop">"id"</span>: <span class="str">"local-fallback"</span>,
-        <span class="prop">"name"</span>: <span class="str">"llama3.2"</span>,
-        <span class="prop">"provider"</span>: <span class="str">"local"</span>,
+        <span class="prop">"id"</span>: <span class="str">"ollama:qwen3"</span>,
+        <span class="prop">"name"</span>: <span class="str">"ollama:qwen3"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"ollama"</span>,
         <span class="prop">"enabled"</span>: <span class="kw">true</span>,
         <span class="prop">"priority"</span>: <span class="num">2</span>,
         <span class="prop">"weight"</span>: <span class="num">100</span>,
         <span class="prop">"temperature"</span>: <span class="num">0.7</span>,
         <span class="prop">"maxTokens"</span>: <span class="num">2048</span>,
-        <span class="prop">"contextWindow"</span>: <span class="num">8192</span>,
-        <span class="prop">"toolEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"contextWindow"</span>: <span class="num">32768</span>,
+        <span class="prop">"toolEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"imageEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"audioEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"videoEnabled"</span>: <span class="kw">false</span>,
         <span class="prop">"documentEnabled"</span>: <span class="kw">false</span>,
-        <span class="prop">"reasoningEnabled"</span>: <span class="kw">false</span>,
+        <span class="prop">"reasoningEnabled"</span>: <span class="kw">true</span>,
         <span class="prop">"inputPricePerMillion"</span>: <span class="num">0</span>,
         <span class="prop">"outputPricePerMillion"</span>: <span class="num">0</span>
       }
@@ -325,15 +323,27 @@
 }</pre>
         </div>
 
-        <p>With this config, 75% of priority-1 requests go to Claude (weight 75 out of 100) and 25% go to GPT-4o (weight 25 out of 100). If both fail, the local Llama 3.2 instance handles the request — but only for requests that do not require tools or multimodal inputs, since those capability flags are <code>false</code> for the fallback.</p>
+        <p>With this config, 75% of priority-1 requests go to Claude and 25% go to GPT-5.4. The local Qwen entry at priority 2 is not consulted while any priority-1 model is enabled — it only comes into play once you disable the cloud models (manually or from the dashboard).</p>
 
         <div class="callout callout-warn">
           <div class="callout-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            Capability matching is strict
+            Capability flags are advisory
           </div>
-          <p>If a request requires tool use (because the LLM is expected to call tools) and no model in any priority group has <code>toolEnabled: true</code>, the call will fail immediately rather than fall through to an incapable model and produce a broken response. Always ensure at least one enabled model has the required capability flags set for each feature you rely on.</p>
+          <p><code>toolEnabled</code>, <code>imageEnabled</code>, <code>audioEnabled</code>, <code>videoEnabled</code>, and <code>documentEnabled</code> are stored for UI hints and future enforcement but are <strong>not</strong> consulted during model selection today. If you configure a model that lacks a capability your code path needs, the upstream provider will either reject the request or produce a degraded response — the selector will not route around it. Only <code>reasoningEnabled</code> is actually consumed at call time (see the Reasoning section below).</p>
         </div>
+
+        <h3 id="reasoning">Reasoning Flag</h3>
+
+        <p>When a model has <code>reasoningEnabled: true</code>, the orchestrator threads the flag through to the provider call. What happens next is provider-specific:</p>
+
+        <ul>
+          <li><strong>OpenAI-compatible providers</strong> (openai, openrouter, google, groq, xai, deepseek, cohere, mistral, minimax, ollama, lmstudio, custom) translate it to <code>reasoning_effort: "medium"</code> on the request body. Providers that don't implement that field ignore it silently.</li>
+          <li><strong>OpenAI reasoning models</strong> (o1/o3/o4/gpt-5.x) are auto-detected by name. For these, the provider also switches <code>max_tokens</code> → <code>max_completion_tokens</code> and omits <code>temperature</code> — both required by the API.</li>
+          <li><strong>DeepSeek-R1</strong> (<code>deepseek-reasoner</code>) always thinks; the provider captures any <code>reasoning_content</code> in the response for observability but never echoes it back on subsequent turns (echoing it produces a 400).</li>
+          <li><strong>Anthropic</strong> wraps the flag with a model-name regex check for Claude 4.x. When matched, it sets <code>thinking: { type: "enabled", budget_tokens: … }</code> — Anthropic's extended / adaptive thinking API. Requests against non-4.x models with <code>reasoningEnabled</code> set are not rejected; the flag is simply not forwarded.</li>
+          <li><strong>Local models</strong> (Qwen, Gemma, DeepSeek-R1 via Ollama/LM Studio) emit <code>&lt;think&gt;…&lt;/think&gt;</code> blocks or ChatML-style channel delimiters, which the provider strips before returning content to the orchestrator. Those traces are not persisted anywhere.</li>
+        </ul>
 
         <h2 id="embedding">Embedding Models</h2>
 
@@ -346,9 +356,9 @@
         <div class="callout callout-danger">
           <div class="callout-label">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            Do not change embedding models mid-deployment
+            Switching embedding models is not seamless
           </div>
-          <p>All stored vectors must come from the same model. Switching to a different embedding model produces incompatible vectors — semantic search will return nonsense results. If you need to switch models, re-embed all existing memories first using <strong>Settings &rarr; Memory &rarr; Re-embed all</strong> in the dashboard.</p>
+          <p>The <code>memory_vec</code> virtual table is created with the dimension count of the embedding model enabled at first boot. Switching later to a model with the same dimension count (e.g. OpenAI <code>text-embedding-3-small</code> ↔ LM Studio <code>text-embedding-bge-small-en-v1.5</code> both 1536 / 384 respectively — match yours) will work, but semantic search quality may degrade because old vectors come from a different model. Switching to a model with a <em>different</em> dimension count will fail the runtime dimension guard inside <code>generateEmbedding</code>. A built-in bulk re-embed tool is not yet implemented; the only clean recovery today is to wipe the SQLite database file and let ScalyClaw rebuild it on next boot (memories are lost unless you've exported them first).</p>
         </div>
 
         <h3>Recommended Models</h3>
@@ -433,14 +443,14 @@
           <pre>{
   <span class="prop">"models"</span>: {
     <span class="prop">"providers"</span>: {
-      <span class="prop">"local"</span>: { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
+      <span class="prop">"ollama"</span>: { <span class="prop">"baseUrl"</span>: <span class="str">"http://localhost:11434/v1"</span> }
     },
     <span class="prop">"models"</span>: [ <span class="cmt">/* ... chat models ... */</span> ],
     <span class="prop">"embeddingModels"</span>: [
       {
-        <span class="prop">"id"</span>: <span class="str">"local-embed"</span>,
-        <span class="prop">"name"</span>: <span class="str">"nomic-embed-text"</span>,
-        <span class="prop">"provider"</span>: <span class="str">"local"</span>,
+        <span class="prop">"id"</span>: <span class="str">"ollama:nomic-embed-text"</span>,
+        <span class="prop">"name"</span>: <span class="str">"ollama:nomic-embed-text"</span>,
+        <span class="prop">"provider"</span>: <span class="str">"ollama"</span>,
         <span class="prop">"enabled"</span>: <span class="kw">true</span>,
         <span class="prop">"priority"</span>: <span class="num">1</span>,
         <span class="prop">"weight"</span>: <span class="num">100</span>,
@@ -534,9 +544,9 @@
             <button class="code-block-copy" aria-label="Copy"></button>
           </div>
           <pre>{
-  <span class="prop">"id"</span>: <span class="str">"my-azure-deployment"</span>,
-  <span class="prop">"name"</span>: <span class="str">"my-gpt4o-deployment"</span>,
-  <span class="prop">"provider"</span>: <span class="str">"azure"</span>,
+  <span class="prop">"id"</span>: <span class="str">"custom:my-gateway-gpt4o"</span>,
+  <span class="prop">"name"</span>: <span class="str">"custom:my-gateway-gpt4o"</span>,
+  <span class="prop">"provider"</span>: <span class="str">"custom"</span>,
   <span class="prop">"enabled"</span>: <span class="kw">true</span>,
   <span class="prop">"priority"</span>: <span class="num">1</span>,
   <span class="prop">"weight"</span>: <span class="num">100</span>,
