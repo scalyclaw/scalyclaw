@@ -47,9 +47,15 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
     baseUrl: 'https://api.anthropic.com/v1',
     requiresKey: true,
     chatModels: [
-      { id: 'anthropic:claude-opus-4-6', hint: 'Most capable', inputPrice: 15, outputPrice: 75, capabilities: { tools: true, vision: true, reasoning: true } },
-      { id: 'anthropic:claude-sonnet-4-5-20250929', hint: 'Balanced', inputPrice: 3, outputPrice: 15, capabilities: { tools: true, vision: true, reasoning: true } },
-      { id: 'anthropic:claude-haiku-4-5-20251001', hint: 'Fast', inputPrice: 0.8, outputPrice: 4, capabilities: { tools: true, vision: true, reasoning: true } },
+      // ── Latest (released April 16, 2026) ──
+      { id: 'anthropic:claude-opus-4-7', hint: 'Opus 4.7 — flagship, 1M ctx, adaptive thinking, agentic coding', inputPrice: 5, outputPrice: 25, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'anthropic:claude-sonnet-4-6', hint: 'Sonnet 4.6 — balanced, 1M ctx, extended + adaptive thinking', inputPrice: 3, outputPrice: 15, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'anthropic:claude-haiku-4-5-20251001', hint: 'Haiku 4.5 — fastest, 200k ctx, extended thinking', inputPrice: 1, outputPrice: 5, capabilities: { tools: true, vision: true, reasoning: true } },
+      // ── Legacy (still supported) ──
+      { id: 'anthropic:claude-opus-4-6', hint: 'Opus 4.6 — previous flagship, 1M ctx, extended thinking', inputPrice: 5, outputPrice: 25, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'anthropic:claude-sonnet-4-5-20250929', hint: 'Sonnet 4.5 — 200k ctx, extended thinking', inputPrice: 3, outputPrice: 15, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'anthropic:claude-opus-4-5-20251101', hint: 'Opus 4.5 — 200k ctx, extended thinking', inputPrice: 5, outputPrice: 25, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'anthropic:claude-opus-4-1-20250805', hint: 'Opus 4.1 — legacy, 200k ctx', inputPrice: 15, outputPrice: 75, capabilities: { tools: true, vision: true, reasoning: true } },
     ],
     embeddingModels: [],
   },
