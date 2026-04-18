@@ -100,6 +100,7 @@ Workers are independently deployable. They share nothing with the node except Re
 | 💰 | **Budget Control** | Monthly/daily limits, per-model tracking, configurable alerts |
 | 📊 | **Dashboard** | Real-time monitoring, personality editor, chat overlay, job inspector |
 | 🔄 | **Zero-Downtime Reload** | Skills, agents, config, MCP servers — all reload live via Redis pub/sub |
+| 📣 | **Proactive Engagement** | Ambient signals turn into timely broadcasts across every enabled channel — with quiet hours, per-trigger cooldowns, and an adaptive threshold that tunes to user engagement |
 
 ---
 
@@ -228,6 +229,21 @@ ScalyClaw ships with native **Anthropic** support and a unified **OpenAI-compati
 - **Reasoning** — the `reasoningEnabled` flag plumbs through to providers that support it: OpenAI o-series / GPT-5.x, Google Gemini 2.5/3/3.1, DeepSeek-R1, Claude 4.x extended & adaptive thinking, and local models via `<think>` trace stripping
 - **Budget control** — global monthly/daily spending limits with soft or hard enforcement, threshold alerts, and per-model cost tracking driven by `inputPricePerMillion` / `outputPricePerMillion`
 - **Embedding models** — separate model config for memory vector search. Set `embeddingModel` to `"auto"` (default) to select from enabled embedding models using priority + weight
+
+---
+
+## 📣 Engagement
+
+ScalyClaw reaches out first when something actionable happens — pending task results, upcoming deadlines, a conversation that drifted off. A scheduled cron scans six ambient signals, a single LLM call decides whether to speak, and the message is broadcast to every enabled channel in parallel.
+
+- **Six signals** — idle, pending deliverables, time-sensitive memories, entity activity, user pattern, return from absence
+- **Four trigger types** — `urgent`, `deliverable`, `insight`, `check_in`, each with its own cooldown
+- **Adaptive threshold** — self-tunes to the user's engagement rate; midpoint during the cold-start window
+- **Quiet hours + mute + per-trigger cooldown + daily cap** — layered timing gates with urgent-override
+- **All-channel broadcast** — every enabled adapter gets the message in parallel; bookkeeping applied only after a successful delivery
+- **One LLM call per firing** — the evaluate-and-generate step is merged; no wasted round-trips
+
+Configure from the dashboard Engagement page or via `POST /api/proactive/trigger` for a manual smoke test.
 
 ---
 
