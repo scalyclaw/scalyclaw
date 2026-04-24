@@ -28,8 +28,11 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
     baseUrl: 'https://api.openai.com/v1',
     requiresKey: true,
     chatModels: [
-      // ── GPT-5.4 family (released March 2026, flagship) ──
-      { id: 'openai:gpt-5.4', hint: 'GPT-5.4 — flagship, 1M ctx, agentic + high reasoning', inputPrice: 2.5, outputPrice: 15, capabilities: { tools: true, vision: true, reasoning: true } },
+      // ── GPT-5.5 family (released April 23, 2026 — current flagship) ──
+      { id: 'openai:gpt-5.5-pro', hint: 'GPT-5.5 Pro — highest accuracy, 1M ctx, reasoning', inputPrice: 30, outputPrice: 180, capabilities: { tools: true, vision: true, reasoning: true } },
+      { id: 'openai:gpt-5.5', hint: 'GPT-5.5 — flagship, 1M ctx, token-efficient reasoning', inputPrice: 5, outputPrice: 30, capabilities: { tools: true, vision: true, reasoning: true } },
+      // ── GPT-5.4 family (released March 2026) ──
+      { id: 'openai:gpt-5.4', hint: 'GPT-5.4 — 1M ctx, agentic + high reasoning', inputPrice: 2.5, outputPrice: 15, capabilities: { tools: true, vision: true, reasoning: true } },
       { id: 'openai:gpt-5.4-mini', hint: 'GPT-5.4 mini — 400K ctx, coding & subagents', inputPrice: 0.75, outputPrice: 4.5, capabilities: { tools: true, vision: true, reasoning: true } },
       { id: 'openai:gpt-5.4-nano', hint: 'GPT-5.4 nano — cheapest 5.4-class, 400K ctx', inputPrice: 0.2, outputPrice: 1.25, capabilities: { tools: true, vision: true, reasoning: true } },
       // ── GPT-5 (Aug 2025) ──
@@ -81,7 +84,8 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
       { id: 'openrouter:google/gemini-2.5-pro-preview', hint: 'Gemini 2.5 Pro via OpenRouter', inputPrice: 1.25, outputPrice: 10 },
       { id: 'openrouter:mistralai/mistral-large-latest', hint: 'Mistral Large via OpenRouter', inputPrice: 2, outputPrice: 6 },
       { id: 'openrouter:meta-llama/llama-3.3-70b-instruct', hint: 'Llama 3.3 70B via OpenRouter', inputPrice: 0.6, outputPrice: 0.6 },
-      { id: 'openrouter:deepseek/deepseek-chat', hint: 'DeepSeek V3 via OpenRouter', inputPrice: 0.27, outputPrice: 1.1 },
+      { id: 'openrouter:deepseek/deepseek-v4-flash', hint: 'DeepSeek V4 Flash via OpenRouter', inputPrice: 0.14, outputPrice: 0.28 },
+      { id: 'openrouter:deepseek/deepseek-v4-pro', hint: 'DeepSeek V4 Pro via OpenRouter', inputPrice: 1.74, outputPrice: 3.48 },
     ],
     embeddingModels: [],
   },
@@ -185,8 +189,9 @@ export const PROVIDERS: Record<string, ProviderInfo> = {
     baseUrl: 'https://api.deepseek.com/v1',
     requiresKey: true,
     chatModels: [
-      { id: 'deepseek:deepseek-chat', hint: 'DeepSeek V3', inputPrice: 0.27, outputPrice: 1.1, capabilities: { tools: true } },
-      { id: 'deepseek:deepseek-reasoner', hint: 'R1 reasoning model', inputPrice: 0.55, outputPrice: 2.19, capabilities: { tools: true, reasoning: true } },
+      // ── V4 family (released April 24, 2026) ──
+      { id: 'deepseek:deepseek-v4-pro', hint: 'DeepSeek V4 Pro — 1M ctx, thinking + tools', inputPrice: 1.74, outputPrice: 3.48, capabilities: { tools: true, reasoning: true } },
+      { id: 'deepseek:deepseek-v4-flash', hint: 'DeepSeek V4 Flash — 1M ctx, cheap, thinking + tools', inputPrice: 0.14, outputPrice: 0.28, capabilities: { tools: true, reasoning: true } },
     ],
     embeddingModels: [],
   },
